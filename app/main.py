@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.api import api_router
+from app.config import settings
 from app.db.postgres import init_db, shutdown_db
 
 app = FastAPI(title="CELINE API Prototype")
@@ -9,7 +10,12 @@ app.include_router(api_router, prefix="/celine")
 
 @app.get("/")
 async def root():
-    return {"message": "Hello from CELINE FastAPI container!"}
+    """Root endpoint"""
+    return {
+        "name": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "status": "running"
+    }
 
 @app.on_event("startup")
 async def startup_event():

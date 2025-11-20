@@ -1,6 +1,11 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    # Project
+    PROJECT_NAME: str = "Celine Digital Twin APIs"
+    VERSION: str = "1.0.0-SNAPSHOT"
+    ENVIRONMENT: str = "development"
+    DEBUG: bool = True
     
     # PostgreSQL
     POSTGRES_USER: str
