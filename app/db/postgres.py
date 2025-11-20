@@ -39,7 +39,7 @@ async def shutdown_db() -> None:
     await engine.dispose()
     print("Database connections closed")
 
-async def get_session() -> AsyncSession:
+async def get_db_session() -> AsyncSession:
     """Dependency to get database session"""
     async with AsyncSessionLocal() as session:
         yield session
