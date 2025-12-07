@@ -5,6 +5,10 @@ tasks:
     desc: "Run development server"
     cmds:
       - uv run uvicorn dataset.main:create_app --reload
+  test:
+    desc: "Run tests"
+    cmds:
+      - uv run pytest
 
   cli:export-lineage:
     desc: Export lineage from marquez
