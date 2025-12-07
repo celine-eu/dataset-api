@@ -17,17 +17,22 @@ tasks:
     cmds:
       - uv run python -m dataset.cli.main import catalogue -i "./data/openlineage/*.yaml" --api-url http://localhost:8000
 
-  migrate:
+  alembic:migrate:
     desc: "Run migrations"
     cmds:
       - uv run alembic upgrade head
 
-  make-migration:
+  alembic:sync-model:
     desc: "Create new revision"
     cmds:
       - uv run alembic revision --autogenerate -m \"$MSG\"
     vars:
-      MSG: "update"
+      MSG: "update model"
+
+  alembic:reset:
+    desc: "Reset DB schema"
+    cmds:
+      - uv run alembic downgrade base
 
   release:
     cmds:

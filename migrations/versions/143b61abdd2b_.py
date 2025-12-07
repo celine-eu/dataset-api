@@ -1,8 +1,8 @@
 """""
 
-Revision ID: 82d9cd470dfc
+Revision ID: 143b61abdd2b
 Revises: 
-Create Date: 2025-12-06 17:40:32.043598
+Create Date: 2025-12-07 11:00:39.917992
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '82d9cd470dfc'
+revision: str = '143b61abdd2b'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -27,7 +27,7 @@ def upgrade() -> None:
     sa.Column('title', sa.String(length=512), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('backend_type', sa.String(length=64), nullable=False),
-    sa.Column('backend_config', sa.JSON(), nullable=False),
+    sa.Column('backend_config', sa.JSON(), nullable=True),
     sa.Column('ontology_path', sa.String(length=1024), nullable=True),
     sa.Column('schema_override_path', sa.String(length=1024), nullable=True),
     sa.Column('expose', sa.Boolean(), nullable=False),
@@ -38,6 +38,7 @@ def upgrade() -> None:
     sa.Column('landing_page', sa.String(length=1024), nullable=True),
     sa.Column('language_uris', sa.JSON(), nullable=True),
     sa.Column('spatial_uris', sa.JSON(), nullable=True),
+    sa.Column('lineage', sa.JSON(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     schema='dataset_api'
     )

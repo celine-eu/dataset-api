@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import asyncio
 from logging.config import fileConfig
-
 from alembic import context
 from sqlalchemy import pool, text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -37,9 +36,19 @@ def include_object(object, name, type_, reflected, compare_to):
     return True
 
 
+def include_name(name, type_, parent_names):
+    schema = settings.catalogue_schema
+    if type_ == "schema":
+        # Tell Alembic to include ONLY your schema and not 'public'
+        return name == schema
+    return True
+
+
 # ────────────────────────────────────────────
 # OFFLINE migrations
 # ────────────────────────────────────────────
+
+
 def run_migrations_offline() -> None:
     url = settings.database_url.replace("postgresql+psycopg", "postgresql+asyncpg")
 
@@ -47,7 +56,11 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        include_object=include_object,  # <── correct place
+        include_object=include_object,
+        include_name=include_name,
+        compare_server_default=True,
+        compare_type=True,
+        version_table_schema=settings.catalogue_schema,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -62,7 +75,11 @@ def do_run_migrations(connection):
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
-        include_object=include_object,  # <── correct place
+        include_object=include_object,
+        include_name=include_name,
+        compare_server_default=True,
+        compare_type=True,
+        version_table_schema=settings.catalogue_schema,
     )
     context.run_migrations()
 
