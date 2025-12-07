@@ -2,7 +2,7 @@
 import logging
 import sys
 
-from .config import settings
+from dataset.core.config import settings
 
 
 def setup_logging() -> None:

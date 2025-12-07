@@ -1,7 +1,7 @@
 # dataset/catalogue/schema.py
 from __future__ import annotations
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class BackendConfig(BaseModel):
@@ -36,19 +36,21 @@ class Tags(BaseModel):
 
 
 class Lineage(BaseModel):
-    namespace: Optional[str]
-    name: Optional[str]
-    sourceName: Optional[str]
-    createdAt: Optional[str]
-    updatedAt: Optional[str]
-    lastModifiedAt: Optional[str]
-    lastLifecycleState: Optional[str]
-    tags: Optional[List[str]]
-    facets: Optional[Dict[str, Any]]
+    namespace: Optional[str] = None
+    name: Optional[str] = None
+    sourceName: Optional[str] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+    lastModifiedAt: Optional[str] = None
+    lastLifecycleState: Optional[str] = None
+    tags: Optional[List[str]] = None
+    facets: Optional[Dict[str, Any]] = None
 
     @field_validator("namespace")
     def namespace_not_empty(cls, v):
         return v or "default"
+
+    model_config = ConfigDict(extra="allow")
 
 
 class DatasetEntryModel(BaseModel):

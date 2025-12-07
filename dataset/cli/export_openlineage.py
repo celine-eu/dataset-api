@@ -53,6 +53,24 @@ def normalize_dataset_id(ds: dict) -> str:
     return name.lower().replace(" ", "_")
 
 
+def extract_lineage_info(mq: dict) -> dict:
+    """Extract only stable OpenLineage lineage fields."""
+    if not mq:
+        return {}
+
+    fields = {
+        "namespace": mq.get("namespace"),
+        "name": mq.get("name"),
+        "sourceName": mq.get("sourceName"),
+        "createdAt": mq.get("createdAt"),
+        "updatedAt": mq.get("updatedAt") or mq.get("lastModifiedAt"),
+        "lastLifecycleState": mq.get("lastLifecycleState"),
+        "tags": mq.get("tags", []),
+        "facets": mq.get("facets", {}),
+    }
+    return {k: v for k, v in fields.items() if v is not None}
+
+
 def map_openlineage_to_catalogue(
     ds: dict, backend_type: str, expose=False
 ) -> dict[str, Any]:
@@ -61,6 +79,8 @@ def map_openlineage_to_catalogue(
     physical = ds.get("physicalName")
     description = ds.get("description") or physical
     tags = ds.get("tags") or []
+
+    lineage = extract_lineage_info(ds)
 
     entry = {
         "title": name,
@@ -71,17 +91,7 @@ def map_openlineage_to_catalogue(
         "ontology_path": None,
         "schema_override_path": None,
         "tags": {"keywords": tags},
-        "lineage": {
-            "namespace": ds.get("namespace"),
-            "name": name,
-            "sourceName": ds.get("sourceName"),
-            "createdAt": ds.get("createdAt"),
-            "updatedAt": ds.get("updatedAt") or ds.get("lastModifiedAt"),
-            "lastModifiedAt": ds.get("lastModifiedAt"),
-            "lastLifecycleState": ds.get("lastLifecycleState"),
-            "tags": tags,
-            "facets": ds.get("facets") or {},
-        },
+        "lineage": lineage,
     }
 
     if backend_type == "postgres":

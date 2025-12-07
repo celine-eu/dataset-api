@@ -1,4 +1,4 @@
-# dataset_api/api/catalogue.py
+# dataset/api/catalogue.py
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from dataset.catalogue.db import get_session
 from dataset.catalogue.models import DatasetEntry
-from catalogue.dcat_formatter import build_catalog
+from dataset.catalogue.dcat_formatter import build_catalog
 
 router = APIRouter()
 

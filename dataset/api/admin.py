@@ -1,4 +1,4 @@
-# dataset_api/api/admin.py
+# dataset/api/admin.py
 from __future__ import annotations
 
 import logging
