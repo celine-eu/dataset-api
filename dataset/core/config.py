@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # and still allow .env to override everything.
     api_base_url: HttpUrl = HttpUrl("http://localhost:8000")
     catalog_uri: AnyUrl = HttpUrl("https://example.org/catalog")
-    dataset_base_uri: AnyUrl = HttpUrl("https://example.org/dataset/")
+    dataset_base_uri: AnyUrl = HttpUrl("https://example.org/dataset")
 
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/datasets"
     catalogue_schema: str = "dataset_api"

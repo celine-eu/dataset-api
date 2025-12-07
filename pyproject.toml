@@ -1,6 +1,6 @@
 [project]
 name = "dataset"
-version = "0.1.0"
+version = "0.0.0"
 description = "CELINE Digital Twin API prototype"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,12 +13,40 @@ dependencies = [
     "pydantic-settings>=2.12.0",
     "sqlalchemy>=2.0.44",
     "sqlmodel>=0.0.27",
+    "typer>=0.20.0",
     "uvicorn[standard]>=0.38.0",
 ]
 
 [tool.uv]  # optional, helps uv handle locking
+package = true
 
 [tool.setuptools.packages.find]
 where = ["dataset"]
 include = ["dataset*"]
 exclude = ["tests*"]
+
+[dependency-groups]
+dev = [
+    "semantic-release>=0.1.0",
+]
+
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+update_pyproject_toml = true 
+commit_parser = "conventional"
+
+build_command = """
+    uv lock --upgrade-package "$PACKAGE_NAME"
+    git add uv.lock
+    uv build
+"""
+
+[tool.semantic_release.commit_parser_options]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf", "chore"]
+parse_squash_commits = true
+ignore_merge_commits = true
+
+[project.scripts]
+dataset-cli = "dataset.cli.main:run"

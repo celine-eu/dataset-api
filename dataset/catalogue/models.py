@@ -1,7 +1,7 @@
-# dataset_api/catalogue/models.py
+# dataset/catalogue/models.py
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from sqlalchemy import Boolean, Integer, JSON, String, Text
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
@@ -23,7 +23,9 @@ class DatasetEntry(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     backend_type: Mapped[str] = mapped_column(String(64))  # "postgres", "s3", "fs", ...
-    backend_config: Mapped[dict] = mapped_column(JSON)  # {table, path, bucket, ...}
+    backend_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )  # {table, path, bucket, ...}
 
     ontology_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     schema_override_path: Mapped[Optional[str]] = mapped_column(
@@ -43,3 +45,5 @@ class DatasetEntry(Base):
     landing_page: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     language_uris: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     spatial_uris: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+
+    lineage: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

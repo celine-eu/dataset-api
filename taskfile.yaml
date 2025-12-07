@@ -6,6 +6,17 @@ tasks:
     cmds:
       - uv run uvicorn dataset.main:app --reload
 
+  cli:export-lineage:
+    desc: Export lineage from marquez
+    cmds:
+      - mkdir -p ./data/openlineage
+      - uv run python -m dataset.cli.main export openlineage --ns '*' -o ./data/openlineage
+
+  cli:import-datasets:
+    desc: Import exported datasets to API catalogue
+    cmds:
+      - uv run python -m dataset.cli.main import catalogue -i "./data/openlineage/*.yaml" --api-url http://localhost:8000
+
   migrate:
     desc: "Run migrations"
     cmds:
@@ -17,3 +28,9 @@ tasks:
       - uv run alembic revision --autogenerate -m \"$MSG\"
     vars:
       MSG: "update"
+
+  release:
+    cmds:
+      - uv run semantic-release -v version --no-vcs-release
+      - git push
+      - git push --tags

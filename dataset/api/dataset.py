@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from dataset.catalogue.db import get_session
 from dataset.catalogue.models import DatasetEntry
-from dataset.dcat.builder import build_dataset
+from dataset.catalogue.dcat_formatter import build_dataset
 
 router = APIRouter()
 
