@@ -53,7 +53,9 @@ def normalize_dataset_id(ds: dict) -> str:
     return name.lower().replace(" ", "_")
 
 
-def map_openlineage_to_catalogue(ds: dict, backend_type: str) -> dict[str, Any]:
+def map_openlineage_to_catalogue(
+    ds: dict, backend_type: str, expose=False
+) -> dict[str, Any]:
     """Convert Marquez/OpenLineage dataset into our YAML entry."""
     name = ds.get("name")
     physical = ds.get("physicalName")
@@ -65,7 +67,7 @@ def map_openlineage_to_catalogue(ds: dict, backend_type: str) -> dict[str, Any]:
         "description": description,
         "backend_type": backend_type,
         "backend_config": {},
-        "expose": False,
+        "expose": expose,
         "ontology_path": None,
         "schema_override_path": None,
         "tags": {"keywords": tags},
@@ -107,6 +109,9 @@ def export_openlineage(
     backend_type: str = typer.Option("postgres", help="Backend type for the datasets."),
     marquez_url: Optional[str] = typer.Option(None, "--marquez-url"),
     verbose: bool = typer.Option(False, "--verbose"),
+    expose: bool = typer.Option(
+        False, "--expose", help="Mark exported datasets as exposed."
+    ),
 ):
     setup_cli_logging(verbose)
 
@@ -138,7 +143,9 @@ def export_openlineage(
 
         mapped = {
             "datasets": {
-                normalize_dataset_id(ds): map_openlineage_to_catalogue(ds, backend_type)
+                normalize_dataset_id(ds): map_openlineage_to_catalogue(
+                    ds=ds, backend_type=backend_type, expose=expose
+                )
                 for ds in datasets
             }
         }

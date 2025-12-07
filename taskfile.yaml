@@ -10,7 +10,7 @@ tasks:
     desc: Export lineage from marquez
     cmds:
       - mkdir -p ./data/openlineage
-      - uv run python -m dataset.cli.main export openlineage --ns '*' -o ./data/openlineage
+      - uv run python -m dataset.cli.main export openlineage --ns '*' -o ./data/openlineage --expose
 
   cli:import-datasets:
     desc: Import exported datasets to API catalogue
