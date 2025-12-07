@@ -12,7 +12,7 @@ from dataset.catalogue.dcat_formatter import build_catalog
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/catalogue")
 async def list_catalogue(db: AsyncSession = Depends(get_session)):
     stmt = select(DatasetEntry).where(DatasetEntry.expose.is_(True))
     res = await db.execute(stmt)
