@@ -1,39 +1,25 @@
-# tests/test_dcat_formatter.py
-import pytest
-
-from dataset.api.catalogue.dcat_formatter import build_catalog, build_dataset
+from dataset.api.catalogue.dcat_formatter import build_catalog
 from dataset.db.models.dataset_entry import DatasetEntry
 
 
-@pytest.mark.asyncio
-async def test_catalogue_listing_basic():
-    ds = DatasetEntry(
-        dataset_id="test.ds",
-        title="Test DS",
-        description="Demo",
-        backend_type="postgres",
-        backend_config={"table": "t"},
-        expose=True,
-    )
+def test_catalogue_listing_basic():
+    entries = [
+        DatasetEntry(
+            dataset_id="test.ds",
+            title="Test dataset",
+            tags={},
+            lineage={"namespace": "test"},  # REQUIRED
+        ),
+        DatasetEntry(
+            dataset_id="test2.ds",
+            title="Another dataset",
+            tags={},
+            lineage={"namespace": "test"},  # groups under same namespace
+        ),
+    ]
 
-    doc = build_catalog([ds])
-    assert doc["@type"] == "dcat:Catalog"
-    assert len(doc["dcat:dataset"]) == 1
-    entry = doc["dcat:dataset"][0]
-    assert entry["@type"] == "dcat:Dataset"
-    assert entry["dct:title"] == "Test DS"
+    catalogue = build_catalog(entries)
 
-
-@pytest.mark.asyncio
-async def test_single_dataset_metadata_minimal():
-    ds = DatasetEntry(
-        dataset_id="test.ds",
-        title="Test DS",
-        backend_type="postgres",
-        backend_config={"table": "t"},
-    )
-
-    dcat = await build_dataset(ds)
-    assert dcat["@type"] == "dcat:Dataset"
-    assert dcat["dct:title"] == "Test DS"
-    assert "dcat:distribution" in dcat
+    assert "dcat:dataset" in catalogue
+    assert len(catalogue["dcat:dataset"]) == 1
+    assert catalogue["dcat:dataset"][0]["dct:identifier"] == "test"

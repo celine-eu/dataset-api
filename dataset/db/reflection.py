@@ -36,12 +36,7 @@ async def reflect_table_async(db: AsyncSession, table_name: str) -> Table:
         table = metadata.tables.get(qualified)
 
     if table is None:
-        raise HTTPException(
-            500,
-            f"SQLAlchemy reflection succeeded but metadata lookup failed: "
-            f"schema={schema}, table={tbl}. "
-            f"Available tables={list(metadata.tables.keys())}",
-        )
+        raise HTTPException(500, f"Failed to lookup requested table {table_name}")
 
     # geometry types
     for col in table.columns:
