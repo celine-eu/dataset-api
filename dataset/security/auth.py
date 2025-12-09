@@ -37,11 +37,6 @@ async def _fetch_jwks(issuer: str) -> dict[str, Any]:
 
 
 async def _decode_keycloak_jwt(token: str) -> dict[str, Any]:
-    if jwt is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="JWT validation library not installed (python-jose).",
-        )
 
     if not settings.keycloak_issuer:
         raise HTTPException(

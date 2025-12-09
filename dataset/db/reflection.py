@@ -14,10 +14,13 @@ logger = logging.getLogger(__name__)
 async def reflect_table_async(db: AsyncSession, table_name: str) -> Table:
     metadata = MetaData()
 
-    if "." in table_name:
-        schema, tbl = table_name.split(".", 1)
+    parts = table_name.split(".")
+    if len(parts) == 3:
+        _, schema, tbl = parts
+    elif len(parts) == 2:
+        schema, tbl = parts
     else:
-        schema, tbl = None, table_name
+        schema, tbl = None, parts[0]
 
     def _reflect(sync_conn):
         metadata.reflect(bind=sync_conn, only=[tbl], schema=schema)
@@ -25,11 +28,22 @@ async def reflect_table_async(db: AsyncSession, table_name: str) -> Table:
     conn = await db.connection()
     await conn.run_sync(_reflect)
 
-    key = f"{schema}.{tbl}" if schema else tbl
-    table = metadata.tables.get(key)
-    if table is None:
-        raise HTTPException(500, f"Table '{table_name}' not found")
+    table = metadata.tables.get(tbl)
 
+    # Try qualified
+    if table is None:
+        qualified = f"{schema}.{tbl}" if schema else tbl
+        table = metadata.tables.get(qualified)
+
+    if table is None:
+        raise HTTPException(
+            500,
+            f"SQLAlchemy reflection succeeded but metadata lookup failed: "
+            f"schema={schema}, table={tbl}. "
+            f"Available tables={list(metadata.tables.keys())}",
+        )
+
+    # geometry types
     for col in table.columns:
         if (
             getattr(col.type, "datatype", None) == "geometry"
@@ -37,5 +51,4 @@ async def reflect_table_async(db: AsyncSession, table_name: str) -> Table:
         ):
             col.type = Geometry(geometry_type="GEOMETRY", srid=4326)
 
-    logger.debug("Successfully reflected table %s", key)
     return table
