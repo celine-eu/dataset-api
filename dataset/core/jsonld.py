@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from dataset.db.models import DatasetEntry
+from dataset.db.models.dataset_entry import DatasetEntry
 from dataset.core.config import settings
 from dataset.core.utils import get_dataset_uri
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from dataset.core.logging import logging
-from dataset.core.healthcheck import is_healthly
+from dataset.api.healthcheck import is_healthly
 
 logger = logging.getLogger(__name__)
 

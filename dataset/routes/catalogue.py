@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dataset.db.engine import get_session
-from dataset.db.models import DatasetEntry
+from dataset.db.models.dataset_entry import DatasetEntry
 from dataset.api.catalogue.dcat_formatter import build_catalog
 
 router = APIRouter()

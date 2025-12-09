@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from dataset.core.config import settings
 from dataset.db.engine import get_session
-from dataset.db.models import Base
+from dataset.db.models.dataset_entry import Base
 from dataset.main import create_app
 
 

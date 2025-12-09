@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dataset.db.models import DatasetEntry
+from dataset.db.models.dataset_entry import DatasetEntry
 from dataset.db.reflection import reflect_table_async
 from dataset.security.opa import authorize_dataset_query
 from dataset.api.dataset_query.parser import parse_sql_filter

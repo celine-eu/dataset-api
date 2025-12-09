@@ -7,9 +7,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from dataset.core.config import settings
-from dataset.core.healthcheck import is_healthly
+from dataset.api.healthcheck import is_healthly
 from dataset.core.logging import setup_logging
-from dataset.routes import admin, catalogue, dataset, health
+from dataset.routes import register_routes
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -39,10 +39,7 @@ def create_app(use_lifespan: bool = True) -> FastAPI:
         lifespan=lifespan if use_lifespan else None,
     )
 
-    app.include_router(catalogue.router, tags=["catalogue"])
-    app.include_router(dataset.router, prefix="/dataset", tags=["dataset"])
-    app.include_router(admin.router, prefix="/admin", tags=["admin"])
-    app.include_router(health.router, tags=["health"])
+    register_routes(app)
 
     return app
 

@@ -14,7 +14,7 @@ from dataset.api.dataset_query.executor import execute_query
 router = APIRouter()
 
 
-@router.post("/{dataset_id}/query")
+@router.post("/dataset/{dataset_id}/query")
 async def query_dataset_post(
     dataset_id: str,
     body: DatasetQueryModel,
@@ -31,7 +31,7 @@ async def query_dataset_post(
     )
 
 
-@router.get("/{dataset_id}/query")
+@router.get("/dataset/{dataset_id}/query")
 async def query_dataset_get(
     dataset_id: str,
     filter: Optional[str] = None,

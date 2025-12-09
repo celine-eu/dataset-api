@@ -7,7 +7,7 @@ from typing import Any, Optional
 import httpx
 
 from dataset.core.config import settings
-from dataset.db.models import DatasetEntry
+from dataset.db.models.dataset_entry import DatasetEntry
 
 logger = logging.getLogger(__name__)
 

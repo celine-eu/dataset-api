@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from dataset.db.engine import get_session
-from dataset.db.models import DatasetEntry
+from dataset.db.models.dataset_entry import DatasetEntry
 from dataset.schemas.catalogue_import import CatalogueImportModel
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class CatalogueImportResponse(BaseModel):
 
 
 @router.post(
-    "/catalogue",
+    "/admin/catalogue",
     response_model=CatalogueImportResponse,
     status_code=status.HTTP_200_OK,
 )

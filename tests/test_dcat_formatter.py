@@ -2,7 +2,7 @@
 import pytest
 
 from dataset.api.catalogue.dcat_formatter import build_catalog, build_dataset
-from dataset.db.models import DatasetEntry
+from dataset.db.models.dataset_entry import DatasetEntry
 
 
 @pytest.mark.asyncio
