@@ -1,40 +1,30 @@
 # tests/conftest.py
 import pytest
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from dataset.core.config import settings
+from dataset.db.engine import get_session
+from dataset.db.models import Base
 from dataset.main import create_app
-from dataset.catalogue.models import Base
-from dataset.catalogue.db import get_session
-
-from httpx import AsyncClient, ASGITransport
 
 
 @pytest.fixture()
 async def test_engine():
-    from dataset.core.config import settings
-
     url = settings.database_url.replace("postgresql+psycopg", "postgresql+asyncpg")
 
     engine = create_async_engine(url, future=True)
 
     async with engine.begin() as conn:
-
-        # --- HARD RESET ----------------------------------------------------
-        # Completely remove the schema if it exists.
         await conn.execute(
             text(f"DROP SCHEMA IF EXISTS {settings.catalogue_schema} CASCADE")
         )
-        # Recreate it empty.
         await conn.execute(text(f"CREATE SCHEMA {settings.catalogue_schema}"))
-        # ---------------------------------------------------------------
-
-        # Recreate SQLAlchemy models inside this schema
         await conn.run_sync(Base.metadata.create_all)
 
     yield engine
 
-    # Cleanup after the entire test session
     async with engine.begin() as conn:
         await conn.execute(
             text(f"DROP SCHEMA IF EXISTS {settings.catalogue_schema} CASCADE")

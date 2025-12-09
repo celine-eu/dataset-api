@@ -1,13 +1,13 @@
-# dataset/api/catalogue.py
+# dataset/routes/catalogue.py
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from dataset.catalogue.db import get_session
-from dataset.catalogue.models import DatasetEntry
-from dataset.catalogue.dcat_formatter import build_catalog
+from dataset.db.engine import get_session
+from dataset.db.models import DatasetEntry
+from dataset.api.catalogue.dcat_formatter import build_catalog
 
 router = APIRouter()
 

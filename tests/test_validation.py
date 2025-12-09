@@ -1,4 +1,9 @@
-from dataset.catalogue.schema import DatasetEntryModel, Lineage, BackendConfig, Lineage
+# tests/test_validation.py
+from dataset.schemas.catalogue_import import (
+    BackendConfig,
+    DatasetEntryModel,
+    Lineage,
+)
 
 
 def test_lineage_optional_fields():

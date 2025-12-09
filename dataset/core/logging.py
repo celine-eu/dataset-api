@@ -1,4 +1,4 @@
-# dataset_api/core/logging.py
+# dataset/core/logging.py
 import logging
 import sys
 
@@ -6,10 +6,7 @@ from dataset.core.config import settings
 
 
 def setup_logging() -> None:
-    """Configure root logging for the service.
-
-    Uses a simple, production-friendly format compatible with uvicorn/gunicorn.
-    """
+    """Configure root logging for the service."""
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
 
     handler = logging.StreamHandler(sys.stdout)
@@ -24,6 +21,5 @@ def setup_logging() -> None:
     root.handlers.clear()
     root.addHandler(handler)
 
-    # Keep uvicorn loggers consistent
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logging.getLogger(name).setLevel(log_level)

@@ -4,7 +4,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal, Optional
 
-from pydantic import HttpUrl, AnyUrl
+from pydantic import AnyUrl, HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,15 +22,10 @@ class Settings(BaseSettings):
     marquez_url: Optional[AnyUrl] = None
     marquez_namespace: Optional[str] = None
 
-    # --- NEW: security / OPA configuration ---
-    # Keycloak OIDC issuer, e.g. "https://keycloak.example.com/realms/myrealm"
     keycloak_issuer: Optional[AnyUrl] = None
-    # Optional audience to validate in JWTs
     keycloak_audience: Optional[str] = None
 
-    # OPA base URL, e.g. "http://opa:8181"
     opa_url: Optional[AnyUrl] = None
-    # OPA policy path for dataset access decisions, e.g. "dataset/access"
     opa_dataset_policy_path: str = "dataset/access"
 
     log_level: str = "INFO"

@@ -1,4 +1,5 @@
-from dataset.catalogue.models import DatasetEntry
+# tests/test_backend_resolution.py
+from dataset.db.models import DatasetEntry
 
 
 def test_backend_config_roundtrip():

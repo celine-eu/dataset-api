@@ -5,7 +5,7 @@ import datetime as dt
 import logging
 from typing import Any, Iterable, Optional
 
-from dataset.catalogue.models import DatasetEntry
+from dataset.db.models import DatasetEntry
 from dataset.core.config import settings
 from dataset.core.utils import get_dataset_uri
 
@@ -40,16 +40,8 @@ def _iso_date(value: Optional[str | dt.datetime]) -> Optional[str]:
         return value
 
 
-# ---------------------------------------------------------------------------
-# Catalog
-# ---------------------------------------------------------------------------
-
-
 def build_catalog(datasets: Iterable[DatasetEntry]) -> dict[str, Any]:
-    """Build DCAT-AP Catalog JSON-LD for /catalogue.
-
-    Lightweight: no per-dataset lineage calls.
-    """
+    """Build DCAT-AP Catalog JSON-LD for /catalogue."""
     catalog_uri = str(settings.catalog_uri)
     dataset_nodes: list[dict[str, Any]] = []
 
@@ -78,10 +70,8 @@ def build_catalog(datasets: Iterable[DatasetEntry]) -> dict[str, Any]:
         if identifier:
             node["dct:identifier"] = identifier
         else:
-            # Reasonable default identifier
             node["dct:identifier"] = d.dataset_id
 
-        # Minimal distribution pointing back to API
         node["dcat:distribution"] = [
             {
                 "@id": f"{dataset_uri}#distribution-api",
@@ -99,16 +89,10 @@ def build_catalog(datasets: Iterable[DatasetEntry]) -> dict[str, Any]:
         "@id": catalog_uri,
         "@type": "dcat:Catalog",
         "dct:title": settings.app_name,
-        # Optional catalog-level description, publisher, etc. can be plugged from settings later.
         "dcat:dataset": dataset_nodes,
     }
 
     return catalog
-
-
-# ---------------------------------------------------------------------------
-# Dataset
-# ---------------------------------------------------------------------------
 
 
 async def build_dataset(entry: DatasetEntry) -> dict[str, Any]:
@@ -128,17 +112,14 @@ async def build_dataset(entry: DatasetEntry) -> dict[str, Any]:
     if entry.description:
         dcat_dataset["dct:description"] = entry.description
 
-    # Identifier (prefer tag, fall back to dataset_id)
     identifier = tags.get("identifier") or entry.dataset_id
     dcat_dataset["dct:identifier"] = identifier
 
-    # Keywords / theme
     if tags.get("keywords"):
         dcat_dataset["dcat:keyword"] = tags["keywords"]
     if tags.get("themes"):
         dcat_dataset["dcat:theme"] = tags["themes"]
 
-    # Publisher / license / rights holder
     if entry.publisher_uri:
         dcat_dataset["dct:publisher"] = {"@id": entry.publisher_uri}
     if entry.rights_holder_uri:
@@ -146,24 +127,19 @@ async def build_dataset(entry: DatasetEntry) -> dict[str, Any]:
     if entry.license_uri:
         dcat_dataset["dct:license"] = {"@id": entry.license_uri}
 
-    # Access rights
     access_rights = tags.get("accessRights")
     if access_rights:
         dcat_dataset["dct:accessRights"] = {"@id": access_rights}
 
-    # Landing page
     if entry.landing_page:
         dcat_dataset["dcat:landingPage"] = {"@id": entry.landing_page}
 
-    # Languages
     if entry.language_uris:
         dcat_dataset["dct:language"] = [{"@id": u} for u in entry.language_uris]
 
-    # Spatial coverage
     if entry.spatial_uris:
         dcat_dataset["dct:spatial"] = [{"@id": u} for u in entry.spatial_uris]
 
-    # Temporal coverage (from tags)
     temporal = tags.get("temporal") or {}
     start = temporal.get("start")
     end = temporal.get("end")
@@ -175,17 +151,14 @@ async def build_dataset(entry: DatasetEntry) -> dict[str, Any]:
             temporal_node["dcat:endDate"] = end
         dcat_dataset["dct:temporal"] = temporal_node
 
-    # Accrual periodicity (update frequency)
     accrual = tags.get("accrualPeriodicity")
     if accrual:
         dcat_dataset["dct:accrualPeriodicity"] = {"@id": accrual}
 
-    # Conforms to (schema / standard)
     conforms_to = tags.get("conformsTo")
     if conforms_to:
         dcat_dataset["dct:conformsTo"] = {"@id": conforms_to}
 
-    # Contact point
     contact = tags.get("contactPoint") or {}
     if contact:
         contact_node: dict[str, Any] = {"@type": "vcard:Individual"}
@@ -197,25 +170,17 @@ async def build_dataset(entry: DatasetEntry) -> dict[str, Any]:
             contact_node["vcard:hasEmail"] = email
         dcat_dataset["dcat:contactPoint"] = contact_node
 
-    # Distributions
     dcat_dataset["dcat:distribution"] = _build_distributions(entry, dataset_uri)
 
-    # Lineage-based enrichment (stored OpenLineage/Marquez info)
     if lineage:
         _apply_stored_lineage(dcat_dataset, lineage)
 
     return dcat_dataset
 
 
-# ---------------------------------------------------------------------------
-# Lineage enrichment (from stored OpenLineage / Marquez)
-# ---------------------------------------------------------------------------
-
-
 def _apply_stored_lineage(
     dcat_dataset: dict[str, Any], lineage: dict[str, Any]
 ) -> None:
-    """Map stored lineage info (from Marquez/OpenLineage) into DCAT-AP / PROV."""
     created = lineage.get("createdAt")
     updated = lineage.get("updatedAt")
     source = lineage.get("sourceName") or lineage.get("namespace")
@@ -238,25 +203,20 @@ def _apply_stored_lineage(
             }
         )
 
-    # Merge OpenLineage tags into dcat:keyword
     if tags:
         existing = set(dcat_dataset.get("dcat:keyword", []))
         dcat_dataset["dcat:keyword"] = sorted(existing.union(tags))
 
-    # Optional: map some standard Dataset facets → DCAT-AP
-    # schema facet -> dct:conformsTo (if not already set)
     schema_facet = facets.get("schema") or {}
     schema_url = schema_facet.get("_schemaURL")
     if schema_url and "dct:conformsTo" not in dcat_dataset:
         dcat_dataset["dct:conformsTo"] = {"@id": schema_url}
 
-    # documentation facet -> dct:description (if none)
     doc_facet = facets.get("documentation") or {}
     doc_desc = doc_facet.get("description")
     if doc_desc and not dcat_dataset.get("dct:description"):
         dcat_dataset["dct:description"] = doc_desc
 
-    # ownership facet -> publisher / rightsHolder (if not already set)
     ownership = facets.get("ownership") or {}
     owners = ownership.get("owners") or []
     if owners and "dct:publisher" not in dcat_dataset:
@@ -267,22 +227,15 @@ def _apply_stored_lineage(
                 "@id": f"{settings.catalog_uri}/agent/{name}"
             }
 
-    # version facet -> adms:version or owl:versionInfo
     version = facets.get("version") or {}
     ver = version.get("version")
     if ver:
         dcat_dataset["adms:version"] = ver
 
 
-# ---------------------------------------------------------------------------
-# Distribution
-# ---------------------------------------------------------------------------
-
-
 def _build_distributions(entry: DatasetEntry, dataset_uri: str) -> list[dict[str, Any]]:
     distributions: list[dict[str, Any]] = []
 
-    # API distribution
     api_dist: dict[str, Any] = {
         "@id": f"{dataset_uri}#distribution-api",
         "@type": "dcat:Distribution",
@@ -292,15 +245,11 @@ def _build_distributions(entry: DatasetEntry, dataset_uri: str) -> list[dict[str
         "dcat:mediaType": "application/json",
     }
 
-    # If license available at dataset level and no distribution-specific license, reuse it
     if entry.license_uri:
         api_dist["dct:license"] = {"@id": entry.license_uri}
 
-    # You could also propagate issued/modified at distribution-level from lineage if desired
-
     distributions.append(api_dist)
 
-    # Landing page distribution
     if entry.landing_page:
         landing_dist: dict[str, Any] = {
             "@id": f"{dataset_uri}#distribution-landing",
@@ -312,9 +261,7 @@ def _build_distributions(entry: DatasetEntry, dataset_uri: str) -> list[dict[str
         }
         distributions.append(landing_dist)
 
-    # Raw file distribution for s3/fs backends
     if entry.backend_type in ("s3", "fs"):
-
         file_dist: dict[str, Any] = {
             "@id": f"{dataset_uri}#distribution-file",
             "@type": "dcat:Distribution",
@@ -322,17 +269,14 @@ def _build_distributions(entry: DatasetEntry, dataset_uri: str) -> list[dict[str
         }
 
         if entry.backend_config:
-
             fmt = entry.backend_config.get("format", "application/octet-stream")
             file_dist["dct:format"] = fmt
-            file_dist["dct:mediaType"] = fmt
+            file_dist["dcat:mediaType"] = fmt
 
-            # Optional: direct download URL
             raw_url = entry.backend_config.get("public_url")
             if raw_url:
                 file_dist["dcat:downloadURL"] = raw_url
 
-            # Optional: size if known
             size_bytes = entry.backend_config.get("size_bytes")
             if isinstance(size_bytes, int):
                 file_dist["dcat:byteSize"] = size_bytes

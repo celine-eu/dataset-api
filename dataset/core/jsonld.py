@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from dataset.catalogue.models import DatasetEntry
+from dataset.db.models import DatasetEntry
 from dataset.core.config import settings
 from dataset.core.utils import get_dataset_uri
 
@@ -18,8 +18,6 @@ def rows_to_jsonld(
 ) -> dict[str, Any]:
     """
     VERY simple stub JSON-LD mapper.
-
-    Later you can specialize per-dataset (e.g. GeoJSON-LD, schema.org, etc.).
     """
     dataset_uri = get_dataset_uri(entry.dataset_id)
     collection_uri = f"{dataset_uri}/query"

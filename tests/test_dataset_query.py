@@ -1,11 +1,10 @@
+# tests/test_dataset_query.py
 import pytest
 from sqlalchemy import text
-from dataset.catalogue.models import DatasetEntry
+
+from dataset.db.models import DatasetEntry
 
 
-# ------------------------------------------------------------
-# Basic open dataset query
-# ------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_query_open_dataset_simple(client, test_session):
     table = "dataset_api.test_table"
@@ -55,9 +54,6 @@ async def test_query_open_dataset_simple(client, test_session):
         await test_session.commit()
 
 
-# ------------------------------------------------------------
-# SQL-glot filter (instead of CQL2)
-# ------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_query_sql_filter(client, test_session):
     table = "dataset_api.filter_table"
@@ -113,9 +109,6 @@ async def test_query_sql_filter(client, test_session):
         await test_session.commit()
 
 
-# ------------------------------------------------------------
-# Pagination works
-# ------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_query_pagination(client, test_session):
     table = "dataset_api.page_table"
@@ -152,18 +145,12 @@ async def test_query_pagination(client, test_session):
         await test_session.commit()
 
 
-# ------------------------------------------------------------
-# Missing dataset
-# ------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_query_nonexistent_dataset(client):
     resp = await client.get("/dataset/missing/query")
     assert resp.status_code in (400, 404)
 
 
-# ------------------------------------------------------------
-# Unsupported backend
-# ------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_query_unsupported_backend(client, test_session):
     ds = DatasetEntry(
@@ -180,9 +167,6 @@ async def test_query_unsupported_backend(client, test_session):
     assert resp.status_code == 400
 
 
-# ------------------------------------------------------------
-# SQL Injection blocked
-# ------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_query_sql_injection_blocked(client, test_session):
     table = "dataset_api.inj_table"
@@ -218,7 +202,6 @@ async def test_query_sql_injection_blocked(client, test_session):
         )
         await test_session.commit()
 
-        # sqlglot rejects DROP TABLE as invalid syntax for a WHERE clause
         resp = await client.get(
             "/dataset/ds_inj/query",
             params={"filter": "value = 'safe'; DROP TABLE inj_table"},
@@ -231,9 +214,6 @@ async def test_query_sql_injection_blocked(client, test_session):
         await test_session.commit()
 
 
-# ------------------------------------------------------------
-# Geospatial filter (SQL using ST_Intersects)
-# ------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_query_geospatial_filter(client, test_session):
     table = "dataset_api.geo_table"
@@ -271,7 +251,6 @@ async def test_query_geospatial_filter(client, test_session):
         )
         await test_session.commit()
 
-        # SQL filter with ST_Intersects
         polygon = '{"type": "Polygon", "coordinates": [[[8,44],[10,44],[10,46],[8,46],[8,44]]]}'
         sql_filter = (
             f"ST_Intersects(geom, ST_SetSRID(ST_GeomFromGeoJSON('{polygon}'), 4326))"
@@ -289,9 +268,6 @@ async def test_query_geospatial_filter(client, test_session):
         await test_session.commit()
 
 
-# ------------------------------------------------------------
-# Temporal SQL filter
-# ------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_query_temporal_filter(client, test_session):
     table = "dataset_api.temp_table"
@@ -343,9 +319,6 @@ async def test_query_temporal_filter(client, test_session):
         await test_session.commit()
 
 
-# ------------------------------------------------------------
-# Complex SQL filter (sqlglot supports parentheses)
-# ------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_query_complex_filter(client, test_session):
     table = "dataset_api.complex_table"

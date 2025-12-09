@@ -6,8 +6,8 @@ from typing import Any, Optional
 
 import httpx
 
-from dataset.catalogue.models import DatasetEntry
 from dataset.core.config import settings
+from dataset.db.models import DatasetEntry
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +20,10 @@ async def authorize_dataset_query(
 ) -> bool:
     """
     Call OPA to decide if the given user may run this query on this dataset.
-
-    Row-level policies can be implemented in OPA; here we only care about
-    an allow/deny boolean.
     """
     opa_url: str | None = str(settings.opa_url) if settings.opa_url else None
 
     if not opa_url:
-        # If you prefer "fail closed", flip this to False and adjust error handling.
         logger.debug("OPA URL not configured, skipping external policy check.")
         return True
 
@@ -52,11 +48,9 @@ async def authorize_dataset_query(
             resp = await client.post(url, json={"input": input_doc})
             resp.raise_for_status()
             data = resp.json()
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - defensive
         logger.error("OPA evaluation failed: %s", exc)
-        # Fail closed by default for non-open data; caller can decide based on dataset.
         return False
 
-    # Convention: OPA returns {"result": {"allow": true/false}}
     allowed = bool(data.get("result", {}).get("allow", False))
     return allowed

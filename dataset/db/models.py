@@ -1,13 +1,12 @@
-# dataset/catalogue/models.py
+# dataset/db/models.py
 from __future__ import annotations
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from sqlalchemy import Boolean, Integer, JSON, String, Text
-from sqlalchemy.orm import declarative_base, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
 from dataset.core.config import settings
-
 
 Base = declarative_base()
 
@@ -46,7 +45,7 @@ class DatasetEntry(Base):
 
     lineage: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
-    # NEW: coarse dataset access level (used together with OPA)
+    # Coarse dataset access level (used together with OPA)
     # Suggested values: "open", "restricted", "internal"
     access_level: Mapped[Optional[str]] = mapped_column(
         String(32), nullable=True, default="open"

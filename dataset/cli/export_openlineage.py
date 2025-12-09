@@ -3,21 +3,17 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional, List, Any
+from typing import Any, List, Optional
+
 import httpx
 import typer
 import yaml
 
-from dataset.cli.utils import setup_cli_logging, resolve_namespaces
+from dataset.cli.utils import resolve_namespaces, setup_cli_logging
 from dataset.core.config import settings
 
 logger = logging.getLogger(__name__)
 export_app = typer.Typer(name="export", help="Export OpenLineage datasets into YAML")
-
-
-# ---------------------------------------------------------------------------
-# Marquez API helpers
-# ---------------------------------------------------------------------------
 
 
 def fetch_namespaces(marquez_url: str) -> list[str]:
@@ -72,7 +68,7 @@ def extract_lineage_info(mq: dict) -> dict:
 
 
 def map_openlineage_to_catalogue(
-    ds: dict, backend_type: str, expose=False
+    ds: dict, backend_type: str, expose: bool = False
 ) -> dict[str, Any]:
     """Convert Marquez/OpenLineage dataset into our YAML entry."""
     name = ds.get("name")
@@ -105,11 +101,6 @@ def map_openlineage_to_catalogue(
     return entry
 
 
-# ---------------------------------------------------------------------------
-# CLI command
-# ---------------------------------------------------------------------------
-
-
 @export_app.command("openlineage")
 def export_openlineage(
     ns: List[str] = typer.Option(
@@ -132,11 +123,9 @@ def export_openlineage(
 
     typer.echo(f"Querying Marquez at {base_url}")
 
-    # Step 1: list known namespaces
     all_namespaces = fetch_namespaces(base_url)
     typer.echo(f"Found namespaces: {all_namespaces}")
 
-    # Step 2: resolve include/exclude rules
     try:
         selected = resolve_namespaces(all_namespaces, ns)
     except ValueError as e:
@@ -145,7 +134,6 @@ def export_openlineage(
 
     typer.echo(f"Selected namespaces: {selected}")
 
-    # Step 3: extract per-namespace datasets and write YAML
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for namespace in selected:

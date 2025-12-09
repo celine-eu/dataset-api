@@ -1,8 +1,9 @@
+# tests/test_sql_filter_core.py
 import pytest
-from sqlalchemy import Table, Column, MetaData, Integer, String, DateTime, select
+from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, select
 from sqlalchemy.sql.elements import ColumnElement
 
-from dataset.api.dataset import parse_sql_filter
+from dataset.api.dataset_query.parser import parse_sql_filter
 
 
 @pytest.fixture
@@ -20,11 +21,6 @@ def test_table():
 
 def render(stmt):
     return stmt.compile(compile_kwargs={"literal_binds": True})
-
-
-# ----------------------------------------------------------------------
-# BASIC TESTS
-# ----------------------------------------------------------------------
 
 
 def test_simple_eq(test_table):
@@ -57,11 +53,6 @@ def test_or_condition(test_table):
     assert "city = 'Milan'" in sql
 
 
-# ----------------------------------------------------------------------
-# DATETIME LITERALS
-# ----------------------------------------------------------------------
-
-
 def test_datetime_literal(test_table):
     f = parse_sql_filter("created_at >= '2025-01-01T00:00:00Z'", test_table)
     assert f is not None
@@ -69,11 +60,6 @@ def test_datetime_literal(test_table):
         select(test_table).where(f).compile(compile_kwargs={"literal_binds": True})
     )
     assert "2025-01-01" in sql
-
-
-# ----------------------------------------------------------------------
-# PARENTHESES & PRECEDENCE
-# ----------------------------------------------------------------------
 
 
 def test_nested_parens(test_table):
@@ -115,25 +101,13 @@ def test_deep_nesting(test_table):
     assert "temperature < 40" in sql
 
 
-# ----------------------------------------------------------------------
-# NOT operator
-# ----------------------------------------------------------------------
-
-
 def test_not(test_table):
     f = parse_sql_filter("NOT (city = 'Rome')", test_table)
     assert f is not None
     sql = str(
         select(test_table).where(f).compile(compile_kwargs={"literal_binds": True})
     )
-
-    # SQLAlchemy may rewrite NOT (city = 'Rome') → city != 'Rome'
     assert "city != 'Rome'" in sql or "NOT" in sql
-
-
-# ----------------------------------------------------------------------
-# NUMERIC, STRING, MIXED
-# ----------------------------------------------------------------------
 
 
 def test_mixed_operators(test_table):
@@ -147,11 +121,6 @@ def test_mixed_operators(test_table):
     assert "temperature >= 10" in sql
     assert "temperature <= 30" in sql
     assert "city != 'Paris'" in sql
-
-
-# ----------------------------------------------------------------------
-# INVALID CASES (should raise 400)
-# ----------------------------------------------------------------------
 
 
 def test_invalid_column_raises(test_table):
@@ -174,20 +143,10 @@ def test_invalid_function(test_table):
         parse_sql_filter("hack(city)", test_table)
 
 
-# ----------------------------------------------------------------------
-# Geometry functions (if enabled)
-# ----------------------------------------------------------------------
-
-
 def test_geometry_functions_allowed(test_table):
     f = parse_sql_filter("st_distance(city, 'POINT(0 0)') > 10", test_table)
     assert f is not None
     assert isinstance(f, ColumnElement)
-
-
-# ----------------------------------------------------------------------
-# COMPLEX REAL-WORLD QUERIES
-# ----------------------------------------------------------------------
 
 
 def test_multi_layer_boolean(test_table):

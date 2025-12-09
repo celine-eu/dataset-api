@@ -1,8 +1,10 @@
+# tests/test_catalogue_import.py
 import pytest
-from dataset.catalogue.schema import (
+
+from dataset.schemas.catalogue_import import (
+    BackendConfig,
     CatalogueImportModel,
     DatasetEntryModel,
-    BackendConfig,
 )
 
 

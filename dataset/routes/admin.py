@@ -1,16 +1,16 @@
-# dataset/api/admin.py
+# dataset/routes/admin.py
 from __future__ import annotations
 
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 
-from dataset.catalogue.db import get_session
-from dataset.catalogue.models import DatasetEntry
-from dataset.catalogue.schema import CatalogueImportModel
+from dataset.db.engine import get_session
+from dataset.db.models import DatasetEntry
+from dataset.schemas.catalogue_import import CatalogueImportModel
 
 logger = logging.getLogger(__name__)
 
@@ -44,18 +44,17 @@ async def import_catalogue(
         res = await db.execute(stmt)
         existing = res.scalars().first()
 
+        backend_config = ds.backend_config.model_dump() if ds.backend_config else None
+        lineage = ds.lineage.model_dump() if ds.lineage else None
+        tags = ds.tags.model_dump() if ds.tags else None
+
         if existing:
-            # Update fields
             existing.title = ds.title
             existing.description = ds.description
             existing.backend_type = ds.backend_type
-
-            existing.backend_config = (
-                ds.backend_config.model_dump() if ds.backend_config else None
-            )
-            existing.lineage = ds.lineage.model_dump() if ds.lineage else None
-            existing.tags = ds.tags.model_dump() if ds.tags else None
-
+            existing.backend_config = backend_config
+            existing.lineage = lineage
+            existing.tags = tags
             existing.ontology_path = ds.ontology_path
             existing.schema_override_path = ds.schema_override_path
             existing.expose = ds.expose
@@ -65,7 +64,6 @@ async def import_catalogue(
             existing.landing_page = ds.landing_page
             existing.language_uris = ds.language_uris
             existing.spatial_uris = ds.spatial_uris
-
             updated += 1
         else:
             entry = DatasetEntry(
@@ -73,11 +71,9 @@ async def import_catalogue(
                 title=ds.title,
                 description=ds.description,
                 backend_type=ds.backend_type,
-                backend_config=(
-                    ds.backend_config.model_dump() if ds.backend_config else None
-                ),
-                tags=ds.tags.model_dump() if ds.tags else None,
-                lineage=ds.lineage.model_dump() if ds.lineage else None,
+                backend_config=backend_config,
+                tags=tags,
+                lineage=lineage,
                 ontology_path=ds.ontology_path,
                 schema_override_path=ds.schema_override_path,
                 expose=ds.expose,
@@ -93,7 +89,7 @@ async def import_catalogue(
 
     try:
         await db.commit()
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Failed to import catalogue: %s", exc)
         await db.rollback()
         raise HTTPException(

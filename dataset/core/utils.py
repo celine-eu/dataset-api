@@ -1,4 +1,5 @@
 # dataset_api/core/utils.py
+from __future__ import annotations
 
 from dataset.core.config import settings
 
@@ -8,6 +9,5 @@ def url_str(url) -> str:
 
 
 def get_dataset_uri(dataset_id: str) -> str:
-    # dataset_base_uri is expected to be something like "https://example.org/dataset"
     base = str(settings.dataset_base_uri).rstrip("/")
     return f"{base}/{dataset_id}"

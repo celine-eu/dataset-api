@@ -1,6 +1,8 @@
+# tests/test_dcat_formatter.py
 import pytest
-from dataset.catalogue.models import DatasetEntry
-from dataset.catalogue.dcat_formatter import build_catalog, build_dataset
+
+from dataset.api.catalogue.dcat_formatter import build_catalog, build_dataset
+from dataset.db.models import DatasetEntry
 
 
 @pytest.mark.asyncio

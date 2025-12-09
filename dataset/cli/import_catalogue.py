@@ -1,33 +1,29 @@
 # dataset/cli/import_catalogue.py
 from __future__ import annotations
 
+import glob
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
-import typer
+from typing import Any, Dict, List
+
 import httpx
-import glob
+import typer
 from pydantic import ValidationError
 
-from dataset.cli.utils import setup_cli_logging, load_yaml_file, resolve_namespaces
-from dataset.catalogue.schema import CatalogueImportModel, DatasetEntryModel
+from dataset.cli.utils import load_yaml_file, resolve_namespaces, setup_cli_logging
+from dataset.schemas.catalogue_import import (
+    CatalogueImportModel,
+    DatasetEntryModel,
+)
 
 logger = logging.getLogger(__name__)
 
 import_app = typer.Typer(name="import", help="Import catalogue into Dataset API")
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def validate_catalogue_payload(
-    raw_entries: Dict[str, Dict[str, Any]], strict=False
+    raw_entries: Dict[str, Dict[str, Any]], strict: bool = False
 ) -> List[DatasetEntryModel]:
-    """
-    Convert merged YAML dicts into validated Pydantic models.
-    """
     dataset_models: List[DatasetEntryModel] = []
 
     for ds_id, entry in raw_entries.items():
@@ -46,7 +42,6 @@ def validate_catalogue_payload(
 
 
 def expand_inputs(patterns: List[Path]) -> List[Path]:
-    """Expand input paths where some may be globs."""
     out: List[Path] = []
     for p in patterns:
         s = str(p)
@@ -59,17 +54,8 @@ def expand_inputs(patterns: List[Path]) -> List[Path]:
 
 
 def extract_dataset_namespace(entry: Dict[str, Any]) -> str:
-    """
-    Return the dataset's namespace from the lineage block if present.
-    Default is "default" if missing.
-    """
     lineage = entry.get("lineage") or {}
     return lineage.get("namespace") or "default"
-
-
-# ---------------------------------------------------------------------------
-# CLI Command
-# ---------------------------------------------------------------------------
 
 
 @import_app.command("catalogue")
@@ -92,13 +78,8 @@ def import_catalogue(
         False, "--strict", help="Fail on first validation error."
     ),
 ):
-    """
-    Import datasets into the Dataset API.
-    Supports namespace filtering, and glob input files.
-    """
     setup_cli_logging(verbose)
 
-    # Expand file globs
     files = expand_inputs(input_yaml)
     if not files:
         typer.echo("No input YAML files found from provided patterns.", err=True)
@@ -106,9 +87,6 @@ def import_catalogue(
 
     typer.echo(f"Found {len(files)} YAML file(s).")
 
-    # ----------------------------------------------------------------------
-    # Load all datasets from input files
-    # ----------------------------------------------------------------------
     collected: Dict[str, Dict[str, Any]] = {}
 
     for f in files:
@@ -137,21 +115,15 @@ def import_catalogue(
 
     typer.echo(f"Loaded {len(collected)} total datasets before filtering.")
 
-    # ----------------------------------------------------------------------
-    # Namespace filtering
-    # ----------------------------------------------------------------------
-    # Discover all namespaces present in loaded YAML
     all_namespaces = sorted(
         {extract_dataset_namespace(entry) for entry in collected.values()}
     )
 
     typer.echo(f"Namespaces found in input: {all_namespaces}")
 
-    # If no --ns argument was provided → import ALL namespaces
     if not ns:
         selected_namespaces = all_namespaces
     else:
-        # Reuse the same namespace resolution logic as export_openlineage
         try:
             selected_namespaces = resolve_namespaces(all_namespaces, ns)
         except ValueError as e:
@@ -160,7 +132,6 @@ def import_catalogue(
 
     typer.echo(f"Selected namespaces: {selected_namespaces}")
 
-    # Filter datasets to selected namespaces
     filtered = {
         ds_id: entry
         for ds_id, entry in collected.items()
@@ -173,9 +144,6 @@ def import_catalogue(
 
     typer.echo(f"{len(filtered)} datasets remaining after filtering.")
 
-    # ----------------------------------------------------------------------
-    # Prepare payload and POST
-    # ----------------------------------------------------------------------
     validated = validate_catalogue_payload(filtered, strict)
     payload = CatalogueImportModel(datasets=validated).model_dump()
 

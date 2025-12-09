@@ -15,7 +15,7 @@ env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(env_path)
 
 from dataset.core.config import settings
-from dataset.catalogue.models import Base
+from dataset.api.catalogue.models import Base
 
 
 config = context.config
@@ -29,10 +29,13 @@ target_metadata = Base.metadata
 # Restrict Alembic to *your* schema only
 # ────────────────────────────────────────────
 def include_object(object, name, type_, reflected, compare_to):
+    schema = settings.catalogue_schema
+
     if type_ == "table":
-        return object.schema == settings.catalogue_schema
-    if type_ == "column":
-        return object.table.schema == settings.catalogue_schema
+        model_schema = object.schema or schema
+        db_schema = compare_to.schema if compare_to is not None else schema
+        return model_schema == db_schema == schema
+
     return True
 
 
@@ -61,6 +64,7 @@ def run_migrations_offline() -> None:
         compare_server_default=True,
         compare_type=True,
         version_table_schema=settings.catalogue_schema,
+        include_schemas=True,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -79,6 +83,7 @@ def do_run_migrations(connection):
         include_name=include_name,
         compare_server_default=True,
         compare_type=True,
+        include_schemas=True,
         version_table_schema=settings.catalogue_schema,
     )
     context.run_migrations()
