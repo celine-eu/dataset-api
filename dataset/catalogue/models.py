@@ -22,10 +22,10 @@ class DatasetEntry(Base):
     title: Mapped[str] = mapped_column(String(512))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    backend_type: Mapped[str] = mapped_column(String(64))  # "postgres", "s3", "fs", ...
+    backend_type: Mapped[str] = mapped_column(String(64))
     backend_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSON, nullable=True
-    )  # {table, path, bucket, ...}
+    )
 
     ontology_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     schema_override_path: Mapped[Optional[str]] = mapped_column(
@@ -33,9 +33,7 @@ class DatasetEntry(Base):
     )
 
     expose: Mapped[bool] = mapped_column(Boolean, default=False)
-    tags: Mapped[Optional[dict]] = mapped_column(
-        JSON, nullable=True
-    )  # keywords, theme URIs, etc.
+    tags: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Optional extra fields for DCAT-AP / provenance
     publisher_uri: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
@@ -47,3 +45,9 @@ class DatasetEntry(Base):
     spatial_uris: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
 
     lineage: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # NEW: coarse dataset access level (used together with OPA)
+    # Suggested values: "open", "restricted", "internal"
+    access_level: Mapped[Optional[str]] = mapped_column(
+        String(32), nullable=True, default="open"
+    )

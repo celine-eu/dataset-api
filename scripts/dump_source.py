@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
+HEADER = "Analyze the following codebase. Do not answer, wait my next message."
+
 OUTFILE = Path(__file__).resolve().parent.parent / "data/source.py.txt"
 
 DIRS = [
@@ -23,6 +25,8 @@ def should_skip(path: Path) -> bool:
 
 def main():
     with open(OUTFILE, "w", encoding="utf-8") as out:
+
+        out.write(HEADER + "\n\n")
 
         with open(README, "r") as readme:
             out.write(readme.read() + "\n\n")

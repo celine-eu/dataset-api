@@ -7,6 +7,7 @@ from typing import Any, Iterable, Optional
 
 from dataset.catalogue.models import DatasetEntry
 from dataset.core.config import settings
+from dataset.core.utils import get_dataset_uri
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +22,6 @@ DCAT_CONTEXT = {
     "xsd": "http://www.w3.org/2001/XMLSchema#",
     "vcard": "http://www.w3.org/2006/vcard/ns#",
 }
-
-
-def _dataset_uri(dataset_id: str) -> str:
-    # dataset_base_uri is expected to be something like "https://example.org/dataset"
-    base = str(settings.dataset_base_uri).rstrip("/")
-    return f"{base}/{dataset_id}"
 
 
 def _iso_date(value: Optional[str | dt.datetime]) -> Optional[str]:
@@ -59,7 +54,7 @@ def build_catalog(datasets: Iterable[DatasetEntry]) -> dict[str, Any]:
     dataset_nodes: list[dict[str, Any]] = []
 
     for d in datasets:
-        dataset_uri = _dataset_uri(d.dataset_id)
+        dataset_uri = get_dataset_uri(d.dataset_id)
 
         node: dict[str, Any] = {}
         node["@id"] = dataset_uri
@@ -118,7 +113,7 @@ def build_catalog(datasets: Iterable[DatasetEntry]) -> dict[str, Any]:
 
 async def build_dataset(entry: DatasetEntry) -> dict[str, Any]:
     """Build a DCAT-AP JSON-LD node for a single Dataset."""
-    dataset_uri = _dataset_uri(entry.dataset_id)
+    dataset_uri = get_dataset_uri(entry.dataset_id)
 
     tags = entry.tags or {}
     lineage = entry.lineage or {}

@@ -7,7 +7,7 @@ The Dataset API provides a unified, lineage-aware, metadata-rich interface to da
 - DCAT-AP 3.0.0 catalogue (`/catalogue`)
 - Detailed dataset metadata (`/dataset/<id>/metadata`)
 - Dataset schema (`/dataset/<id>/schema`)
-- Query API using CQL2-like syntax (`/dataset/<id>/query`)
+- Query API using SQL-like syntax (`/dataset/<id>/query`)
 - Strong governance through controlled dataset exposure (`expose: true/false`)
 - OpenLineage integration and provenance tracking
 - YAML-based catalogue import/export

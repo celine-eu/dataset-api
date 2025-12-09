@@ -8,7 +8,7 @@ tasks:
   test:
     desc: "Run tests"
     cmds:
-      - uv run pytest
+      - uv run pytest -- {{.CLI_ARGS}}
 
   cli:export-lineage:
     desc: Export lineage from marquez

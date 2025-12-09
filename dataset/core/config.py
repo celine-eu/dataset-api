@@ -12,8 +12,6 @@ class Settings(BaseSettings):
     app_name: str = "Dataset API"
     env: Literal["dev", "prod", "test"] = "dev"
 
-    # Provide safe defaults so Pylance stops complaining,
-    # and still allow .env to override everything.
     api_base_url: HttpUrl = HttpUrl("http://localhost:8000")
     catalog_uri: AnyUrl = HttpUrl("https://example.org/catalog")
     dataset_base_uri: AnyUrl = HttpUrl("https://example.org/dataset")
@@ -23,6 +21,17 @@ class Settings(BaseSettings):
 
     marquez_url: Optional[AnyUrl] = None
     marquez_namespace: Optional[str] = None
+
+    # --- NEW: security / OPA configuration ---
+    # Keycloak OIDC issuer, e.g. "https://keycloak.example.com/realms/myrealm"
+    keycloak_issuer: Optional[AnyUrl] = None
+    # Optional audience to validate in JWTs
+    keycloak_audience: Optional[str] = None
+
+    # OPA base URL, e.g. "http://opa:8181"
+    opa_url: Optional[AnyUrl] = None
+    # OPA policy path for dataset access decisions, e.g. "dataset/access"
+    opa_dataset_policy_path: str = "dataset/access"
 
     log_level: str = "INFO"
 
