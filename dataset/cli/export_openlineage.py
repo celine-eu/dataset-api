@@ -78,7 +78,17 @@ def map_openlineage_to_catalogue(
 
     lineage = extract_lineage_info(ds)
 
-    entry = {
+    facets = ds.get("facets") or {}
+    gov = facets.get("governance") or {}
+
+    # Remove OL metadata keys
+    gov_data = (
+        {k: v for k, v in gov.items() if not k.startswith("_")}
+        if isinstance(gov, dict)
+        else {}
+    )
+
+    entry: dict[str, Any] = {
         "title": name,
         "description": description,
         "backend_type": backend_type,
@@ -97,6 +107,54 @@ def map_openlineage_to_catalogue(
             "path": physical,
             "format": "application/octet-stream",
         }
+
+    # ---------------- Governance mapping ----------------
+    # license -> license_uri
+    license_val = gov_data.get("license")
+    if isinstance(license_val, str) and license_val:
+        entry["license_uri"] = license_val
+
+    # owners (list[str]) -> rights_holder_uri (first) and keywords
+    owners = gov_data.get("owners") or []
+    if isinstance(owners, list) and owners:
+        # represent as URN, can be adjusted later
+        first_owner = owners[0]
+        entry["rights_holder_uri"] = f"urn:team:{first_owner}"
+        # also add to keywords
+        entry["tags"].setdefault("keywords", [])
+        entry["tags"]["keywords"].extend([f"owner:{o}" for o in owners])
+
+    # access level, access rights, classification
+    access_level = gov_data.get("accessLevel")
+    access_rights = gov_data.get("accessRights")
+    classification = gov_data.get("classification")
+
+    if access_level:
+        entry["access_level"] = str(access_level)
+        # DCAT accessRights goes under tags
+        entry["tags"]["accessRights"] = str(access_level)
+
+    if access_rights:
+        entry["tags"]["accessRights"] = str(access_rights)
+
+    # merge governance tags into keywords
+    gov_tags = gov_data.get("tags") or []
+    if gov_tags:
+        kw = set(entry["tags"].get("keywords") or [])
+        kw.update(gov_tags)
+        if classification:
+            kw.add(f"classification:{classification}")
+        entry["tags"]["keywords"] = sorted(kw)
+    elif classification:
+        kw = set(entry["tags"].get("keywords") or [])
+        kw.add(f"classification:{classification}")
+        entry["tags"]["keywords"] = sorted(kw)
+
+    # optionally keep the raw gov_data under lineage.facets for debugging
+    if gov_data:
+        lineage_facets = entry["lineage"].get("facets") or {}
+        lineage_facets["governance"] = gov_data
+        entry["lineage"]["facets"] = lineage_facets
 
     return entry
 

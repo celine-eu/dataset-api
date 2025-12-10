@@ -24,8 +24,10 @@ async def lifespan(app: FastAPI):
 
     failed = await is_healthly()
 
-    if not failed:
-        yield
+    if failed:
+        raise RuntimeError("System failed health check at startup")
+
+    yield
 
     logger.info("Shutting down %s", settings.app_name)
 

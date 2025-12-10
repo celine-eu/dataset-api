@@ -91,10 +91,20 @@ def build_catalog(entries: Iterable[DatasetEntry]) -> dict[str, Any]:
                 "@type": "dcat:Distribution",
                 "dct:title": e.title or dist_id,
                 "dct:identifier": dist_id,
-                "dct:format": fmt,
+                "dct:format": fmt or "application/json-ld",
                 "dcat:mediaType": fmt,
                 "dcat:accessURL": get_dataset_uri(dist_id) + "/query",
             }
+
+            # governance fields
+            if e.license_uri:
+                dist_node["dct:license"] = e.license_uri
+            if e.rights_holder_uri:
+                dist_node["dct:rightsHolder"] = e.rights_holder_uri
+            if e.access_level:
+                dist_node["dct:accessRights"] = e.access_level
+            if e.tags and e.tags.get("keywords", []):
+                dist_node["dcat:keyword"] = e.tags.get("keywords", [])
 
             # Optional fields
             if backend.get("public_url"):

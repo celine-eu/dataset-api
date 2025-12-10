@@ -78,6 +78,8 @@ class DatasetEntryModel(BaseModel):
     language_uris: Optional[List[str]] = None
     spatial_uris: Optional[List[str]] = None
 
+    access_level: Optional[str] = None
+
     @field_validator("backend_type")
     def check_backend_type(cls, v):
         allowed = {"postgres", "s3", "fs"}

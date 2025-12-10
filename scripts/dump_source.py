@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-HEADER = "Analyze the following codebase. Do not answer, wait my next message."
+HEADER = ""
 
-OUTFILE = Path(__file__).resolve().parent.parent / "data/source.py.txt"
+OUTFILE = Path(__file__).resolve().parent.parent / "data/source.txt"
 
 DIRS = [
     Path(__file__).resolve().parent.parent / "dataset",

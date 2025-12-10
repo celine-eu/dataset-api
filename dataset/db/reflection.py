@@ -23,7 +23,7 @@ async def reflect_table_async(db: AsyncSession, table_name: str) -> Table:
         schema, tbl = None, parts[0]
 
     def _reflect(sync_conn):
-        metadata.reflect(bind=sync_conn, only=[tbl], schema=schema)
+        metadata.reflect(bind=sync_conn, only=[tbl], schema=schema, views=True)
 
     conn = await db.connection()
     await conn.run_sync(_reflect)

@@ -64,6 +64,7 @@ async def import_catalogue(
             existing.landing_page = ds.landing_page
             existing.language_uris = ds.language_uris
             existing.spatial_uris = ds.spatial_uris
+            existing.access_level = ds.access_level
             updated += 1
         else:
             entry = DatasetEntry(
@@ -83,6 +84,7 @@ async def import_catalogue(
                 landing_page=ds.landing_page,
                 language_uris=ds.language_uris,
                 spatial_uris=ds.spatial_uris,
+                access_level=ds.access_level,
             )
             db.add(entry)
             created += 1
