@@ -21,6 +21,21 @@ tasks:
     cmds:
       - uv run python -m dataset.cli.main import catalogue -i "./data/openlineage/*.yaml" --api-url http://localhost:8000
 
+  cli:ontology-fetch:
+    desc: Fetch ontologies
+    cmds:
+      - uv run python -m dataset.cli.main ontology fetch -o ./data/ontologies
+
+  cli:ontology-analyze:
+    desc: Fetch ontologies
+    cmds:
+      - uv run python -m dataset.cli.main ontology analyze -i data/ontologies -o data/ontologies/analysis.yaml --graphviz data/ontologies/graphviz.dot
+
+  cli:ontology-view:
+    desc: View ontologies (requires xdot)
+    cmds:
+      - xdot data/ontologies/graphviz.dot
+
   alembic:migrate:
     desc: "Run migrations"
     cmds:
