@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -19,6 +20,24 @@ ontology_analyze_app = typer.Typer(
     name="ontology-analyze",
     help="Analyze ontology directory and build a cross-ontology dependency graph.",
 )
+
+
+# ---------------------------------------------------------------------------
+# Helper: normalize namespaces (★ FIX)
+# ---------------------------------------------------------------------------
+
+
+def normalize_ns(ns: str | None) -> Optional[str]:
+    """
+    Apply consistent namespace normalization:
+      - strip trailing "/" and "#"
+      - return None if empty
+    """
+    if ns is None:
+        return None
+    ns = ns.rstrip("/#")
+    return ns or None
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -63,66 +82,63 @@ class OntologyAnalyzer:
     }
 
     def __init__(self) -> None:
-        # namespace IRI -> OntologyStats
         self.namespaces: Dict[str, OntologyStats] = {}
-        # ns_from -> (ns_to -> count)
         self.references: Dict[str, Dict[str, int]] = {}
-        # ns_from -> set(ns_to) (explicit owl:imports or XSD imports)
         self.imports: Dict[str, Set[str]] = {}
 
     # ------------------------ Core helpers ------------------------ #
 
-    def _ensure_ns(self, ns: str) -> OntologyStats:
+    def _ensure_ns(self, raw_ns: str | None) -> OntologyStats:
+        if raw_ns is None:
+            raw_ns = "unknown"
+        ns = normalize_ns(raw_ns) or "unknown"
         if ns not in self.namespaces:
             self.namespaces[ns] = OntologyStats(namespace=ns)
         return self.namespaces[ns]
 
     @staticmethod
     def _get_namespace(node: URIRef) -> Optional[str]:
-        """
-        Extract namespace from a URIRef using rdflib's split_uri.
-        Returns None if no sensible split can be found.
-        """
         if not isinstance(node, URIRef):
             return None
         uri_str = str(node)
         try:
             ns, _ = split_uri(node)
-            return str(ns)
+            return normalize_ns(str(ns))
         except Exception:
-            # Fallback: crude split on last '#' or '/'
             if "#" in uri_str:
-                return uri_str.rsplit("#", 1)[0] + "#"
+                return normalize_ns(uri_str.rsplit("#", 1)[0])
             if "/" in uri_str:
-                return uri_str.rsplit("/", 1)[0] + "/"
+                return normalize_ns(uri_str.rsplit("/", 1)[0])
         return None
 
-    def _register_reference(self, src_ns: str, dst_ns: str, weight: int = 1) -> None:
-        if src_ns == dst_ns:
+    def _register_reference(
+        self, raw_src: str | None, raw_dst: str | None, weight: int = 1
+    ) -> None:
+        src = normalize_ns(raw_src)
+        dst = normalize_ns(raw_dst)
+        if not src or not dst or src == dst:
             return
-        if src_ns not in self.references:
-            self.references[src_ns] = {}
-        self.references[src_ns][dst_ns] = (
-            self.references[src_ns].get(dst_ns, 0) + weight
-        )
 
-    def _register_import(self, src_ns: str, dst_ns: str) -> None:
-        if src_ns == dst_ns:
+        self.references.setdefault(src, {})
+        self.references[src][dst] = self.references[src].get(dst, 0) + weight
+
+    def _register_import(self, raw_src: str | None, raw_dst: str | None) -> None:
+        src = normalize_ns(raw_src)
+        dst = normalize_ns(raw_dst)
+        if not src or not dst or src == dst:
             return
-        self.imports.setdefault(src_ns, set()).add(dst_ns)
-        # Also treat import as a semantic reference
-        self._register_reference(src_ns, dst_ns, weight=1)
+
+        self.imports.setdefault(src, set()).add(dst)
+        self._register_reference(src, dst, weight=1)
 
     # ------------------------ RDF processing ------------------------ #
 
     def process_rdf_graph(self, file_path: Path, g: Graph) -> None:
-        """
-        Process triples from a single RDF graph and aggregate statistics.
-        """
         file_str = str(file_path)
 
         for s, p, o in g:
-            # Count total triples per namespace of the subject
+            s_ns = None
+
             if isinstance(s, URIRef):
                 s_ns = self._get_namespace(s)
                 if s_ns:
@@ -130,67 +146,56 @@ class OntologyAnalyzer:
                     stats.files.add(file_str)
                     stats.triples += 1
 
-            # Class / property / individual classification
+            # Classification
             if p == RDF.type and isinstance(s, URIRef) and isinstance(o, URIRef):
                 s_ns = self._get_namespace(s)
-                if not s_ns:
-                    continue
-                stats = self._ensure_ns(s_ns)
-                if o in self.CLASS_TYPES:
-                    stats.classes += 1
-                elif o in self.PROPERTY_TYPES:
-                    stats.properties += 1
-                else:
-                    stats.individuals += 1
+                o_ns = self._get_namespace(o)
+                if s_ns:
+                    stats = self._ensure_ns(s_ns)
+                    if o in self.CLASS_TYPES:
+                        stats.classes += 1
+                    elif o in self.PROPERTY_TYPES:
+                        stats.properties += 1
+                    else:
+                        stats.individuals += 1
 
             # Cross-namespace references
             self._process_dependencies_for_triple(s, p, o)
 
-        # Handle owl:Ontology + owl:imports
+        # owl:imports
         for onto in g.subjects(RDF.type, OWL.Ontology):
             if not isinstance(onto, URIRef):
                 continue
-            onto_ns = self._get_namespace(onto) or str(onto)
-            self._ensure_ns(onto_ns).files.add(file_str)
+            onto_ns = self._get_namespace(onto)
+            stats = self._ensure_ns(onto_ns)
+            stats.files.add(file_str)
 
             for imported in g.objects(onto, OWL.imports):
-                if not isinstance(imported, URIRef):
-                    continue
-                imp_ns = self._get_namespace(imported) or str(imported)
-                self._ensure_ns(imp_ns)
-                self._register_import(onto_ns, imp_ns)
+                if isinstance(imported, URIRef):
+                    imp_ns = self._get_namespace(imported)
+                    self._ensure_ns(imp_ns)
+                    self._register_import(onto_ns, imp_ns)
 
     def _process_dependencies_for_triple(self, s: Any, p: Any, o: Any) -> None:
-        """
-        Detect cross-namespace dependencies based on triple patterns:
-        - rdf:type (A uses class B)
-        - subclass / equivalent / sameAs / seeAlso
-        - foreign property usage: subject in nsA, predicate in nsB, nsA != nsB
-        """
         s_ns = self._get_namespace(s) if isinstance(s, URIRef) else None
         p_ns = self._get_namespace(p) if isinstance(p, URIRef) else None
         o_ns = self._get_namespace(o) if isinstance(o, URIRef) else None
 
-        # Foreing property usage: subject ns uses predicate ns
+        # Subject uses foreign property
         if s_ns and p_ns and s_ns != p_ns:
             self._register_reference(s_ns, p_ns)
 
-        if isinstance(o, URIRef):
-            # rdf:type: subject ns depends on object ns
-            if p == RDF.type and s_ns and o_ns and s_ns != o_ns:
-                self._register_reference(s_ns, o_ns)
+        # rdf:type
+        if p == RDF.type and s_ns and o_ns and s_ns != o_ns:
+            self._register_reference(s_ns, o_ns)
 
-            # subclass/equivalence/etc: subject ns depends on object ns
-            if p in self.DEP_PREDICATES and s_ns and o_ns and s_ns != o_ns:
-                self._register_reference(s_ns, o_ns)
+        # subclass, equivalent, sameAs etc.
+        if p in self.DEP_PREDICATES and s_ns and o_ns and s_ns != o_ns:
+            self._register_reference(s_ns, o_ns)
 
     # ------------------------ XSD processing ------------------------ #
 
     def process_xsd(self, file_path: Path) -> None:
-        """
-        Very lightweight XSD handling: read targetNamespace and xs:import namespaces
-        and register them as dependencies.
-        """
         try:
             tree = ET.parse(file_path)
         except Exception as exc:
@@ -199,36 +204,27 @@ class OntologyAnalyzer:
 
         root = tree.getroot()
         tns = root.attrib.get("targetNamespace")
-        if not tns:
-            # If no targetNamespace, treat file as its own pseudo-namespace
-            tns = f"file://{file_path.name}"
+        tns = normalize_ns(tns) or f"file://{file_path.name}"
+
         src_stats = self._ensure_ns(tns)
         src_stats.files.add(str(file_path))
 
-        xs_ns = "http://www.w3.org/2001/XMLSchema"
-        imports = set()
         for elem in root.findall(".//{http://www.w3.org/2001/XMLSchema}import"):
             ns = elem.attrib.get("namespace")
+            ns = normalize_ns(ns)
             if ns:
-                imports.add(ns)
-
-        for ns in imports:
-            self._ensure_ns(ns)
-            self._register_import(tns, ns)
+                self._ensure_ns(ns)
+                self._register_import(tns, ns)
 
     # ------------------------ Descriptions ------------------------ #
 
     def attach_descriptions_from_graph(self, merged_graph: Graph) -> None:
-        """
-        Use owl:Ontology nodes (and their labels/comments) to enrich OntologyStats.
-        """
         for onto in merged_graph.subjects(RDF.type, OWL.Ontology):
             if not isinstance(onto, URIRef):
                 continue
-            ns = self._get_namespace(onto) or str(onto)
+            ns = self._get_namespace(onto)
             stats = self._ensure_ns(ns)
 
-            # Label candidates
             labels = (
                 list(merged_graph.objects(onto, RDFS.label))
                 or list(merged_graph.objects(onto, DCTERMS.title))
@@ -237,7 +233,6 @@ class OntologyAnalyzer:
             if labels and not stats.label:
                 stats.label = str(labels[0])
 
-            # Description candidates
             descs = (
                 list(merged_graph.objects(onto, DCTERMS.description))
                 or list(merged_graph.objects(onto, RDFS.comment))
@@ -250,70 +245,51 @@ class OntologyAnalyzer:
 
     @staticmethod
     def _make_short_id(ns: str, fallback_index: int) -> str:
-        """
-        Derive a compact identifier for an ontology namespace, used as node id.
-
-        Priority:
-        - last non-empty path segment
-        - 'ns{index}' fallback
-        """
         s = ns.rstrip("/#")
         if not s:
             return f"ns{fallback_index}"
         last = s.split("/")[-1].split("#")[-1]
-        if not last:
-            return f"ns{fallback_index}"
-        return last.lower().replace("-", "_").replace(".", "_")
+        return last.lower().replace("-", "_").replace(".", "_") or f"ns{fallback_index}"
 
     def _build_id_map(self, merged_graph: Graph) -> Dict[str, str]:
-        """
-        Build mapping: namespace IRI -> short id, using rdflib prefixes if possible.
-        """
         id_map: Dict[str, str] = {}
         ns_list = sorted(self.namespaces.keys())
 
-        # 1) Use existing prefixes if they match
+        # 1) Use RDF prefixes
         for prefix, ns in merged_graph.namespace_manager.namespaces():
-            ns_str = str(ns)
-            if ns_str in self.namespaces and ns_str not in id_map:
+            ns_str = normalize_ns(str(ns))
+            if ns_str and ns_str in self.namespaces and ns_str not in id_map:
                 id_map[ns_str] = prefix
 
         # 2) Fallback for remaining
         counter = 1
         for ns in ns_list:
-            if ns in id_map:
-                continue
-            id_map[ns] = self._make_short_id(ns, counter)
-            counter += 1
+            if ns not in id_map:
+                id_map[ns] = self._make_short_id(ns, counter)
+                counter += 1
 
         return id_map
 
     def build_result_document(self, merged_graph: Graph) -> Dict[str, Any]:
-        """
-        Build a comprehensive structure suitable for YAML/JSON and downstream
-        visualization / ontology selection for dataset mappers.
-        """
-        # First, attach descriptions & labels
         self.attach_descriptions_from_graph(merged_graph)
 
-        # id map for graph nodes
         id_map = self._build_id_map(merged_graph)
 
-        # Compute incoming reference counts
-        incoming: Dict[str, int] = {ns: 0 for ns in self.namespaces}
-        for src_ns, targets in self.references.items():
-            for dst_ns, count in targets.items():
-                if dst_ns in incoming:
-                    incoming[dst_ns] += count
+        # incoming
+        incoming = {ns: 0 for ns in self.namespaces}
+        for src, targets in self.references.items():
+            for dst, count in targets.items():
+                if dst in incoming:
+                    incoming[dst] += count
 
-        # Compute outgoing reference counts
-        outgoing: Dict[str, int] = {
+        # outgoing
+        outgoing = {
             ns: sum(self.references.get(ns, {}).values()) for ns in self.namespaces
         }
 
-        # Build node list
+        # Nodes
         nodes: List[Dict[str, Any]] = []
-        for ns, stats in sorted(self.namespaces.items(), key=lambda x: x[0]):
+        for ns, stats in sorted(self.namespaces.items()):
             node_id = id_map[ns]
             nodes.append(
                 {
@@ -332,34 +308,19 @@ class OntologyAnalyzer:
                 }
             )
 
-        # Build edge list
+        # Edges (★ FIX: now uses normalized namespaces correctly)
         edge_map: Dict[Tuple[str, str], Dict[str, Any]] = {}
-        for src_ns, targets in self.references.items():
-            for dst_ns, ref_count in targets.items():
-                src_id = id_map.get(src_ns)
-                dst_id = id_map.get(dst_ns)
-                if not src_id or not dst_id:
-                    continue
-                key = (src_id, dst_id)
-                edge_entry = edge_map.setdefault(
-                    key,
-                    {
-                        "source": src_id,
-                        "target": dst_id,
-                        "reference_count": 0,
-                        "import": False,
-                    },
-                )
-                edge_entry["reference_count"] += ref_count
 
-        for src_ns, imported_set in self.imports.items():
-            for dst_ns in imported_set:
-                src_id = id_map.get(src_ns)
+        for src_ns, targets in self.references.items():
+            src_id = id_map.get(src_ns)
+            if not src_id:
+                continue
+            for dst_ns, ref_count in targets.items():
                 dst_id = id_map.get(dst_ns)
-                if not src_id or not dst_id:
+                if not dst_id:
                     continue
                 key = (src_id, dst_id)
-                edge_entry = edge_map.setdefault(
+                edge = edge_map.setdefault(
                     key,
                     {
                         "source": src_id,
@@ -368,7 +329,27 @@ class OntologyAnalyzer:
                         "import": False,
                     },
                 )
-                edge_entry["import"] = True
+                edge["reference_count"] += ref_count
+
+        for src_ns, dst_set in self.imports.items():
+            src_id = id_map.get(src_ns)
+            if not src_id:
+                continue
+            for dst_ns in dst_set:
+                dst_id = id_map.get(dst_ns)
+                if not dst_id:
+                    continue
+                key = (src_id, dst_id)
+                edge = edge_map.setdefault(
+                    key,
+                    {
+                        "source": src_id,
+                        "target": dst_id,
+                        "reference_count": 0,
+                        "import": False,
+                    },
+                )
+                edge["import"] = True
 
         edges = list(edge_map.values())
 
@@ -382,10 +363,7 @@ class OntologyAnalyzer:
 
         return {
             "ontologies": nodes,
-            "graph": {
-                "nodes": nodes,
-                "edges": edges,
-            },
+            "graph": {"nodes": nodes, "edges": edges},
             "ranking": {
                 "most_referenced": [
                     {
@@ -410,48 +388,102 @@ class OntologyAnalyzer:
 
 
 # ---------------------------------------------------------------------------
-# File discovery & parsing
+# File discovery / parsing
 # ---------------------------------------------------------------------------
 
 
+def matches_keywords(metadata: Dict[str, Any], patterns: List[str]) -> bool:
+    if not patterns:
+        return True
+
+    kws = set(metadata.get("keywords") or [])
+    includes, excludes = [], []
+    star = False
+
+    for p in patterns:
+        if p == "*":
+            star = True
+        elif p.startswith("+"):
+            includes.append(p[1:])
+        elif p.startswith("-"):
+            excludes.append(p[1:])
+        else:
+            includes.append(p)
+
+    if star:
+        return not any(e in kws for e in excludes)
+
+    return all(i in kws for i in includes) and not any(e in excludes for e in kws)
+
+
+def _load_metadata_for_file(file_path: Path) -> Optional[Dict[str, Any]]:
+    meta_path = file_path.parent / "metadata.yaml"
+    if not meta_path.exists():
+        return None
+    try:
+        with meta_path.open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except Exception as exc:
+        logger.warning("Failed to load metadata for %s: %s", file_path, exc)
+        return None
+
+
 def _iter_files(input_dir: Path) -> List[Path]:
-    """Return a list of files under input_dir (recursively) that look like ontology-ish files."""
-    exts = {".ttl", ".rdf", ".owl", ".xml", ".xsd", ".nt", ".n3", ".trig"}
     files: List[Path] = []
     for path in input_dir.rglob("*"):
-        if path.is_file():
-            if path.suffix.lower() in exts or path.suffix == "":
-                files.append(path)
+        if not path.is_file():
+            continue
+
+        if path.suffix.lower() in {
+            ".ttl",
+            ".rdf",
+            ".owl",
+            ".xml",
+            ".xsd",
+            ".nt",
+            ".n3",
+            ".trig",
+            ".jsonld",
+            ".rj",
+        }:
+            files.append(path)
+            continue
+
+        if path.suffix == "":
+            files.append(path)
+            continue
+
     return sorted(files)
 
 
 def _load_rdf_file(path: Path, merged_graph: Graph) -> Optional[Graph]:
-    """
-    Try multiple RDF formats until one succeeds. On success, returns a
-    per-file Graph which has also been merged into merged_graph.
-    """
-    formats = ["turtle", "xml", "application/rdf+xml", "n3", "trig", None]
-    last_error: Optional[Exception] = None
+    g = Graph()
+    try:
+        g.parse(path)
+        merged_graph += g
+        logger.info("Parsed %s via auto-detection", path)
+        return g
+    except Exception:
+        pass
 
-    for fmt in formats:
-        g = Graph()
+    for fmt in ["turtle", "xml", "n3", "nt", "trig"]:
         try:
+            g = Graph()
             g.parse(path, format=fmt)
-            logger.info("Parsed %s as %s", path, fmt or "auto")
             merged_graph += g
+            logger.info("Parsed %s as %s", path, fmt)
             return g
-        except Exception as exc:  # pragma: no cover - defensive
-            last_error = exc
+        except Exception:
             continue
 
-    logger.warning("Failed to parse RDF from %s: %s", path, last_error)
+    logger.warning("Could not parse %s in any RDF format", path)
     return None
 
 
 def _looks_like_xsd(path: Path) -> bool:
     if path.suffix.lower() == ".xsd":
         return True
-    # crude heuristic for extension-less files
+
     if path.suffix == "":
         try:
             with path.open("r", encoding="utf-8", errors="ignore") as f:
@@ -461,47 +493,35 @@ def _looks_like_xsd(path: Path) -> bool:
             )
         except Exception:
             return False
+
     return False
 
 
 def write_graphviz_dot(
     path: Path, nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]
 ) -> None:
-    """
-    Export a simple directed graph as Graphviz DOT for visualization.
-    - Nodes: id, label
-    - Edges: source -> target with label (type + count)
-    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         f.write("digraph ontologies {\n")
 
-        # Nodes
         for node in nodes:
             node_id = node["id"]
             label = node.get("label") or node_id
             ns = node.get("namespace", "")
-            # show namespace in tooltip-ish way
-            full_label = f"{label}\\n{ns}"
-            safe_label = full_label.replace('"', '\\"')
-            f.write(f'  "{node_id}" [label="{safe_label}"];\n')
+            full_label = f"{label}\\n{ns}".replace('"', '\\"')
+            f.write(f'  "{node_id}" [label="{full_label}"];\n')
 
-        # Edges
         for edge in edges:
             src = edge["source"]
             dst = edge["target"]
-            ref_count = edge.get("reference_count", 0)
-            is_import = edge.get("import", False)
-
-            label_parts = []
-            if is_import:
-                label_parts.append("import")
-            if ref_count:
-                label_parts.append(f"refs={ref_count}")
-            label_str = " / ".join(label_parts)
-
-            if label_str:
-                f.write(f'  "{src}" -> "{dst}" [label="{label_str}"];\n')
+            parts = []
+            if edge.get("import"):
+                parts.append("import")
+            if edge.get("reference_count", 0):
+                parts.append(f"refs={edge['reference_count']}")
+            label = " / ".join(parts)
+            if label:
+                f.write(f'  "{src}" -> "{dst}" [label="{label}"];\n')
             else:
                 f.write(f'  "{src}" -> "{dst}";\n')
 
@@ -519,22 +539,9 @@ def analyze_ontologies(
     input_dir: Path,
     output_file: Path,
     graphviz_out: Optional[Path],
+    keywords: List[str],
     verbose: bool,
 ):
-    """
-    Analyze ontology directory and build a comprehensive dependency graph.
-
-    The output includes, for each ontology/namespace:
-    - files, triples, classes, properties, individuals
-    - imports (owl:imports, XSD imports)
-    - incoming/outgoing reference counts
-    - label/description (where available)
-
-    This can be used to:
-    - visualize the ontology ecosystem
-    - decide which ontology to use for a dataset mapper
-    - inspect which ontology is most reused or most dependent on others
-    """
     setup_cli_logging(verbose)
 
     if not input_dir.exists() or not input_dir.is_dir():
@@ -553,29 +560,59 @@ def analyze_ontologies(
     merged_graph = Graph()
     analyzer = OntologyAnalyzer()
 
+    metadata_by_file: Dict[Path, Dict[str, Any]] = {}
+    metadata_by_ns: Dict[str, Dict[str, Any]] = {}
+
     for f in files:
         logger.info("Processing %s", f)
-        # XSD handling
+
+        meta = _load_metadata_for_file(f)
+        if meta:
+            metadata_by_file[f] = meta
+
         if _looks_like_xsd(f):
             analyzer.process_xsd(f)
             continue
 
-        # RDF/OWL handling
         rdf_graph = _load_rdf_file(f, merged_graph)
-        if rdf_graph is None:
-            continue
-        analyzer.process_rdf_graph(f, rdf_graph)
+        if rdf_graph:
+            analyzer.process_rdf_graph(f, rdf_graph)
 
-    # Build final result document
+    # Map metadata.yaml to namespaces
+    for ns, stats in analyzer.namespaces.items():
+        for file_path in stats.files:
+            fp = Path(file_path)
+            if fp in metadata_by_file:
+                metadata_by_ns[ns] = metadata_by_file[fp]
+                break
+
     result_doc = analyzer.build_result_document(merged_graph)
 
-    # Write YAML output
+    # Keyword filtering
+    if keywords:
+        logger.info("Applying keyword filters: %s", keywords)
+
+        def ok(node):
+            ns = node["namespace"]
+            meta = metadata_by_ns.get(ns) or {}
+            return matches_keywords(meta, keywords)
+
+        filtered_nodes = [n for n in result_doc["graph"]["nodes"] if ok(n)]
+        keep_ids = {n["id"] for n in filtered_nodes}
+
+        filtered_edges = [
+            e
+            for e in result_doc["graph"]["edges"]
+            if e["source"] in keep_ids and e["target"] in keep_ids
+        ]
+
+        result_doc["graph"]["nodes"] = filtered_nodes
+        result_doc["graph"]["edges"] = filtered_edges
+        result_doc["ontologies"] = filtered_nodes
+
     write_yaml_file(output_file, result_doc)
     logger.info("Ontology analysis written to %s", output_file)
 
-    # Optionally write Graphviz DOT
-    if graphviz_out is not None:
-        graph = result_doc.get("graph") or {}
-        nodes = graph.get("nodes") or []
-        edges = graph.get("edges") or []
-        write_graphviz_dot(graphviz_out, nodes, edges)
+    if graphviz_out:
+        g = result_doc.get("graph") or {}
+        write_graphviz_dot(graphviz_out, g.get("nodes", []), g.get("edges", []))

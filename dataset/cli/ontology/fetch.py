@@ -65,9 +65,23 @@ def matches_keywords(ontology: Dict[str, Any], patterns: List[str]) -> bool:
     return True
 
 
-# ---------------------------------------------------------
-# File download helper
-# ---------------------------------------------------------
+def _write_metadata_file(
+    subdir: Path, ontology: Dict[str, Any], downloaded: List[str]
+) -> None:
+    """
+    Store a metadata.yaml file next to the downloaded ontology files.
+    """
+    meta = dict(ontology)  # shallow copy
+    meta["downloaded_files"] = downloaded
+    outfile = subdir / "metadata.yaml"
+    try:
+        with outfile.open("w", encoding="utf-8") as f:
+            yaml.safe_dump(meta, f, sort_keys=False, allow_unicode=True)
+        logger.info("Wrote metadata → %s", outfile)
+    except Exception as exc:
+        logger.error("Failed to write metadata %s: %s", outfile, exc)
+
+
 def safe_name(name: str) -> str:
     return (
         name.lower()
@@ -86,18 +100,12 @@ def download_file(url: str) -> bytes:
         return resp.content
 
 
-# ---------------------------------------------------------
-# Load ontologies YAML
-# ---------------------------------------------------------
 def load_ontologies(path: Path) -> List[Dict[str, Any]]:
     with path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     return data.get("ontologies") or []
 
 
-# ---------------------------------------------------------
-# Main CLI command
-# ---------------------------------------------------------
 def fetch_ontologies(
     ontologies_file: Path,
     keywords: List[str],
@@ -105,7 +113,7 @@ def fetch_ontologies(
     verbose: bool,
 ):
     """
-    Download ontology 'definitions' to disk with robust error handling.
+    Download ontology 'definitions' and ALSO store per-ontology metadata.
     """
     setup_cli_logging(verbose)
 
@@ -124,20 +132,24 @@ def fetch_ontologies(
     logger.info("Applying keyword filters: %s", keywords)
 
     filtered = [o for o in onts if matches_keywords(o, keywords or [])]
-
     logger.info("Selected %d ontologies after filtering", len(filtered))
 
     for ont in filtered:
         name = ont.get("name") or "unknown"
         defs = ont.get("definitions") or []
+
         subdir = output_dir / safe_name(name)
         subdir.mkdir(parents=True, exist_ok=True)
 
         if not defs:
-            logger.warning("Ontology '%s' has no definitions. Skipping.", name)
+            logger.warning(
+                "Ontology '%s' has no definitions. Skipping downloads.", name
+            )
+            _write_metadata_file(subdir, ont, downloaded=[])
             continue
 
         logger.info("Downloading %d definitions for %s", len(defs), name)
+        downloaded_files: List[str] = []
 
         for url in defs:
             try:
@@ -147,15 +159,18 @@ def fetch_ontologies(
                 logger.error("Failed to download %s: %s", url, exc)
                 continue
 
-            # Determine filename
             fname = url.split("/")[-1] or "definition"
             outfile = subdir / fname
 
             try:
                 outfile.write_bytes(content)
+                downloaded_files.append(fname)
                 logger.info("→ Saved %s", outfile)
             except Exception as exc:
                 logger.error("Failed to save %s: %s", outfile, exc)
                 continue
+
+        # ✨ NEW: write metadata.yaml referencing the ontology catalogue entry
+        _write_metadata_file(subdir, ont, downloaded_files)
 
     logger.info("Ontology fetch complete.")

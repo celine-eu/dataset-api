@@ -29,12 +29,12 @@ tasks:
   cli:ontology-analyze:
     desc: Fetch ontologies
     cmds:
-      - uv run python -m dataset.cli.main ontology analyze -i data/ontologies -o data/ontologies/analysis.yaml --graphviz data/ontologies/graphviz.dot
+      - uv run python -m dataset.cli.main ontology analyze -- {{.CLI_ARGS}}
 
   cli:ontology-view:
     desc: View ontologies (requires xdot)
     cmds:
-      - xdot data/ontologies/graphviz.dot
+      - xdot data/ontologies/ontology-graph.dot
 
   alembic:migrate:
     desc: "Run migrations"

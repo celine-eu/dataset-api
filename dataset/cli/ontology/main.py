@@ -18,7 +18,7 @@ ontology_app = typer.Typer(
 @ontology_app.command("fetch")
 def cmd_fetch_ontologies(
     ontologies_file: Path = typer.Option(
-        Path(__file__).resolve().parent.parent.parent
+        Path(__file__).resolve().parent.parent.parent.parent
         / "ontologies"
         / "open-repository.yaml",
         "--input",
@@ -62,9 +62,15 @@ def cmd_analyze_ontologies(
         help="YAML file where the analysis result will be written.",
     ),
     graphviz_out: Optional[Path] = typer.Option(
-        None,
+        Path("./data/ontologies/ontology-graph.dot"),
         "--graphviz",
         help="Optional Graphviz DOT output for visualization.",
+    ),
+    keywords: List[str] = typer.Option(
+        None,
+        "--keywords",
+        "-k",
+        help="Keyword filters to restrict graph output (+foo -bar *).",
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ):
@@ -72,5 +78,6 @@ def cmd_analyze_ontologies(
         input_dir=input_dir,
         output_file=output_file,
         graphviz_out=graphviz_out,
+        keywords=keywords,
         verbose=verbose,
     )
