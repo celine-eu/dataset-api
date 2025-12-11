@@ -1,0 +1,261 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://celine.eu/schema/celine-api.schema.json",
+    "title": "CELINE API Schema",
+    "description": "JSON Schema for CELINE JSON-LD payloads (Observation and TimeSeries).",
+    "type": "object",
+    "oneOf": [
+        {
+            "$ref": "#/$defs/Observation"
+        },
+        {
+            "$ref": "#/$defs/TimeSeries"
+        }
+    ],
+    "$defs": {
+        "IRIObject": {
+            "type": "object",
+            "required": [
+                "@id"
+            ],
+            "properties": {
+                "@id": {
+                    "type": "string",
+                    "format": "uri"
+                }
+            },
+            "additionalProperties": false
+        },
+        "Observation": {
+            "type": "object",
+            "title": "CELINE Observation",
+            "required": [
+                "@context",
+                "@id",
+                "@type",
+                "madeBySensor",
+                "hasFeatureOfInterest",
+                "observedProperty",
+                "resultTime",
+                "hasSimpleResult"
+            ],
+            "properties": {
+                "@context": {
+                    "description": "JSON-LD context; should reference the CELINE context document.",
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "format": "uri"
+                        },
+                        {
+                            "type": "object"
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "oneOf": [
+                                    {
+                                        "type": "string",
+                                        "format": "uri"
+                                    },
+                                    {
+                                        "type": "object"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "@id": {
+                    "type": "string",
+                    "format": "uri"
+                },
+                "@type": {
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "enum": [
+                                "sosa:Observation",
+                                "celine:Observation"
+                            ]
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    ]
+                },
+                "madeBySensor": {
+                    "description": "IRI of the sensor or meter producing this observation.",
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "format": "uri"
+                        },
+                        {
+                            "$ref": "#/$defs/IRIObject"
+                        }
+                    ]
+                },
+                "hasFeatureOfInterest": {
+                    "description": "IRI of the feature (asset, space, etc.) this observation is about.",
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "format": "uri"
+                        },
+                        {
+                            "$ref": "#/$defs/IRIObject"
+                        }
+                    ]
+                },
+                "observedProperty": {
+                    "description": "IRI of observed property (e.g. s4ener:EnergyConsumption).",
+                    "oneOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "$ref": "#/$defs/IRIObject"
+                        }
+                    ]
+                },
+                "resultTime": {
+                    "description": "Timestamp of the observation result.",
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "hasSimpleResult": {
+                    "description": "Numeric value for the observation.",
+                    "type": "number"
+                }
+            },
+            "additionalProperties": true
+        },
+        "TimeSeriesPoint": {
+            "type": "object",
+            "title": "CELINE Time Series Point",
+            "required": [
+                "@id",
+                "@type",
+                "pointTime",
+                "pointValue",
+                "refersToProperty"
+            ],
+            "properties": {
+                "@id": {
+                    "type": "string",
+                    "format": "uri"
+                },
+                "@type": {
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "enum": [
+                                "bigg:TimeSeriesPoint"
+                            ]
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    ]
+                },
+                "pointTime": {
+                    "description": "Timestamp of this point.",
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "pointValue": {
+                    "description": "Numeric value at pointTime.",
+                    "type": "number"
+                },
+                "refersToProperty": {
+                    "description": "IRI of the property this point refers to.",
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "format": "uri"
+                        },
+                        {
+                            "$ref": "#/$defs/IRIObject"
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": true
+        },
+        "TimeSeries": {
+            "type": "object",
+            "title": "CELINE Time Series",
+            "required": [
+                "@context",
+                "@id",
+                "@type",
+                "timeSeriesPoint"
+            ],
+            "properties": {
+                "@context": {
+                    "description": "JSON-LD context; should reference the CELINE context document.",
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "format": "uri"
+                        },
+                        {
+                            "type": "object"
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "oneOf": [
+                                    {
+                                        "type": "string",
+                                        "format": "uri"
+                                    },
+                                    {
+                                        "type": "object"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "@id": {
+                    "type": "string",
+                    "format": "uri"
+                },
+                "@type": {
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "enum": [
+                                "celine:TimeSeries",
+                                "bigg:TimeSeriesList"
+                            ]
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    ]
+                },
+                "timeSeriesPoint": {
+                    "description": "Array of time series points.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/TimeSeriesPoint"
+                    },
+                    "minItems": 1
+                }
+            },
+            "additionalProperties": true
+        }
+    }
+}

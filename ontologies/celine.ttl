@@ -1,0 +1,170 @@
+@prefix celine: <https://celine.eu/ontology/> .
+@prefix saref: <https://saref.etsi.org/core/> .
+@prefix s4ener: <https://saref.etsi.org/saref4ener/> .
+@prefix s4bldg: <https://saref.etsi.org/saref4bldg/> .
+@prefix s4city: <https://saref.etsi.org/saref4city/> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix ssn: <http://www.w3.org/ns/ssn/> .
+@prefix bigg: <http://bigg-project.eu/ontology#> .
+@prefix bigg4kpi: <http://bigg-project.eu/ontology/bigg4kpi#> .
+@prefix seas: <https://w3id.org/seas/> .
+@prefix emkpi: <https://omic-tools.org/ontology/em-kpi#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+
+#################################################################
+# ONTOLOGY HEADER
+#################################################################
+
+<https://celine.eu/ontology/> a owl:Ontology ;
+    rdfs:label "CELINE Unified Ontology Profile" ;
+    rdfs:comment "Unified ontology profile combining SAREF, SOSA/SSN, SAREF4ENER, SAREF4CITY, BIGG, SEAS and EM-KPI for the CELINE Digital Twin and Energy Community Platform." .
+
+
+#################################################################
+# CELINE CLASSES
+#################################################################
+
+celine:EnergyCommunity a owl:Class ;
+    rdfs:label "Energy Community" ;
+    rdfs:subClassOf s4city:Community .
+
+celine:Prosumer a owl:Class ;
+    rdfs:label "Prosumer" ;
+    rdfs:subClassOf s4city:CityObject .
+
+celine:Asset a owl:Class ;
+    rdfs:label "Asset" ;
+    rdfs:subClassOf saref:Device .
+
+celine:Meter a owl:Class ;
+    rdfs:label "Meter" ;
+    rdfs:subClassOf s4ener:EnergyMeter .
+
+celine:TimeSeries a owl:Class ;
+    rdfs:label "Time Series" ;
+    rdfs:subClassOf bigg:TimeSeriesList .
+
+celine:Observation a owl:Class ;
+    rdfs:label "Observation" ;
+    rdfs:subClassOf sosa:Observation .
+
+celine:Tariff a owl:Class ;
+    rdfs:label "Tariff" ;
+    rdfs:subClassOf bigg:Tariff .
+
+celine:CO2Factor a owl:Class ;
+    rdfs:label "CO2 Emission Factor" ;
+    rdfs:subClassOf bigg:CO2EmissionsFactor .
+
+celine:FlexibilityEvent a owl:Class ;
+    rdfs:label "Flexibility Event" ;
+    rdfs:subClassOf seas:DemandResponseEvent .
+
+celine:Forecast a owl:Class ;
+    rdfs:label "Forecast" ;
+    rdfs:subClassOf seas:Forecast .
+
+celine:EnergyKPI a owl:Class ;
+    rdfs:label "Energy KPI" ;
+    rdfs:subClassOf bigg4kpi:KPIAssessment ,
+                     emkpi:EnergyPerformanceIndicator .
+
+
+#################################################################
+# CELINE OBJECT PROPERTIES
+#################################################################
+
+celine:hasMember a owl:ObjectProperty ;
+    rdfs:label "has member" ;
+    rdfs:domain celine:EnergyCommunity ;
+    rdfs:range  celine:Prosumer .
+
+celine:ownsAsset a owl:ObjectProperty ;
+    rdfs:label "owns asset" ;
+    rdfs:domain celine:Prosumer ;
+    rdfs:range  celine:Asset .
+
+celine:isLocatedIn a owl:ObjectProperty ;
+    rdfs:label "is located in" ;
+    rdfs:domain celine:Asset ;
+    rdfs:range  s4bldg:BuildingSpace .
+
+celine:hasMeter a owl:ObjectProperty ;
+    rdfs:label "has meter" ;
+    rdfs:domain celine:Asset ;
+    rdfs:range  celine:Meter .
+
+celine:hasTimeSeries a owl:ObjectProperty ;
+    rdfs:label "has time series" ;
+    rdfs:domain celine:Meter ;
+    rdfs:range  celine:TimeSeries .
+
+celine:hasObservation a owl:ObjectProperty ;
+    rdfs:label "has observation" ;
+    rdfs:domain celine:Meter , celine:Asset ;
+    rdfs:range  celine:Observation .
+
+celine:hasTariff a owl:ObjectProperty ;
+    rdfs:label "has tariff" ;
+    rdfs:domain celine:Prosumer , celine:EnergyCommunity ;
+    rdfs:range  celine:Tariff .
+
+celine:hasCO2Factor a owl:ObjectProperty ;
+    rdfs:label "has CO2 factor" ;
+    rdfs:domain celine:EnergyCommunity ;
+    rdfs:range  celine:CO2Factor .
+
+celine:hasFlexibilityEvent a owl:ObjectProperty ;
+    rdfs:label "has flexibility event" ;
+    rdfs:domain celine:Asset ;
+    rdfs:range  celine:FlexibilityEvent .
+
+celine:hasForecast a owl:ObjectProperty ;
+    rdfs:label "has forecast" ;
+    rdfs:domain celine:EnergyCommunity ;
+    rdfs:range  celine:Forecast .
+
+celine:evaluatedBy a owl:ObjectProperty ;
+    rdfs:label "evaluated by" ;
+    rdfs:domain celine:EnergyCommunity ;
+    rdfs:range  celine:EnergyKPI .
+
+
+#################################################################
+# CELINE DATATYPE PROPERTIES
+#################################################################
+
+celine:timestamp a owl:DatatypeProperty ;
+    rdfs:label "timestamp" ;
+    rdfs:range xsd:dateTime .
+
+celine:value a owl:DatatypeProperty ;
+    rdfs:label "value" ;
+    rdfs:range xsd:float .
+
+
+#################################################################
+# ALIGNMENTS WITH SAREF / SOSA / BIGG (subproperties)
+#################################################################
+
+celine:measuredConsumption a owl:ObjectProperty ;
+    rdfs:label "measured consumption" ;
+    rdfs:subPropertyOf s4ener:hasEnergyConsumption .
+
+celine:measuredProduction a owl:ObjectProperty ;
+    rdfs:label "measured production" ;
+    rdfs:subPropertyOf s4ener:hasEnergyProduction .
+
+celine:pointTime a owl:DatatypeProperty ;
+    rdfs:label "point time" ;
+    rdfs:subPropertyOf bigg:dateTime ;
+    rdfs:range xsd:dateTime .
+
+celine:pointValue a owl:DatatypeProperty ;
+    rdfs:label "point value" ;
+    rdfs:subPropertyOf bigg:hasValue ;
+    rdfs:range xsd:float .
+

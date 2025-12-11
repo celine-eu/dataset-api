@@ -1,0 +1,151 @@
+{
+    "@context": {
+        "celine": "https://celine.eu/ontology/",
+        "saref": "https://saref.etsi.org/core/",
+        "s4ener": "https://saref.etsi.org/saref4ener/",
+        "s4bldg": "https://saref.etsi.org/saref4bldg/",
+        "s4city": "https://saref.etsi.org/saref4city/",
+        "sosa": "http://www.w3.org/ns/sosa/",
+        "ssn": "http://www.w3.org/ns/ssn/",
+        "bigg": "http://bigg-project.eu/ontology#",
+        "bigg4kpi": "http://bigg-project.eu/ontology/bigg4kpi#",
+        "seas": "https://w3id.org/seas/",
+        "emkpi": "https://omic-tools.org/ontology/em-kpi#",
+        "xsd": "http://www.w3.org/2001/XMLSchema#",
+        "EnergyCommunity": "celine:EnergyCommunity",
+        "Prosumer": "celine:Prosumer",
+        "Asset": "celine:Asset",
+        "Meter": "celine:Meter",
+        "TimeSeries": "celine:TimeSeries",
+        "Observation": "celine:Observation",
+        "Tariff": "celine:Tariff",
+        "CO2Factor": "celine:CO2Factor",
+        "FlexibilityEvent": "celine:FlexibilityEvent",
+        "Forecast": "celine:Forecast",
+        "EnergyKPI": "celine:EnergyKPI",
+        "hasMember": {
+            "@id": "celine:hasMember",
+            "@type": "@id"
+        },
+        "ownsAsset": {
+            "@id": "celine:ownsAsset",
+            "@type": "@id"
+        },
+        "isLocatedIn": {
+            "@id": "celine:isLocatedIn",
+            "@type": "@id"
+        },
+        "hasMeter": {
+            "@id": "celine:hasMeter",
+            "@type": "@id"
+        },
+        "hasTimeSeries": {
+            "@id": "celine:hasTimeSeries",
+            "@type": "@id"
+        },
+        "hasObservation": {
+            "@id": "celine:hasObservation",
+            "@type": "@id"
+        },
+        "hasTariff": {
+            "@id": "celine:hasTariff",
+            "@type": "@id"
+        },
+        "hasCO2Factor": {
+            "@id": "celine:hasCO2Factor",
+            "@type": "@id"
+        },
+        "hasFlexibilityEvent": {
+            "@id": "celine:hasFlexibilityEvent",
+            "@type": "@id"
+        },
+        "hasForecast": {
+            "@id": "celine:hasForecast",
+            "@type": "@id"
+        },
+        "evaluatedBy": {
+            "@id": "celine:evaluatedBy",
+            "@type": "@id"
+        },
+        "hasProperty": {
+            "@id": "saref:hasProperty",
+            "@type": "@id"
+        },
+        "hasMeasurement": {
+            "@id": "saref:hasMeasurement",
+            "@type": "@id"
+        },
+        "hasValue": {
+            "@id": "saref:hasValue"
+        },
+        "isMeasuredIn": {
+            "@id": "saref:isMeasuredIn",
+            "@type": "@id"
+        },
+        "EnergyConsumption": "s4ener:EnergyConsumption",
+        "EnergyProduction": "s4ener:EnergyProduction",
+        "Load": "s4ener:Load",
+        "Generator": "s4ener:Generator",
+        "EnergyStorage": "s4ener:EnergyStorage",
+        "Battery": "s4ener:Battery",
+        "PVPanel": "s4ener:PVPanel",
+        "Inverter": "s4ener:Inverter",
+        "EVCharger": "s4ener:EVCharger",
+        "HeatPump": "s4ener:HeatPump",
+        "madeBySensor": {
+            "@id": "sosa:madeBySensor",
+            "@type": "@id"
+        },
+        "hasFeatureOfInterest": {
+            "@id": "sosa:hasFeatureOfInterest",
+            "@type": "@id"
+        },
+        "observedProperty": {
+            "@id": "sosa:observedProperty",
+            "@type": "@id"
+        },
+        "resultTime": {
+            "@id": "sosa:resultTime",
+            "@type": "xsd:dateTime"
+        },
+        "hasSimpleResult": {
+            "@id": "sosa:hasSimpleResult"
+        },
+        "timeSeriesPoint": {
+            "@id": "bigg:hasTimeSeriesPoint",
+            "@type": "@id"
+        },
+        "pointTime": {
+            "@id": "bigg:dateTime",
+            "@type": "xsd:dateTime"
+        },
+        "pointValue": {
+            "@id": "bigg:hasValue"
+        },
+        "refersToProperty": {
+            "@id": "bigg:refersToProperty",
+            "@type": "@id"
+        },
+        "drEvent": {
+            "@id": "seas:DemandResponseEvent",
+            "@type": "@id"
+        },
+        "forecastProperty": {
+            "@id": "seas:forecasts",
+            "@type": "@id"
+        },
+        "kpiValue": "bigg4kpi:hasKPIValue",
+        "kpiTime": {
+            "@id": "bigg4kpi:hasTime",
+            "@type": "xsd:dateTime"
+        },
+        "timestamp": {
+            "@id": "celine:timestamp",
+            "@type": "xsd:dateTime"
+        },
+        "value": {
+            "@id": "celine:value",
+            "@type": "xsd:float"
+        }
+    }
+}

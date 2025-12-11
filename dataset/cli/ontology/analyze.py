@@ -23,7 +23,7 @@ ontology_analyze_app = typer.Typer(
 
 
 # ---------------------------------------------------------------------------
-# Helper: normalize namespaces (★ FIX)
+# Helper: normalize namespaces
 # ---------------------------------------------------------------------------
 
 
@@ -308,7 +308,7 @@ class OntologyAnalyzer:
                 }
             )
 
-        # Edges (★ FIX: now uses normalized namespaces correctly)
+        # Edges
         edge_map: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
         for src_ns, targets in self.references.items():
