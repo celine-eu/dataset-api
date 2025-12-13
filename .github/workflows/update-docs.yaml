@@ -1,0 +1,27 @@
+name: Updae CELINE docs
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - "README.md"
+            - "docs/**"
+            - "ontologies/**"
+
+jobs:
+    notify:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Trigger website rebuild
+              uses: peter-evans/repository-dispatch@v3
+              with:
+                  token: ${{ secrets.CELINE_WEBSITE_TOKEN }}
+                  repository: celine-eu/celine-eu.github.io
+                  event-type: celine-docs-update
+                  client-payload: |
+                      {
+                        "source_repo": "${{ github.repository }}",
+                        "ref": "${{ github.ref }}",
+                        "sha": "${{ github.sha }}"
+                      }

@@ -112,7 +112,6 @@ ontologies:
     link: https://www.w3.org/TR/vocab-ssn/
     definitions:
       - https://github.com/w3c/sdw/raw/refs/heads/gh-pages/ssn/integrated/sosa.ttl
-      - https://github.com/w3c/sdw/raw/refs/heads/gh-pages/ssn/integrated/sosa.ttl
     keywords: [IoT, sensors, observations]
     license: "W3C"
 
