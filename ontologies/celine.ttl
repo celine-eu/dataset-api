@@ -1,4 +1,6 @@
-@prefix celine: <https://celine.eu/ontology/> .
+@base <https://celine-eu.github.io/ontologies/celine/> .
+@prefix celine: <https://celine-eu.github.io/ontologies/celine#> .
+
 @prefix saref: <https://saref.etsi.org/core/> .
 @prefix s4ener: <https://saref.etsi.org/saref4ener/> .
 @prefix s4bldg: <https://saref.etsi.org/saref4bldg/> .
@@ -18,10 +20,19 @@
 # ONTOLOGY HEADER
 #################################################################
 
-<https://celine.eu/ontology/> a owl:Ontology ;
+<https://celine-eu.github.io/ontologies/celine/>
+    a owl:Ontology ;
     rdfs:label "CELINE Unified Ontology Profile" ;
     rdfs:comment "Unified ontology profile combining SAREF, SOSA/SSN, SAREF4ENER, SAREF4CITY, BIGG, SEAS and EM-KPI for the CELINE Digital Twin and Energy Community Platform." .
-
+    owl:versionInfo "1.0.0-alpha1" ;
+    dcterms:publisher "CELINE Project" ;
+    dcterms:license <https://creativecommons.org/licenses/by/4.0/> .
+    owl:imports
+        <https://saref.etsi.org/core/> ,
+        <https://saref.etsi.org/saref4ener/> ,
+        <https://saref.etsi.org/saref4city/> ,
+        <http://www.w3.org/ns/sosa/> ,
+        <https://w3id.org/seas/> .
 
 #################################################################
 # CELINE CLASSES

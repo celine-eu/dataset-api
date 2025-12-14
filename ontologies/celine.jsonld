@@ -1,6 +1,6 @@
 {
     "@context": {
-        "celine": "https://celine.eu/ontology/",
+        "celine": "https://celine-eu.github.io/ontologies/celine/",
         "saref": "https://saref.etsi.org/core/",
         "s4ener": "https://saref.etsi.org/saref4ener/",
         "s4bldg": "https://saref.etsi.org/saref4bldg/",

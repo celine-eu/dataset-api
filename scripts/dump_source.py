@@ -8,6 +8,8 @@ OUTFILE = Path(__file__).resolve().parent.parent / "data/source.txt"
 DIRS = [
     Path(__file__).resolve().parent.parent / "dataset",
     Path(__file__).resolve().parent.parent / "tests",
+    Path(__file__).resolve().parent.parent / "ontologies",
+    Path(__file__).resolve().parent.parent / "docs",
 ]
 
 README = Path(__file__).resolve().parent.parent / "README.md"

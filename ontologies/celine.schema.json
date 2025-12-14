@@ -1,6 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://celine.eu/schema/celine-api.schema.json",
+    "$id": "https://celine-eu.github.io/ontologies/celine/schema.json",
     "title": "CELINE API Schema",
     "description": "JSON Schema for CELINE JSON-LD payloads (Observation and TimeSeries).",
     "type": "object",

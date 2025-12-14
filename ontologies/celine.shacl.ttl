@@ -1,4 +1,6 @@
-@prefix celine: <https://celine.eu/ontology/> .
+@base <https://celine-eu.github.io/ontologies/celine/> .
+@prefix celine: <https://celine-eu.github.io/ontologies/celine#> .
+
 @prefix saref: <https://saref.etsi.org/core/> .
 @prefix s4ener: <https://saref.etsi.org/saref4ener/> .
 @prefix s4bldg: <https://saref.etsi.org/saref4bldg/> .
