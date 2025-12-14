@@ -15,12 +15,9 @@ The CELINE ontology is **not a standalone domain ontology**, but a **unified ont
 
 ### Core ontology artifacts
 
-- **[CELINE JSON-LD context](celine.jsonld)**  
-  JSON-LD `@context` defining prefixes, aliases, and mappings used by CELINE APIs and data pipelines.  
-  This is the primary entry point for developers producing JSON-LD payloads.
 
-- **[CELINE JSON Schema](celine.schema.json)**  
-  JSON Schema used at API boundaries to validate incoming JSON-LD payloads before semantic expansion.
+- **[CELINE ontology documentation](celine/)**  
+  Documentation of the CELINE ontology
 
 - **[CELINE ontology (Turtle)](celine.ttl)**  
   The formal OWL/RDF definition of the CELINE Unified Ontology Profile.  
@@ -29,6 +26,13 @@ The CELINE ontology is **not a standalone domain ontology**, but a **unified ont
 - **[CELINE SHACL shapes](celine.shacl.ttl)**  
   SHACL shapes defining semantic constraints on the RDF graph after JSON-LD expansion.  
   Used to validate observations, time series, meters, energy communities, and KPIs.
+
+- **[CELINE JSON-LD context](celine.jsonld)**  
+  JSON-LD `@context` defining prefixes, aliases, and mappings used by CELINE APIs and data pipelines.  
+  This is the primary entry point for developers producing JSON-LD payloads.
+
+- **[CELINE JSON Schema](celine.schema.json)**  
+  JSON Schema used at API boundaries to validate incoming JSON-LD payloads before semantic expansion.
 
 
 ---
