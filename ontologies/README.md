@@ -16,7 +16,7 @@ The CELINE ontology is **not a standalone domain ontology**, but a **unified ont
 ### Core ontology artifacts
 
 
-- **[CELINE ontology documentation](celine/)**  
+- **[CELINE ontology documentation](https://celine-eu.github.io/ontologies/celine/)**  
   Documentation of the CELINE ontology
 
 - **[CELINE ontology (Turtle)](celine.ttl)**  
