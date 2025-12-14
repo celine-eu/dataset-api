@@ -23,17 +23,17 @@
 <https://celine-eu.github.io/ontologies/celine/>
     a owl:Ontology ;
     rdfs:label "CELINE Unified Ontology Profile" ;
-    rdfs:comment "Unified ontology profile combining SAREF, SOSA/SSN, SAREF4ENER, SAREF4CITY, BIGG, SEAS and EM-KPI for the CELINE Digital Twin and Energy Community Platform." .
+    rdfs:comment "Unified ontology profile combining SAREF, SOSA/SSN, SAREF4ENER, SAREF4CITY, BIGG, SEAS and EM-KPI for the CELINE Digital Twin and Energy Community Platform." ;
     owl:versionInfo "1.0.0-alpha1" ;
     dcterms:publisher "CELINE Project" ;
-    dcterms:license <https://creativecommons.org/licenses/by/4.0/> .
+    dcterms:license <https://creativecommons.org/licenses/by/4.0/> ;
     owl:imports
         <https://saref.etsi.org/core/> ,
         <https://saref.etsi.org/saref4ener/> ,
         <https://saref.etsi.org/saref4city/> ,
         <http://www.w3.org/ns/sosa/> ,
         <https://w3id.org/seas/> .
-
+        
 #################################################################
 # CELINE CLASSES
 #################################################################
