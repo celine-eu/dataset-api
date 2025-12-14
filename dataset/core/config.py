@@ -24,6 +24,10 @@ class Settings(BaseSettings):
 
     keycloak_issuer: Optional[AnyUrl] = None
     keycloak_audience: Optional[str] = None
+    keycloak_client_id: Optional[str] = None
+    keycloak_client_secret: Optional[str] = None
+    keycloak_callback_uri: Optional[HttpUrl] = HttpUrl("http://localhost/callback")
+    keycloak_admin_client_secret: Optional[str] = None
 
     opa_url: Optional[AnyUrl] = None
     opa_dataset_policy_path: str = "dataset/access"

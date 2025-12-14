@@ -3,34 +3,58 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+from typing import Optional, Any
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 
 from dataset.schemas.dataset_query import DatasetQueryResult
 from dataset.db.models.dataset_entry import DatasetEntry
 from dataset.db.reflection import reflect_table_async
+from dataset.db.engine import get_session
 from dataset.security.opa import authorize_dataset_query
 from dataset.api.dataset_query.parser import parse_sql_filter
+from dataset.security.auth import (
+    requires_auth,
+    bearer_scheme,
+    get_current_user,
+    get_optional_user,
+)
+from dataset.core.datasets import load_dataset_entry
+from dataset.core.governance import enforce_dataset_access
 
 logger = logging.getLogger(__name__)
 
 
-async def _get_entry(dataset_id: str, db: AsyncSession) -> DatasetEntry:
-    from sqlalchemy import select  # local import to avoid circulars in some setups
-
-    stmt = (
-        select(DatasetEntry)
-        .where(DatasetEntry.dataset_id == dataset_id)
-        .where(DatasetEntry.expose.is_(True))
+async def get_entry_dep(
+    dataset_id: str,
+    db: AsyncSession = Depends(get_session),
+) -> DatasetEntry:
+    res = await db.execute(
+        select(DatasetEntry).where(DatasetEntry.dataset_id == dataset_id)
     )
-    res = await db.execute(stmt)
     entry = res.scalars().first()
     if not entry:
         raise HTTPException(404, "Dataset not found")
     return entry
+
+
+async def dataset_user_dep(
+    entry: DatasetEntry = Depends(get_entry_dep),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+) -> Optional[dict[str, Any]]:
+    if requires_auth(entry.access_level):
+        if credentials is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required for this dataset",
+            )
+        return await get_current_user(credentials)
+
+    return await get_optional_user(credentials)
 
 
 async def execute_query(
@@ -53,7 +77,9 @@ async def execute_query(
     - post-process geometry columns
     - return JSON-LD-like response
     """
-    entry = await _get_entry(dataset_id, db)
+    entry = await load_dataset_entry(db=db, dataset_id=dataset_id)
+
+    enforce_dataset_access(entry=entry, user=user)
 
     if entry.backend_type != "postgres":
         raise HTTPException(400, "Querying only supported for postgres backend")

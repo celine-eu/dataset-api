@@ -10,6 +10,10 @@ from dataset.db.engine import get_session
 from dataset.schemas.dataset_query import DatasetQueryModel, DatasetQueryResult
 from dataset.security.auth import get_optional_user
 from dataset.api.dataset_query.executor import execute_query
+from dataset.security.auth import (
+    get_optional_user,
+)
+
 
 router = APIRouter()
 
