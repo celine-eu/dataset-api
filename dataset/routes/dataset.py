@@ -7,14 +7,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dataset.db.engine import get_session
-from dataset.schemas.dataset_query import DatasetQueryModel
+from dataset.schemas.dataset_query import DatasetQueryModel, DatasetQueryResult
 from dataset.security.auth import get_optional_user
 from dataset.api.dataset_query.executor import execute_query
 
 router = APIRouter()
 
 
-@router.post("/dataset/{dataset_id}/query")
+@router.post("/dataset/{dataset_id}/query", response_model=DatasetQueryResult)
 async def query_dataset_post(
     dataset_id: str,
     body: DatasetQueryModel,

@@ -9,11 +9,11 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dataset.schemas.dataset_query import DatasetQueryResult
 from dataset.db.models.dataset_entry import DatasetEntry
 from dataset.db.reflection import reflect_table_async
 from dataset.security.opa import authorize_dataset_query
 from dataset.api.dataset_query.parser import parse_sql_filter
-from dataset.core.jsonld import rows_to_jsonld  # optional JSON-LD wrapper
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ async def execute_query(
     limit: int,
     offset: int,
     user: Optional[dict],
-):
+) -> DatasetQueryResult:
     """
     Core query execution path:
 
@@ -72,6 +72,12 @@ async def execute_query(
         raise HTTPException(403, "Not authorized to query this dataset.")
 
     sa_filter = parse_sql_filter(filter_str, table) if filter_str else None
+
+    # COUNT total results
+    count_stmt = select(func.count()).select_from(table)
+    if sa_filter is not None:
+        count_stmt = count_stmt.where(sa_filter)
+    total = await db.scalar(count_stmt)
 
     stmt = select(table)
     if sa_filter is not None:
@@ -110,20 +116,11 @@ async def execute_query(
                     row[col] = json.loads(geojson)
         items.append(row)
 
-    # Keep original simple structure, or use JSON-LD helper
-    # return {
-    #     "@context": "https://example.org/dataset-query",
-    #     "dataset": dataset_id,
-    #     "limit": limit,
-    #     "offset": offset,
-    #     "items": items,
-    # }
-
-    # Use generic JSON-LD wrapper for consistency
-    return rows_to_jsonld(
-        entry=entry,
-        rows=items,
-        limit=limit,
+    return DatasetQueryResult(
+        dataset_id=entry.dataset_id,
+        items=items,
         offset=offset,
-        total=None,
+        limit=limit,
+        count=len(items),
+        total=total,
     )
