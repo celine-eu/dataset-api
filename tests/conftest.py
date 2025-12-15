@@ -17,6 +17,7 @@ async def test_engine():
     engine = create_async_engine(url, future=True)
 
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         await conn.execute(
             text(f"DROP SCHEMA IF EXISTS {settings.catalogue_schema} CASCADE")
         )

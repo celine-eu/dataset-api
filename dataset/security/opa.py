@@ -1,56 +1,24 @@
-# dataset/security/opa.py
-from __future__ import annotations
-
 import logging
-from typing import Any, Optional
-
+from typing import Any, Dict
 import httpx
-
-from dataset.core.config import settings
-from dataset.db.models.dataset_entry import DatasetEntry
 
 logger = logging.getLogger(__name__)
 
 
-async def authorize_dataset_query(
-    *,
-    entry: DatasetEntry,
-    user: Optional[dict[str, Any]],
-    raw_filter: Optional[str],
-) -> bool:
-    """
-    Call OPA to decide if the given user may run this query on this dataset.
-    """
-    opa_url: str | None = str(settings.opa_url) if settings.opa_url else None
+class OPAClient:
+    def __init__(self, base_url: str, policy_path: str):
+        self._url = f"{base_url.rstrip('/')}/v1/data/{policy_path.lstrip('/')}"
 
-    if not opa_url:
-        logger.debug("OPA URL not configured, skipping external policy check.")
-        return True
+    async def evaluate(self, input_doc: Dict[str, Any]) -> bool:
+        payload = {"input": input_doc}
 
-    policy_path = settings.opa_dataset_policy_path.strip("/")
-    url = f"{opa_url.rstrip('/')}/v1/data/{policy_path}"
-
-    input_doc = {
-        "dataset": {
-            "id": entry.dataset_id,
-            "backend_type": entry.backend_type,
-            "access_level": entry.access_level or "open",
-            "tags": entry.tags or {},
-        },
-        "user": user or {},
-        "query": {
-            "filter": raw_filter,
-        },
-    }
-
-    try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(url, json={"input": input_doc})
+            resp = await client.post(self._url, json=payload)
             resp.raise_for_status()
             data = resp.json()
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.error("OPA evaluation failed: %s", exc)
-        return False
 
-    allowed = bool(data.get("result", {}).get("allow", False))
-    return allowed
+        result = data.get("result")
+        if not isinstance(result, bool):
+            raise RuntimeError("OPA policy returned invalid result")
+
+        return result

@@ -29,8 +29,9 @@ class Settings(BaseSettings):
     keycloak_callback_uri: Optional[HttpUrl] = HttpUrl("http://localhost/callback")
     keycloak_admin_client_secret: Optional[str] = None
 
-    opa_url: Optional[AnyUrl] = None
-    opa_dataset_policy_path: str = "dataset/access"
+    opa_enabled: bool = False
+    opa_url: str = "http://localhost:8181"
+    opa_policy_path: str = "celine/dataset/access"
 
     log_level: str = "INFO"
 

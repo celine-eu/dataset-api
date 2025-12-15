@@ -15,7 +15,7 @@ from dataset.schemas.dataset_query import DatasetQueryResult
 from dataset.db.models.dataset_entry import DatasetEntry
 from dataset.db.reflection import reflect_table_async
 from dataset.db.engine import get_session
-from dataset.security.opa import authorize_dataset_query
+from dataset.security.governance import enforce_dataset_access
 from dataset.api.dataset_query.parser import parse_sql_filter
 from dataset.security.auth import (
     requires_auth,
@@ -24,7 +24,7 @@ from dataset.security.auth import (
     get_optional_user,
 )
 from dataset.core.datasets import load_dataset_entry
-from dataset.core.governance import enforce_dataset_access
+from dataset.security.governance import enforce_dataset_access
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ async def execute_query(
     """
     entry = await load_dataset_entry(db=db, dataset_id=dataset_id)
 
-    enforce_dataset_access(entry=entry, user=user)
+    await enforce_dataset_access(entry=entry, user=user)
 
     if entry.backend_type != "postgres":
         raise HTTPException(400, "Querying only supported for postgres backend")
@@ -89,13 +89,6 @@ async def execute_query(
         raise HTTPException(500, "Dataset missing backend table definition")
 
     table = await reflect_table_async(db, table_name)
-
-    # OPA check
-    allowed = await authorize_dataset_query(
-        entry=entry, user=user, raw_filter=filter_str
-    )
-    if not allowed:
-        raise HTTPException(403, "Not authorized to query this dataset.")
 
     sa_filter = parse_sql_filter(filter_str, table) if filter_str else None
 
