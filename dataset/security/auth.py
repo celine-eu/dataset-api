@@ -73,7 +73,13 @@ def _audience() -> str:
 
 
 def _user_to_dict(user: OIDCUser) -> dict[str, Any]:
-    return user.model_dump() if hasattr(user, "model_dump") else user.dict()
+    data = user.model_dump() if hasattr(user, "model_dump") else user.dict()
+
+    groups = data.get("groups") or []
+    data["group_names"] = [g.get("name") for g in groups if "name" in g]
+    data["group_paths"] = [g.get("path") for g in groups if "path" in g]
+
+    return data
 
 
 # ---------------------------------------------------------------------

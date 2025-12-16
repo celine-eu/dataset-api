@@ -10,7 +10,6 @@ class DisclosurePolicy:
 
 class DisclosureLevel(str, Enum):
     OPEN = "open"
-    GREEN = "green"
     INTERNAL = "internal"
     RESTRICTED = "restricted"
 
@@ -26,7 +25,6 @@ class DisclosureLevel(str, Enum):
 
 DISCLOSURE_MATRIX: dict[DisclosureLevel, DisclosurePolicy] = {
     DisclosureLevel.OPEN: DisclosurePolicy(False, False),
-    DisclosureLevel.GREEN: DisclosurePolicy(True, False),
     DisclosureLevel.INTERNAL: DisclosurePolicy(True, True),
     DisclosureLevel.RESTRICTED: DisclosurePolicy(True, True),
 }
