@@ -1,7 +1,7 @@
 # tests/test_catalogue_import.py
 import pytest
 
-from dataset.schemas.catalogue_import import (
+from celine.dataset.schemas.catalogue_import import (
     BackendConfig,
     CatalogueImportModel,
     DatasetEntryModel,

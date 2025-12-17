@@ -2,7 +2,7 @@
 import pytest
 from sqlalchemy import text
 
-from dataset.db.models.dataset_entry import DatasetEntry
+from celine.dataset.db.models.dataset_entry import DatasetEntry
 
 
 @pytest.mark.asyncio

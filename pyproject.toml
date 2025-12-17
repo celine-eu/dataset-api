@@ -26,7 +26,8 @@ dependencies = [
 package = true
 
 [tool.setuptools.packages.find]
-include = ["dataset*"]
+where = ["."]
+include = ["celine.dataset*"]
 exclude = ["tests*"]
 
 [dependency-groups]
@@ -56,4 +57,4 @@ parse_squash_commits = true
 ignore_merge_commits = true
 
 [project.scripts]
-dataset-cli = "dataset.cli.main:run"
+dataset-cli = "celine.dataset.cli.main:run"

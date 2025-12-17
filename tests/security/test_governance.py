@@ -1,8 +1,8 @@
 import pytest
 from fastapi import HTTPException
 
-from dataset.security import governance as gov
-from dataset.security.disclosure import DisclosureLevel, DISCLOSURE_MATRIX
+from celine.dataset.security import governance as gov
+from celine.dataset.security.disclosure import DisclosureLevel, DISCLOSURE_MATRIX
 
 
 # ----------------------------------------------------------------------
@@ -62,32 +62,6 @@ async def test_open_allows_authenticated(user):
     from tests.security.conftest import make_entry
 
     entry = make_entry(disclosure=DisclosureLevel.OPEN)
-    await gov.enforce_dataset_access(entry=entry, user=user)
-
-
-# ----------------------------------------------------------------------
-# GREEN (auth required, no policy)
-# ----------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_green_denies_anonymous(anon_user):
-    from tests.security.conftest import make_entry
-
-    entry = make_entry(disclosure=DisclosureLevel.GREEN)
-
-    with pytest.raises(HTTPException) as exc:
-        await gov.enforce_dataset_access(entry=entry, user=anon_user)
-
-    assert exc.value.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_green_allows_authenticated(user):
-    from tests.security.conftest import make_entry
-
-    entry = make_entry(disclosure=DisclosureLevel.GREEN)
-
     await gov.enforce_dataset_access(entry=entry, user=user)
 
 

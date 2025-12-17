@@ -4,10 +4,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from dataset.core.config import settings
-from dataset.db.engine import get_session
-from dataset.db.models.dataset_entry import Base
-from dataset.main import create_app
+from celine.dataset.core.config import settings
+from celine.dataset.db.engine import get_session
+from celine.dataset.db.models.dataset_entry import Base
+from celine.dataset.main import create_app
 
 
 @pytest.fixture()

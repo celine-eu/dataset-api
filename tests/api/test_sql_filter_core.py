@@ -3,7 +3,7 @@ import pytest
 from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, select
 from sqlalchemy.sql.elements import ColumnElement
 
-from dataset.api.dataset_query.parser import parse_sql_filter
+from celine.dataset.api.dataset_query.parser import parse_sql_filter
 
 
 @pytest.fixture

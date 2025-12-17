@@ -1,7 +1,7 @@
 #  tests/test_openlineage_extractor.py
 import pytest
 
-from dataset.cli.export_openlineage import extract_lineage_info
+from celine.dataset.cli.export_openlineage import extract_lineage_info
 
 
 @pytest.mark.asyncio

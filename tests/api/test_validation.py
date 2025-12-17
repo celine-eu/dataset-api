@@ -1,5 +1,5 @@
 # tests/test_validation.py
-from dataset.schemas.catalogue_import import (
+from celine.dataset.schemas.catalogue_import import (
     BackendConfig,
     DatasetEntryModel,
     Lineage,

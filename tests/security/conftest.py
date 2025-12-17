@@ -2,8 +2,8 @@ import pytest
 from types import SimpleNamespace
 from typing import Any, Dict, cast
 
-from dataset.security.disclosure import DisclosureLevel
-from dataset.db.models.dataset_entry import DatasetEntry
+from celine.dataset.security.disclosure import DisclosureLevel
+from celine.dataset.db.models.dataset_entry import DatasetEntry
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from dataset.db.reflection import reflect_table_async
+from celine.dataset.db.reflection import reflect_table_async
 
 
 @pytest.mark.asyncio

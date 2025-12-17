@@ -1,5 +1,5 @@
-from dataset.api.catalogue.dcat_formatter import build_catalog
-from dataset.db.models.dataset_entry import DatasetEntry
+from celine.dataset.api.catalogue.dcat_formatter import build_catalog
+from celine.dataset.db.models.dataset_entry import DatasetEntry
 
 
 def test_catalogue_listing_basic():
