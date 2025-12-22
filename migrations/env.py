@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(env_path)
 
-from dataset.core.config import settings
-from dataset.api.catalogue.models import Base
+from celine.dataset.core.config import settings
+from celine.dataset.api.catalogue.models import Base
 
 
 config = context.config
