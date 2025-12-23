@@ -4,7 +4,7 @@ tasks:
   run:
     desc: "Run development server"
     cmds:
-      - uv run uvicorn dataset.main:create_app --reload
+      - uv run uvicorn celine.dataset.main:create_app --reload
   test:
     desc: "Run tests"
     cmds:
