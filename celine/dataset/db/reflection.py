@@ -14,19 +14,28 @@ logger = logging.getLogger(__name__)
 async def reflect_table_async(db: AsyncSession, table_name: str) -> Table:
     metadata = MetaData()
 
+    logger.debug(f"Reflect table {table_name}")
+
+    dbname = None
     parts = table_name.split(".")
     if len(parts) == 3:
-        _, schema, tbl = parts
+        dbname, schema, tbl = parts
     elif len(parts) == 2:
         schema, tbl = parts
     else:
         schema, tbl = None, parts[0]
 
+    logger.debug(f"Table database={dbname} schema={schema} table={tbl}")
+
     def _reflect(sync_conn):
         metadata.reflect(bind=sync_conn, only=[tbl], schema=schema, views=True)
 
-    conn = await db.connection()
-    await conn.run_sync(_reflect)
+    try:
+        conn = await db.connection()
+        await conn.run_sync(_reflect)
+    except Exception as e:
+        logger.error(f"Reflection failed: {e}")
+        raise HTTPException(500, f"Failed to lookup requested table {table_name}")
 
     table = metadata.tables.get(tbl)
 

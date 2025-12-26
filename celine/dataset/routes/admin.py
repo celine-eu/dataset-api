@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
-from celine.dataset.db.engine import get_session
 from celine.dataset.db.models.dataset_entry import DatasetEntry
+from celine.dataset.db.engine import get_session
 from celine.dataset.schemas.catalogue_import import CatalogueImportModel
 
 logger = logging.getLogger(__name__)

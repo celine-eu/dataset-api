@@ -1,12 +1,15 @@
+import logging
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, status
 
 from celine.dataset.security.disclosure import DisclosureLevel, DISCLOSURE_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
+from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.security.opa import OPAClient
 from celine.dataset.core.config import settings
 
+logger = logging.getLogger(__name__)
 
 _opa_client: Optional[OPAClient] = None
 
@@ -21,13 +24,14 @@ def _get_opa_client() -> Optional[OPAClient]:
             base_url=settings.opa_url,
             policy_path=settings.opa_policy_path,
         )
+
     return _opa_client
 
 
 async def enforce_dataset_access(
     *,
     entry: DatasetEntry,
-    user: Optional[Dict[str, Any]],
+    user: Optional[AuthenticatedUser],
 ) -> None:
     """
     Final access-control gate for dataset usage.
@@ -36,6 +40,7 @@ async def enforce_dataset_access(
     try:
         level = DisclosureLevel.from_value(entry.access_level)
     except ValueError as exc:
+        logger.warning(f"Failed to parse access_level={entry.access_level}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     policy = DISCLOSURE_MATRIX[level]
@@ -50,7 +55,13 @@ async def enforce_dataset_access(
     # Step 2 — policy evaluation
     if policy.requires_policy:
         opa = _get_opa_client()
+
+        if not settings.opa_enabled:
+            logger.warning("OPA disabled, all request are allowed.")
+            return
+
         if opa is None:
+            logger.warning(f"Failed to create opa client")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Policy engine unavailable",

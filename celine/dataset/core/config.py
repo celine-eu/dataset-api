@@ -4,7 +4,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal, Optional
 
-from pydantic import AnyUrl, HttpUrl
+from pydantic import AnyUrl, HttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,12 +22,22 @@ class Settings(BaseSettings):
     marquez_url: Optional[AnyUrl] = None
     marquez_namespace: Optional[str] = None
 
-    keycloak_issuer: Optional[AnyUrl] = None
-    keycloak_audience: Optional[str] = None
-    keycloak_client_id: Optional[str] = None
-    keycloak_client_secret: Optional[str] = None
-    keycloak_callback_uri: Optional[HttpUrl] = HttpUrl("http://localhost/callback")
-    keycloak_admin_client_secret: Optional[str] = None
+    oidc_issuer: str = Field(
+        default="http://keycloak.celine.localhost/realms/celine",
+        description="OIDC url",
+    )
+    oidc_client_id: str = Field(
+        default="celine-cli",
+        description="OIDC client_id",
+    )
+    oidc_client_secret: str = Field(
+        default="celine-cli",
+        description="OIDC  client_secret",
+    )
+    oidc_audience: Optional[str] = Field(
+        default="",
+        description="OIDC token audience",
+    )
 
     opa_enabled: bool = False
     opa_url: str = "http://localhost:8181"

@@ -28,3 +28,14 @@ DISCLOSURE_MATRIX: dict[DisclosureLevel, DisclosurePolicy] = {
     DisclosureLevel.INTERNAL: DisclosurePolicy(True, True),
     DisclosureLevel.RESTRICTED: DisclosurePolicy(True, True),
 }
+
+
+def requires_auth(access_level: str | None) -> bool:
+    """
+    Returns True if the given disclosure level requires authentication.
+
+    Used by API-layer dependencies to decide whether anonymous access
+    is acceptable.
+    """
+    level = DisclosureLevel.from_value(access_level)
+    return DISCLOSURE_MATRIX[level].requires_auth

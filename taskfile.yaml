@@ -4,7 +4,11 @@ tasks:
   run:
     desc: "Run development server"
     cmds:
-      - uv run uvicorn celine.dataset.main:create_app --reload
+      - uv run uvicorn celine.dataset.main:create_app --reload --host 0.0.0.0 --port 8001
+  debug:
+    desc: "Run development server with debugger"
+    cmds:
+      - DEBUG_ATTACH=1 uv run uvicorn celine.dataset.main:create_app --reload --host 0.0.0.0 --port 8001
   test:
     desc: "Run tests"
     cmds:
@@ -14,22 +18,22 @@ tasks:
     desc: Export lineage from marquez
     cmds:
       - mkdir -p ./data/openlineage
-      - uv run python -m dataset.cli.main export openlineage --ns '*' -o ./data/openlineage --expose
+      - uv run python -m celine.dataset.cli.main export openlineage --ns '*' -o ./data/openlineage --expose
 
   cli:import-datasets:
     desc: Import exported datasets to API catalogue
     cmds:
-      - uv run python -m dataset.cli.main import catalogue -i "./data/openlineage/*.yaml" --api-url http://localhost:8000
+      - uv run python -m celine.dataset.cli.main import catalogue -i "./data/openlineage/*.yaml" --api-url http://localhost:8001
 
   cli:ontology-fetch:
     desc: Fetch ontologies
     cmds:
-      - uv run python -m dataset.cli.main ontology fetch -o ./data/ontologies
+      - uv run python -m celine.dataset.cli.main ontology fetch -o ./data/ontologies
 
   cli:ontology-analyze:
     desc: Fetch ontologies
     cmds:
-      - uv run python -m dataset.cli.main ontology analyze -- {{.CLI_ARGS}}
+      - uv run python -m celine.dataset.cli.main ontology analyze -- {{.CLI_ARGS}}
 
   cli:ontology-view:
     desc: View ontologies (requires xdot)

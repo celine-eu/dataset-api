@@ -1,85 +1,117 @@
-# dataset/security/auth.py
 from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi_keycloak import FastAPIKeycloak, OIDCUser
+from jose import jwt, JWTError
+import httpx
 
 from celine.dataset.core.config import settings
+from celine.dataset.security.models import AuthenticatedUser
 
 logger = logging.getLogger(__name__)
-
 bearer_scheme = HTTPBearer(auto_error=False)
 
-DEFAULT_AUDIENCE = "account"
-
 
 # ---------------------------------------------------------------------
-# Keycloak initialization
+# JWKS handling
 # ---------------------------------------------------------------------
-def _parse_issuer(issuer: str) -> tuple[str, str]:
-    issuer = issuer.rstrip("/")
-    marker = "/realms/"
-    if marker not in issuer:
-        raise ValueError("Invalid Keycloak issuer URL")
-    server_url, realm = issuer.split(marker, 1)
-    return server_url, realm
 
 
 @lru_cache
-def get_keycloak() -> FastAPIKeycloak:
-    if not settings.keycloak_issuer:
-        raise RuntimeError("Keycloak issuer not configured")
+def _jwks_url() -> str:
+    issuer = settings.oidc_issuer.rstrip("/")
+    return f"{issuer}/protocol/openid-connect/certs"
 
-    server_url, realm = _parse_issuer(str(settings.keycloak_issuer))
 
-    if not settings.keycloak_client_id or not settings.keycloak_client_secret:
-        raise RuntimeError("Keycloak client credentials not configured")
+@lru_cache
+def _issuer() -> str:
+    return settings.oidc_issuer.rstrip("/")
 
-    admin_secret = (
-        settings.keycloak_admin_client_secret or settings.keycloak_client_secret
-    )
 
+async def _get_jwks() -> dict:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(_jwks_url())
+        resp.raise_for_status()
+        return resp.json()
+
+
+# ---------------------------------------------------------------------
+# Core JWT validation
+# ---------------------------------------------------------------------
+async def _decode_token(token: str) -> dict[str, Any]:
     try:
-        kc = FastAPIKeycloak(
-            server_url=server_url,
-            realm=realm,
-            client_id=settings.keycloak_client_id,
-            client_secret=settings.keycloak_client_secret,
-            admin_client_secret=admin_secret,
-            callback_uri=str(settings.keycloak_callback_uri),
+        jwks = await _get_jwks()
+        claims = jwt.decode(
+            token,
+            jwks,
+            algorithms=["RS256"],
+            issuer=_issuer(),
+            options={"verify_aud": False},  # IMPORTANT
         )
-    except Exception as exc:
-        logger.exception("Failed to initialize Keycloak")
-        raise RuntimeError("Keycloak initialization failed") from exc
 
-    logger.info(
-        "Keycloak initialized (realm=%s, client_id=%s)",
-        realm,
-        settings.keycloak_client_id,
+        token_aud = claims.get("aud")
+        expected = _expected_audiences()
+
+        if token_aud is None:
+            raise HTTPException(401, "Token missing audience")
+
+        if isinstance(token_aud, str):
+            token_aud = [token_aud]
+
+        if not any(aud in expected for aud in token_aud):
+            raise HTTPException(401, "Invalid audience")
+
+        return claims
+
+    except JWTError as exc:
+        logger.debug("JWT validation failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+
+def _expected_audiences() -> list[str]:
+    auds = []
+
+    if settings.oidc_audience:
+        auds.append(settings.oidc_audience)
+
+    if settings.oidc_client_id:
+        auds.append(settings.oidc_client_id)
+
+    # Keycloak default
+    auds.append("account")
+
+    return list(dict.fromkeys(auds))  # dedupe, preserve order
+
+
+def _normalize_user(claims: dict[str, Any]) -> AuthenticatedUser:
+    aud = claims.get("aud", [])
+    if isinstance(aud, str):
+        aud = [aud]
+
+    realm_roles = claims.get("realm_access", {}).get("roles", [])
+    client_roles = (
+        claims.get("resource_access", {})
+        .get(settings.oidc_client_id, {})
+        .get("roles", [])
     )
-    return kc
 
-
-# ---------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------
-def _audience() -> str:
-    return settings.keycloak_audience or DEFAULT_AUDIENCE
-
-
-def _user_to_dict(user: OIDCUser) -> dict[str, Any]:
-    data = user.model_dump() if hasattr(user, "model_dump") else user.dict()
-
-    groups = data.get("groups") or []
-    data["group_names"] = [g.get("name") for g in groups if "name" in g]
-    data["group_paths"] = [g.get("path") for g in groups if "path" in g]
-
-    return data
+    return AuthenticatedUser(
+        sub=claims["sub"],
+        username=claims.get("preferred_username"),
+        email=claims.get("email"),
+        roles=sorted(set(realm_roles + client_roles)),
+        groups=claims.get("groups", []),
+        issuer=claims.get("iss"),
+        audiences=aud,
+        claims=claims,
+    )
 
 
 # ---------------------------------------------------------------------
@@ -87,85 +119,16 @@ def _user_to_dict(user: OIDCUser) -> dict[str, Any]:
 # ---------------------------------------------------------------------
 async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-) -> Optional[dict[str, Any]]:
-    """
-    Optional authentication:
-    - No token → None
-    - Invalid token → 401
-    """
+) -> Optional[AuthenticatedUser]:
     if credentials is None:
         return None
 
-    token = credentials.credentials
-    kc = get_keycloak()
-
-    try:
-        if not kc.token_is_valid(token, audience=_audience()):
-            raise HTTPException(status_code=401, detail="Invalid token")
-
-        decoded = kc._decode_token(token, audience=_audience())
-        return _user_to_dict(OIDCUser.parse_obj(decoded))
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.warning("Optional auth failed: %s", exc)
-        raise HTTPException(status_code=401, detail="Invalid token")
+    claims = await _decode_token(credentials.credentials)
+    return _normalize_user(claims)
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
-) -> dict[str, Any]:
-    """
-    Mandatory authentication.
-    """
-    token = credentials.credentials
-    kc = get_keycloak()
-
-    try:
-        if not kc.token_is_valid(token, audience=_audience()):
-            raise HTTPException(status_code=401, detail="Invalid token")
-
-        decoded = kc._decode_token(token, audience=_audience())
-        return _user_to_dict(OIDCUser.parse_obj(decoded))
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Authentication failed")
-        raise HTTPException(status_code=401, detail="Invalid token") from exc
-
-
-# ---------------------------------------------------------------------
-# Dataset disclosure enforcement
-# ---------------------------------------------------------------------
-def requires_auth(access_level: Optional[str]) -> bool:
-    """
-    Default policy:
-      open / public → anonymous allowed
-      everything else → auth required
-    """
-    return (access_level or "open").lower() not in {"open", "public", "green"}
-
-
-def dataset_user_dependency(
-    *, access_level: Optional[str]
-) -> Callable[..., Awaitable[Optional[dict[str, Any]]]]:
-    """
-    Dependency factory used by dataset routes.
-    """
-
-    async def _dep(
-        credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-    ) -> Optional[dict[str, Any]]:
-        if requires_auth(access_level):
-            if credentials is None:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required for this dataset",
-                )
-            return await get_current_user(credentials)
-
-        return await get_optional_user(credentials)
-
-    return _dep
+) -> AuthenticatedUser:
+    claims = await _decode_token(credentials.credentials)
+    return _normalize_user(claims)

@@ -15,16 +15,17 @@ from celine.dataset.schemas.dataset_query import DatasetQueryResult
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.db.reflection import reflect_table_async
 from celine.dataset.db.engine import get_session
+from celine.dataset.security.disclosure import requires_auth
 from celine.dataset.security.governance import enforce_dataset_access
 from celine.dataset.api.dataset_query.parser import parse_sql_filter
 from celine.dataset.security.auth import (
-    requires_auth,
     bearer_scheme,
     get_current_user,
     get_optional_user,
 )
 from celine.dataset.core.datasets import load_dataset_entry
 from celine.dataset.security.governance import enforce_dataset_access
+from celine.dataset.security.models import AuthenticatedUser
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ async def get_entry_dep(
 async def dataset_user_dep(
     entry: DatasetEntry = Depends(get_entry_dep),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-) -> Optional[dict[str, Any]]:
+) -> Optional[AuthenticatedUser]:
     if requires_auth(entry.access_level):
         if credentials is None:
             raise HTTPException(
@@ -64,7 +65,7 @@ async def execute_query(
     filter_str: Optional[str],
     limit: int,
     offset: int,
-    user: Optional[dict],
+    user: Optional[AuthenticatedUser],
 ) -> DatasetQueryResult:
     """
     Core query execution path:
@@ -90,7 +91,11 @@ async def execute_query(
 
     table = await reflect_table_async(db, table_name)
 
-    sa_filter = parse_sql_filter(filter_str, table) if filter_str else None
+    try:
+        sa_filter = parse_sql_filter(filter_str, table) if filter_str else None
+    except Exception as e:
+        logger.debug(f"Failed to parse SQL query: {e}")
+        raise e
 
     # COUNT total results
     count_stmt = select(func.count()).select_from(table)

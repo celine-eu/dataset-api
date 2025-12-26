@@ -26,7 +26,7 @@ def get_engine() -> AsyncEngine:
         _engine = create_async_engine(
             ASYNC_DATABASE_URL,
             future=True,
-            echo=settings.env == "dev",
+            # echo=settings.env == "dev",
         )
         _sessionmaker = async_sessionmaker(
             bind=_engine,
@@ -47,6 +47,6 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    sessionmaker = get_sessionmaker()
-    async with sessionmaker() as session:
+    SessionLocal = get_sessionmaker()
+    async with SessionLocal() as session:
         yield session

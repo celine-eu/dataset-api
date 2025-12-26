@@ -27,6 +27,31 @@ TEXT_EXTENSIONS = {
 }
 
 
+def is_git_repo() -> bool:
+    return bool(git(["rev-parse", "--is-inside-work-tree"]))
+
+
+def is_git_ignored(path: Path) -> bool:
+    """
+    Returns True if the path is ignored by git (.gitignore, info/exclude, global excludes).
+    Matches git behavior exactly.
+    """
+    if not is_git_repo():
+        return False
+
+    try:
+        subprocess.check_output(
+            ["git", "check-ignore", "--quiet", str(path)],
+            cwd=ROOT,
+            stderr=subprocess.DEVNULL,
+        )
+        return True  # exit code 0 → ignored
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 1:
+            return False  # not ignored
+        return False  # other git error → fail open
+
+
 def is_text_file(path: Path) -> bool:
     return path.suffix.lower() in TEXT_EXTENSIONS
 
@@ -34,10 +59,16 @@ def is_text_file(path: Path) -> bool:
 def should_skip(path: Path) -> bool:
     if "__pycache__" in path.parts:
         return True
+
     if path.is_dir():
         return True
+
     if not is_text_file(path):
         return True
+
+    if is_git_ignored(path):
+        return True
+
     return False
 
 
