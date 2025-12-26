@@ -2,6 +2,7 @@
 
 import pytest
 from datetime import datetime
+import sqlglot
 
 from sqlalchemy import (
     MetaData,
@@ -10,8 +11,9 @@ from sqlalchemy import (
     Float,
     DateTime,
 )
+import sqlglot.expressions
 
-from celine.dataset.api.dataset_query.parser import parse_sql_query
+from celine.dataset.api.dataset_query.parser import parse_sql_query, _function_name
 
 
 # ---------------------------------------------------------------------------
@@ -268,3 +270,9 @@ def test_from_single_source_sqlglot_shape(solar_table):
     sql = "SELECT * FROM dwd_icon_d2_solar_energy"
     stmt = parse_sql_query(sql, solar_table)
     assert stmt is not None
+
+
+def test_postgis_function_name_extraction():
+    expr = sqlglot.parse_one("select ST_Intersects(a, b)")
+    fn = next(e for e in expr.find_all(sqlglot.expressions.Anonymous))
+    assert _function_name(fn) == "st_intersects"
