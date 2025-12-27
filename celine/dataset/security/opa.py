@@ -10,15 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class DatasetGovernance:
-    owner: Optional[str] = None
-
-
-@dataclass(frozen=True)
 class DatasetOPAInput:
     id: str
     access_level: str
-    governance: DatasetGovernance
 
 
 @dataclass(frozen=True)
@@ -50,7 +44,6 @@ def _build_opa_input(
         dataset=DatasetOPAInput(
             id=dataset.dataset_id,
             access_level=dataset.access_level or "restricted",
-            governance=DatasetGovernance(owner=dataset.governance_owner),
         ),
         user=(
             UserOPAInput(
