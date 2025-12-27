@@ -12,56 +12,6 @@ import sqlglot.errors
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass(frozen=True)
-class ParsedSQL:
-    ast: exp.Expression
-    tables: Set[str]  # physical tables only, CTEs excluded
-
-    @property
-    def sql(self) -> str:
-        """
-        Logical SQL rendered from the validated AST.
-        Table names are dataset IDs (no physical substitution).
-        """
-        return self.ast.sql()
-
-    def to_sql(self, tables_map: Optional[Dict[str, str]] = None) -> str:
-        """
-        Render SQL from the AST.
-
-        If table_map is provided, logical table names (dataset IDs)
-        are replaced with their physical backend table names.
-
-        table_map: {logical_name -> physical_table}
-        """
-        if not tables_map:
-            return self.ast.sql()
-
-        # Work on a copy to keep ParsedSQL immutable
-        ast = self.ast.copy()
-
-        for table in ast.find_all(exp.Table):
-            logical = table.name
-
-            if logical not in tables_map:
-                logger.debug(
-                    f"Logical table name '{logical}' not found in physical tables mapping"
-                )
-                continue
-
-            physical = tables_map[logical]
-
-            logger.debug(f"Mapping table {logical} -> {physical}")
-
-            table.set(
-                "this",
-                exp.Identifier(this=physical, quoted=False),
-            )
-
-        return ast.sql()
-
-
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
@@ -84,6 +34,7 @@ ALLOWED_EXPRESSIONS = (
     exp.Star,
     exp.Column,
     exp.Identifier,
+    exp.Dot,
     exp.Alias,
     exp.Distinct,
     # --- Joins ---
@@ -191,6 +142,58 @@ ALLOWED_FUNCTIONS = {
 
 # Reject statement stacking
 _SEMICOLON_RE = re.compile(r";")
+
+
+@dataclass(frozen=True)
+class ParsedSQL:
+    ast: exp.Expression
+    tables: Set[str]  # physical tables only, CTEs excluded
+
+    @property
+    def sql(self) -> str:
+        """
+        Logical SQL rendered from the validated AST.
+        Table names are dataset IDs (no physical substitution).
+        """
+        return self.ast.sql()
+
+    def to_sql(self, tables_map: Optional[Dict[str, str]] = None) -> str:
+        """
+        Render SQL from the AST.
+
+        If table_map is provided, logical table names (dataset IDs)
+        are replaced with their physical backend table names.
+
+        table_map: {logical_name -> physical_table}
+        """
+        if not tables_map:
+            return self.ast.sql()
+
+        # Work on a copy to keep ParsedSQL immutable
+        ast = self.ast.copy()
+
+        for table in ast.find_all(exp.Table):
+            logical = _table_identifier(table)
+
+            if logical not in tables_map:
+                logger.debug(
+                    f"Logical table name '{logical}' not found in physical tables mapping"
+                )
+                continue
+
+            physical = tables_map[logical]
+
+            logger.debug(f"Mapping table {logical} -> {physical}")
+
+            table.set(
+                "this",
+                exp.Identifier(this=physical, quoted=False),
+            )
+            table.set("db", None)
+            table.set("catalog", None)
+
+        return ast.sql()
+
 
 # -----------------------------------------------------------------------------
 # Errors
@@ -340,13 +343,14 @@ def _collect_physical_tables(ast: exp.Expression) -> Set[str]:
     tables: Set[str] = set()
 
     for table in ast.find_all(exp.Table):
-        name = table.name
+        # allow dot based identifiers
+        logical_name = _table_identifier(table)
 
         # Skip references to CTEs
-        if name in cte_names:
+        if logical_name in cte_names:
             continue
 
-        tables.add(name)
+        tables.add(logical_name)
 
     return tables
 
@@ -376,3 +380,13 @@ def _reject_disallowed_nodes(ast: exp.Expression) -> None:
     for node in ast.walk():
         if isinstance(node, _DISALLOWED_EXPRESSIONS):
             raise _bad_request(f"Disallowed SQL operation: {type(node).__name__}")
+
+
+def _table_identifier(table: exp.Table) -> str:
+    parts = []
+    if table.catalog:
+        parts.append(table.catalog)
+    if table.db:
+        parts.append(table.db)
+    parts.append(table.name)
+    return ".".join(parts)

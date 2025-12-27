@@ -4,7 +4,9 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 import os
+from pathlib import Path
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from celine.dataset.core.config import settings
 from celine.dataset.api.healthcheck import is_healthly

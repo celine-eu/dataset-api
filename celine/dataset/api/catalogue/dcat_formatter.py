@@ -84,16 +84,17 @@ def build_catalog(entries: Iterable[DatasetEntry]) -> dict[str, Any]:
         for e in dist_entries:
             dist_id = e.dataset_id
             backend = e.backend_config or {}
-            fmt = backend.get("format", "application/json")
+            media_type = backend.get("format", "application/json")
 
             dist_node = {
-                "@id": f"{dataset_uri}#dist-{dist_id}",
+                "@id": f"{dataset_uri}#{dist_id}",
                 "@type": "dcat:Distribution",
                 "dct:title": e.title or dist_id,
                 "dct:identifier": dist_id,
-                "dct:format": fmt or "application/json-ld",
-                "dcat:mediaType": fmt,
+                "dct:format": media_type or "application/json",
+                "dcat:mediaType": media_type,
                 "dcat:accessURL": get_dataset_uri(dist_id) + "/query",
+                "dcat:landingPage": get_dataset_uri(dist_id) + "/metadata",
             }
 
             # governance fields

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>{% block title %}Dataset Catalogue{% endblock %}</title>
+
+    <link rel="stylesheet" href="/static/style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    {% block head_extra %}{% endblock %}
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <h1><a href="/">Dataset Catalogue</a></h1>
+        </div>
+    </header>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>
+                <a href="https://github.com/celine-eu/dataset-api" target="_blank" rel="noopener noreferrer">
+                    Dataset API
+                </a>
+                is part of the
+                <a href="https://celineproject.eu" target="_blank" rel="noopener noreferrer">
+                    CELINE project
+                </a>
+                digital toolbox
+
+            </p>
+        </div>
+    </footer>
+</body>
+
+</html>

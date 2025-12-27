@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dataset.dataset_id }}{% endblock %}
+
+{% block content %}
+<section class="dataset-header">
+    <h2>{{ dataset.dataset_id }}</h2>
+
+    {% if dataset.title %}
+    <p class="title">{{ dataset.title }}</p>
+    {% endif %}
+
+    {% if dataset.description %}
+    <p class="description">{{ dataset.description }}</p>
+    {% endif %}
+</section>
+
+<section>
+    <h3>Dataset details</h3>
+    <dl class="meta">
+        <dt>Dataset ID</dt>
+        <dd>{{ dataset.dataset_id }}</dd>
+
+        <dt>Backend type</dt>
+        <dd>{{ dataset.backend_type }}</dd>
+
+        {% if dataset.access_level %}
+        <dt>Access level</dt>
+        <dd>{{ dataset.access_level }}</dd>
+        {% endif %}
+    </dl>
+</section>
+
+<section>
+    <h3>Links</h3>
+    <ul class="links">
+        <li>
+            <a href="/dataset/{{ dataset.dataset_id }}/metadata">
+                Metadata (JSONSchema)
+            </a>
+        </li>
+        <li>
+            <a href="/dataset/{{ dataset.dataset_id }}/query">
+                Query endpoint
+            </a>
+        </li>
+    </ul>
+</section>
+
+<section>
+    <h3>API usage</h3>
+
+    {% if needs_auth %}
+    <p>
+        <strong>Authentication required.</strong>
+        Include a bearer token in the <code>Authorization</code> header.
+    </p>
+    {% else %}
+    <p>This dataset is publicly accessible.</p>
+    {% endif %}
+
+    <p>Example request with pagination:</p>
+
+    <pre class="shell"><code>{{ example_curl }}</code></pre>
+
+    <p class="hint">
+        Use <code>limit</code> and <code>offset</code> to paginate through results.
+    </p>
+</section>
+
+{% endblock %}

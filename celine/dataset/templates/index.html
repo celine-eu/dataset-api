@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Dataset Catalogue{% endblock %}
+
+{% block content %}
+<h2>Available datasets</h2>
+
+{% if datasets %}
+<ul class="dataset-list">
+    {% for dataset_name, distributions in datasets.items() %}
+    <li class="dataset-card">
+        <h3>{{ dataset_name }}</h3>
+
+        <ul class="distribution-list">
+            {% for dist in distributions %}
+            <li>
+                <a href="/dataset/{{ dist.dataset_id }}">
+                    {% if dist.title %}
+                    <span class="dist-title">{{ dist.title }}</span>
+                    {% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>No datasets available.</p>
+{% endif %}
+{% endblock %}
