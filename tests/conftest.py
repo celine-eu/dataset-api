@@ -48,7 +48,11 @@ async def test_session(test_engine):
 @pytest.fixture
 async def client(test_session):
     async def override_get_session():
-        yield test_session
+        try:
+            yield test_session
+        finally:
+            if test_session.in_transaction():
+                await test_session.rollback()
 
     app = create_app(use_lifespan=False)
     app.dependency_overrides[get_session] = override_get_session

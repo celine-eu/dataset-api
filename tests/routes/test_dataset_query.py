@@ -7,11 +7,12 @@ from celine.dataset.db.models.dataset_entry import DatasetEntry
 
 @pytest.mark.asyncio
 async def test_query_open_dataset_simple(client, test_session):
+    dataset_id = "ds_open"
     table = "dataset_api.test_table"
 
     try:
         ds = DatasetEntry(
-            dataset_id="ds_open",
+            dataset_id=dataset_id,
             title="OpenDS",
             backend_type="postgres",
             backend_config={"table": table},
@@ -24,28 +25,32 @@ async def test_query_open_dataset_simple(client, test_session):
         await test_session.execute(
             text(
                 f"""
-            CREATE TABLE {table} (
-                id INTEGER,
-                temperature INTEGER,
-                city TEXT
-            )
-        """
+                CREATE TABLE {table} (
+                    id INTEGER,
+                    temperature INTEGER,
+                    city TEXT
+                )
+                """
             )
         )
 
         await test_session.execute(
             text(
                 f"""
-            INSERT INTO {table} (id, temperature, city) VALUES
-              (1, 25, 'Milan'),
-              (2, 10, 'London'),
-              (3, 30, 'Milan')
-        """
+                INSERT INTO {table} (id, temperature, city) VALUES
+                  (1, 25, 'Milan'),
+                  (2, 10, 'London'),
+                  (3, 30, 'Milan')
+                """
             )
         )
         await test_session.commit()
 
-        resp = await client.get("/dataset/ds_open/query")
+        resp = await client.get(
+            f"/dataset/{dataset_id}/query",
+            params={"sql": f"SELECT * FROM {dataset_id}"},
+        )
+        print(resp.json())
         assert resp.status_code == 200
         assert len(resp.json()["items"]) == 3
 
@@ -56,11 +61,12 @@ async def test_query_open_dataset_simple(client, test_session):
 
 @pytest.mark.asyncio
 async def test_query_sql_filter(client, test_session):
+    dataset_id = "ds_filter"
     table = "dataset_api.filter_table"
 
     try:
         ds = DatasetEntry(
-            dataset_id="ds_filter",
+            dataset_id=dataset_id,
             title="FilterDS",
             backend_type="postgres",
             backend_config={"table": table},
@@ -73,30 +79,36 @@ async def test_query_sql_filter(client, test_session):
         await test_session.execute(
             text(
                 f"""
-            CREATE TABLE {table} (
-                id INTEGER,
-                temperature INTEGER,
-                city TEXT
-            )
-        """
+                CREATE TABLE {table} (
+                    id INTEGER,
+                    temperature INTEGER,
+                    city TEXT
+                )
+                """
             )
         )
 
         await test_session.execute(
             text(
                 f"""
-            INSERT INTO {table} (id, temperature, city) VALUES
-              (1, 20, 'Rome'),
-              (2, 25, 'Milan'),
-              (3, 30, 'Rome')
-        """
+                INSERT INTO {table} (id, temperature, city) VALUES
+                  (1, 20, 'Rome'),
+                  (2, 25, 'Milan'),
+                  (3, 30, 'Rome')
+                """
             )
         )
         await test_session.commit()
 
+        sql = f"""
+        SELECT *
+        FROM {dataset_id}
+        WHERE temperature > 22 AND city = 'Milan'
+        """
+
         resp = await client.get(
-            "/dataset/ds_filter/query",
-            params={"filter": "temperature > 22 AND city = 'Milan'"},
+            f"/dataset/{dataset_id}/query",
+            params={"sql": sql},
         )
 
         assert resp.status_code == 200
@@ -111,11 +123,12 @@ async def test_query_sql_filter(client, test_session):
 
 @pytest.mark.asyncio
 async def test_query_pagination(client, test_session):
+    dataset_id = "ds_page"
     table = "dataset_api.page_table"
 
     try:
         ds = DatasetEntry(
-            dataset_id="ds_page",
+            dataset_id=dataset_id,
             title="PageDS",
             backend_type="postgres",
             backend_config={"table": table},
@@ -131,8 +144,11 @@ async def test_query_pagination(client, test_session):
         )
         await test_session.commit()
 
+        sql = f"SELECT * FROM {dataset_id}"
+
         resp = await client.get(
-            "/dataset/ds_page/query", params={"limit": 2, "offset": 2}
+            f"/dataset/{dataset_id}/query",
+            params={"sql": sql, "limit": 2, "offset": 2},
         )
         assert resp.status_code == 200
 
@@ -147,14 +163,20 @@ async def test_query_pagination(client, test_session):
 
 @pytest.mark.asyncio
 async def test_query_nonexistent_dataset(client):
-    resp = await client.get("/dataset/missing/query")
+    resp = await client.get(
+        "/dataset/missing/query",
+        params={"sql": "SELECT 1"},
+    )
     assert resp.status_code in (400, 404)
 
 
 @pytest.mark.asyncio
 async def test_query_unsupported_backend(client, test_session):
+
+    dataset_id = "ds_s3"
+
     ds = DatasetEntry(
-        dataset_id="ds_s3",
+        dataset_id=dataset_id,
         title="S3DS",
         backend_type="s3",
         backend_config={"path": "s3://bucket/key"},
@@ -163,17 +185,21 @@ async def test_query_unsupported_backend(client, test_session):
     test_session.add(ds)
     await test_session.commit()
 
-    resp = await client.get("/dataset/ds_s3/query")
+    resp = await client.get(
+        f"/dataset/{dataset_id}/query",
+        params={"sql": "SELECT 1"},
+    )
     assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
 async def test_query_sql_injection_blocked(client, test_session):
+    dataset_id = "ds_inj"
     table = "dataset_api.inj_table"
 
     try:
         ds = DatasetEntry(
-            dataset_id="ds_inj",
+            dataset_id=dataset_id,
             title="InjDS",
             backend_type="postgres",
             backend_config={"table": table},
@@ -185,26 +211,32 @@ async def test_query_sql_injection_blocked(client, test_session):
         await test_session.execute(
             text(
                 f"""
-            CREATE TABLE {table} (
-                id INTEGER,
-                value TEXT
-            )
-        """
+                CREATE TABLE {table} (
+                    id INTEGER,
+                    value TEXT
+                )
+                """
             )
         )
         await test_session.execute(
             text(
                 f"""
-            INSERT INTO {table} (id, value)
-            VALUES (1, 'safe'), (2, 'safe')
-        """
+                INSERT INTO {table} (id, value)
+                VALUES (1, 'safe'), (2, 'safe')
+                """
             )
         )
         await test_session.commit()
 
+        sql = f"""
+        SELECT *
+        FROM {dataset_id}
+        WHERE value = 'safe'; DROP TABLE inj_table
+        """
+
         resp = await client.get(
-            "/dataset/ds_inj/query",
-            params={"filter": "value = 'safe'; DROP TABLE inj_table"},
+            f"/dataset/{dataset_id}/query",
+            params={"sql": sql},
         )
 
         assert resp.status_code == 400
@@ -216,11 +248,12 @@ async def test_query_sql_injection_blocked(client, test_session):
 
 @pytest.mark.asyncio
 async def test_query_geospatial_filter(client, test_session):
+    dataset_id = "ds_geo"
     table = "dataset_api.geo_table"
 
     try:
         ds = DatasetEntry(
-            dataset_id="ds_geo",
+            dataset_id=dataset_id,
             title="GeoDS",
             backend_type="postgres",
             backend_config={"table": table},
@@ -232,31 +265,40 @@ async def test_query_geospatial_filter(client, test_session):
         await test_session.execute(
             text(
                 f"""
-            CREATE TABLE {table} (
-                id INTEGER,
-                geom geometry(Point, 4326)
-            )
-        """
+                CREATE TABLE {table} (
+                    id INTEGER,
+                    geom geometry(Point, 4326)
+                )
+                """
             )
         )
 
         await test_session.execute(
             text(
                 f"""
-            INSERT INTO {table} (id, geom) VALUES
-              (1, ST_Point(9.0, 45.0)),
-              (2, ST_Point(20.0, 10.0))
-        """
+                INSERT INTO {table} (id, geom) VALUES
+                  (1, ST_Point(9.0, 45.0)),
+                  (2, ST_Point(20.0, 10.0))
+                """
             )
         )
         await test_session.commit()
 
         polygon = '{"type": "Polygon", "coordinates": [[[8,44],[10,44],[10,46],[8,46],[8,44]]]}'
-        sql_filter = (
-            f"ST_Intersects(geom, ST_SetSRID(ST_GeomFromGeoJSON('{polygon}'), 4326))"
-        )
 
-        resp = await client.get("/dataset/ds_geo/query", params={"filter": sql_filter})
+        sql = f"""
+        SELECT *
+        FROM {dataset_id}
+        WHERE ST_Intersects(
+            geom,
+            ST_SetSRID(ST_GeomFromGeoJSON('{polygon}'), 4326)
+        )
+        """
+
+        resp = await client.get(
+            f"/dataset/{dataset_id}/query",
+            params={"sql": sql},
+        )
 
         assert resp.status_code == 200
         items = resp.json()["items"]
@@ -270,11 +312,12 @@ async def test_query_geospatial_filter(client, test_session):
 
 @pytest.mark.asyncio
 async def test_query_temporal_filter(client, test_session):
+    dataset_id = "ds_temp"
     table = "dataset_api.temp_table"
 
     try:
         ds = DatasetEntry(
-            dataset_id="ds_temp",
+            dataset_id=dataset_id,
             title="TempDS",
             backend_type="postgres",
             backend_config={"table": table},
@@ -286,28 +329,34 @@ async def test_query_temporal_filter(client, test_session):
         await test_session.execute(
             text(
                 f"""
-            CREATE TABLE {table} (
-                id INTEGER,
-                ts TIMESTAMP
-            )
-        """
+                CREATE TABLE {table} (
+                    id INTEGER,
+                    ts TIMESTAMP
+                )
+                """
             )
         )
         await test_session.execute(
             text(
                 f"""
-            INSERT INTO {table} (id, ts) VALUES
-              (1, '2025-01-01'),
-              (2, '2025-02-01'),
-              (3, '2024-12-01')
-        """
+                INSERT INTO {table} (id, ts) VALUES
+                  (1, '2025-01-01'),
+                  (2, '2025-02-01'),
+                  (3, '2024-12-01')
+                """
             )
         )
         await test_session.commit()
 
+        sql = f"""
+        SELECT *
+        FROM {dataset_id}
+        WHERE ts >= '2025-01-01T00:00:00Z'
+        """
+
         resp = await client.get(
-            "/dataset/ds_temp/query",
-            params={"filter": "ts >= '2025-01-01T00:00:00Z'"},
+            f"/dataset/{dataset_id}/query",
+            params={"sql": sql},
         )
         assert resp.status_code == 200
 
@@ -321,11 +370,12 @@ async def test_query_temporal_filter(client, test_session):
 
 @pytest.mark.asyncio
 async def test_query_complex_filter(client, test_session):
+    dataset_id = "ds_complex"
     table = "dataset_api.complex_table"
 
     try:
         ds = DatasetEntry(
-            dataset_id="ds_complex",
+            dataset_id=dataset_id,
             title="ComplexDS",
             backend_type="postgres",
             backend_config={"table": table},
@@ -337,31 +387,36 @@ async def test_query_complex_filter(client, test_session):
         await test_session.execute(
             text(
                 f"""
-            CREATE TABLE {table} (
-                id INTEGER,
-                a INTEGER,
-                b TEXT
-            )
-        """
+                CREATE TABLE {table} (
+                    id INTEGER,
+                    a INTEGER,
+                    b TEXT
+                )
+                """
             )
         )
         await test_session.execute(
             text(
                 f"""
-            INSERT INTO {table} (id, a, b) VALUES
-              (1, 10, 'z'),
-              (2, 20, 'y'),
-              (3, 30, 'x')
-        """
+                INSERT INTO {table} (id, a, b) VALUES
+                  (1, 10, 'z'),
+                  (2, 20, 'y'),
+                  (3, 30, 'x')
+                """
             )
         )
         await test_session.commit()
 
-        filter_sql = "(a >= 20 AND b = 'y') OR (a >= 30 AND b = 'x')"
+        sql = f"""
+        SELECT *
+        FROM {dataset_id}
+        WHERE (a >= 20 AND b = 'y')
+           OR (a >= 30 AND b = 'x')
+        """
 
         resp = await client.get(
-            "/dataset/ds_complex/query",
-            params={"filter": filter_sql},
+            f"/dataset/{dataset_id}/query",
+            params={"sql": sql},
         )
         assert resp.status_code == 200
 

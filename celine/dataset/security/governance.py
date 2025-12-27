@@ -2,6 +2,8 @@ import logging
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from celine.dataset.security.disclosure import DisclosureLevel, DISCLOSURE_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
@@ -82,3 +84,33 @@ async def enforce_dataset_access(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied by policy",
             )
+
+
+async def resolve_datasets_for_tables(
+    *,
+    db: AsyncSession,
+    table_names: set[str],
+) -> dict[str, DatasetEntry]:
+    """
+    Resolve dataset IDs referenced in SQL to DatasetEntry objects.
+
+    table_names are logical dataset IDs (not physical table names).
+    """
+
+    if not table_names:
+        raise HTTPException(400, "No datasets referenced in query")
+
+    stmt = select(DatasetEntry).where(DatasetEntry.dataset_id.in_(table_names))
+    res = await db.execute(stmt)
+    entries = res.scalars().all()
+
+    by_id = {e.dataset_id: e for e in entries}
+
+    missing = table_names - by_id.keys()
+    if missing:
+        raise HTTPException(
+            400,
+            f"Query references unknown datasets: {sorted(missing)}",
+        )
+
+    return by_id

@@ -17,6 +17,6 @@ class DatasetQueryResult(BaseModel):
 
 
 class DatasetQueryModel(BaseModel):
-    filter: Optional[str] = None
+    sql: Optional[str] = None
     limit: int = 100
     offset: int = 0
