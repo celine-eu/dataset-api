@@ -23,7 +23,7 @@ class DummyOPAClient:
     def __init__(self, result: bool):
         self._result = result
 
-    async def evaluate(self, input_doc):
+    async def evaluate(self, dataset, user):
         return self._result
 
 

@@ -39,7 +39,7 @@ class Settings(BaseSettings):
         description="OIDC token audience",
     )
 
-    opa_enabled: bool = False
+    opa_enabled: bool = True
     opa_url: str = "http://localhost:8181"
     opa_policy_path: str = "celine/dataset/access"
 

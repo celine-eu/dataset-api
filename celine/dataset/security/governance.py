@@ -69,16 +69,7 @@ async def enforce_dataset_access(
                 detail="Policy engine unavailable",
             )
 
-        input_doc = {
-            "dataset": {
-                "id": entry.dataset_id,
-                "disclosure_level": level.value,
-                "governance": entry.governance or {},
-            },
-            "user": user,
-        }
-
-        allowed = await opa.evaluate(input_doc)
+        allowed = await opa.evaluate(dataset=entry, user=user)
         if not allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
