@@ -109,6 +109,7 @@ def _normalize_user(claims: dict[str, Any]) -> AuthenticatedUser:
         roles=sorted(set(realm_roles + client_roles)),
         groups=claims.get("groups", []),
         issuer=claims.get("iss"),
+        scopes=claims.get("scope", "").split(),
         audiences=aud,
         claims=claims,
     )

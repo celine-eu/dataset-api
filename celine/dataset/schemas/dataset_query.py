@@ -8,7 +8,6 @@ from typing import Any, List, Optional
 
 
 class DatasetQueryResult(BaseModel):
-    dataset_id: str
     items: List[dict[str, Any]]
     offset: int
     limit: int

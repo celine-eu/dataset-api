@@ -46,9 +46,9 @@ async def test_query_open_dataset_simple(client, test_session):
         )
         await test_session.commit()
 
-        resp = await client.get(
-            f"/dataset/{dataset_id}/query",
-            params={"sql": f"SELECT * FROM {dataset_id}"},
+        resp = await client.post(
+            f"/query",
+            json={"sql": f"SELECT * FROM {dataset_id}"},
         )
         print(resp.json())
         assert resp.status_code == 200
@@ -106,9 +106,9 @@ async def test_query_sql_filter(client, test_session):
         WHERE temperature > 22 AND city = 'Milan'
         """
 
-        resp = await client.get(
-            f"/dataset/{dataset_id}/query",
-            params={"sql": sql},
+        resp = await client.post(
+            f"/query",
+            json={"sql": sql},
         )
 
         assert resp.status_code == 200
@@ -146,9 +146,9 @@ async def test_query_pagination(client, test_session):
 
         sql = f"SELECT * FROM {dataset_id}"
 
-        resp = await client.get(
-            f"/dataset/{dataset_id}/query",
-            params={"sql": sql, "limit": 2, "offset": 2},
+        resp = await client.post(
+            f"/query",
+            json={"sql": sql, "limit": 2, "offset": 2},
         )
         assert resp.status_code == 200
 
@@ -163,9 +163,9 @@ async def test_query_pagination(client, test_session):
 
 @pytest.mark.asyncio
 async def test_query_nonexistent_dataset(client):
-    resp = await client.get(
+    resp = await client.post(
         "/dataset/missing/query",
-        params={"sql": "SELECT 1"},
+        json={"sql": "SELECT 1"},
     )
     assert resp.status_code in (400, 404)
 
@@ -185,9 +185,9 @@ async def test_query_unsupported_backend(client, test_session):
     test_session.add(ds)
     await test_session.commit()
 
-    resp = await client.get(
-        f"/dataset/{dataset_id}/query",
-        params={"sql": "SELECT 1"},
+    resp = await client.post(
+        f"/query",
+        json={"sql": "SELECT 1"},
     )
     assert resp.status_code == 400
 
@@ -234,9 +234,9 @@ async def test_query_sql_injection_blocked(client, test_session):
         WHERE value = 'safe'; DROP TABLE inj_table
         """
 
-        resp = await client.get(
-            f"/dataset/{dataset_id}/query",
-            params={"sql": sql},
+        resp = await client.post(
+            f"/query",
+            json={"sql": sql},
         )
 
         assert resp.status_code == 400
@@ -295,9 +295,9 @@ async def test_query_geospatial_filter(client, test_session):
         )
         """
 
-        resp = await client.get(
-            f"/dataset/{dataset_id}/query",
-            params={"sql": sql},
+        resp = await client.post(
+            f"/query",
+            json={"sql": sql},
         )
 
         assert resp.status_code == 200
@@ -354,9 +354,9 @@ async def test_query_temporal_filter(client, test_session):
         WHERE ts >= '2025-01-01T00:00:00Z'
         """
 
-        resp = await client.get(
-            f"/dataset/{dataset_id}/query",
-            params={"sql": sql},
+        resp = await client.post(
+            f"/query",
+            json={"sql": sql},
         )
         assert resp.status_code == 200
 
@@ -414,9 +414,9 @@ async def test_query_complex_filter(client, test_session):
            OR (a >= 30 AND b = 'x')
         """
 
-        resp = await client.get(
-            f"/dataset/{dataset_id}/query",
-            params={"sql": sql},
+        resp = await client.post(
+            f"/query",
+            json={"sql": sql},
         )
         assert resp.status_code == 200
 

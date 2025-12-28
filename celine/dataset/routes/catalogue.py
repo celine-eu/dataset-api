@@ -11,6 +11,8 @@ from celine.dataset.db.engine import get_session
 
 router = APIRouter()
 
+tags = ["catalogue"]
+
 
 @router.get("/catalogue")
 async def list_catalogue(db: AsyncSession = Depends(get_session)):

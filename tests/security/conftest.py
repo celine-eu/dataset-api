@@ -2,7 +2,7 @@ import pytest
 from types import SimpleNamespace
 from typing import Any, Dict, cast
 
-from celine.dataset.security.disclosure import DisclosureLevel
+from celine.dataset.security.disclosure import AccessLevel
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 
 
@@ -30,7 +30,7 @@ def anon_user():
 
 def make_entry(
     *,
-    disclosure: DisclosureLevel,
+    disclosure: AccessLevel,
     governance: dict | None = None,
 ):
     """

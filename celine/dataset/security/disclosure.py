@@ -3,18 +3,18 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class DisclosurePolicy:
+class AccessLevelPolicy:
     requires_auth: bool
     requires_policy: bool
 
 
-class DisclosureLevel(str, Enum):
+class AccessLevel(str, Enum):
     OPEN = "open"
     INTERNAL = "internal"
     RESTRICTED = "restricted"
 
     @classmethod
-    def from_value(cls, value: str | None) -> "DisclosureLevel":
+    def from_value(cls, value: str | None) -> "AccessLevel":
         if not value:
             return cls.OPEN
         try:
@@ -23,10 +23,10 @@ class DisclosureLevel(str, Enum):
             raise ValueError(f"Invalid disclosure level: {value}") from exc
 
 
-DISCLOSURE_MATRIX: dict[DisclosureLevel, DisclosurePolicy] = {
-    DisclosureLevel.OPEN: DisclosurePolicy(False, False),
-    DisclosureLevel.INTERNAL: DisclosurePolicy(True, True),
-    DisclosureLevel.RESTRICTED: DisclosurePolicy(True, True),
+ACCESS_LEVEL_MATRIX: dict[AccessLevel, AccessLevelPolicy] = {
+    AccessLevel.OPEN: AccessLevelPolicy(False, False),
+    AccessLevel.INTERNAL: AccessLevelPolicy(True, True),
+    AccessLevel.RESTRICTED: AccessLevelPolicy(True, True),
 }
 
 
@@ -37,5 +37,5 @@ def requires_auth(access_level: str | None) -> bool:
     Used by API-layer dependencies to decide whether anonymous access
     is acceptable.
     """
-    level = DisclosureLevel.from_value(access_level)
-    return DISCLOSURE_MATRIX[level].requires_auth
+    level = AccessLevel.from_value(access_level)
+    return ACCESS_LEVEL_MATRIX[level].requires_auth

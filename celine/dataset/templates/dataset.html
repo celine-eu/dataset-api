@@ -32,23 +32,55 @@
 </section>
 
 <section>
-    <h3>Links</h3>
-    <ul class="links">
-        <li>
-            <a href="/dataset/{{ dataset.dataset_id }}/metadata">
-                Metadata (JSONSchema)
-            </a>
-        </li>
-        <li>
-            <a href="/dataset/{{ dataset.dataset_id }}/query">
-                Query endpoint
-            </a>
-        </li>
-    </ul>
+    <h3>Dataset Schema</h3>
+
+    <p>
+        Dataset schema is available via API as
+        <a href="/catalogue/{{ dataset.dataset_id }}/schema">
+            JSON Schema
+        </a>
+    </p>
+
+    {% if metadata %}
+    <table class="schema-table">
+        <thead>
+            <tr>
+                <th>Column</th>
+                <th>Type</th>
+                <th>Nullable</th>
+                <th>Primary key</th>
+                <th>Default</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for col in metadata %}
+            <tr>
+                <td><code>{{ col.name }}</code></td>
+                <td>{{ col.type }}</td>
+                <td>{{ "yes" if col.nullable else "no" }}</td>
+                <td>{{ "yes" if col.primary_key else "no" }}</td>
+                <td>
+                    {% if col.default %}
+                    <code>{{ col.default }}</code>
+                    {% else %}
+                    <span class="muted">–</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
 </section>
 
 <section>
     <h3>API usage</h3>
+
+    <p>
+        Use this dataset in SQL queries by referencing its
+        <code>dataset_id</code> in the <code>FROM</code> clause.
+    </p>
 
     {% if needs_auth %}
     <p>
@@ -62,6 +94,11 @@
     <p>Example request with pagination:</p>
 
     <pre class="shell"><code>{{ example_curl }}</code></pre>
+
+    <p class="muted">
+        The query API automatically resolves referenced datasets and
+        enforces access control per dataset.
+    </p>
 
     <p class="hint">
         Use <code>limit</code> and <code>offset</code> to paginate through results.

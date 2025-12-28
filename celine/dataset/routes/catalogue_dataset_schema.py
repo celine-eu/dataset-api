@@ -14,6 +14,8 @@ from celine.dataset.db.reflection import reflect_table_async
 from celine.dataset.api.metadata.schema_builder import build_json_schema
 
 router = APIRouter()
+tags = ["catalogue"]
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +34,7 @@ async def _get_entry(dataset_id: str, db: AsyncSession) -> DatasetEntry:
     return entry
 
 
-@router.get("/dataset/{dataset_id}/metadata")
+@router.get("/catalogue/{dataset_id}/schema")
 async def dataset_metadata(
     dataset_id: str,
     db: AsyncSession = Depends(get_session),

@@ -84,8 +84,7 @@ async def execute_scalar_with_timeout(
 async def execute_query(
     *,
     db: AsyncSession,
-    dataset_id: str,
-    complete_sql: Optional[str],
+    raw_sql: Optional[str],
     limit: int,
     offset: int,
     user: Optional[AuthenticatedUser],
@@ -99,29 +98,14 @@ async def execute_query(
     - LIMIT/OFFSET enforced server-side
     - hard row cap applied
     """
-
-    # ------------------------------------------------------------------
-    # Resolve dataset & access control
-    # ------------------------------------------------------------------
-    entry: DatasetEntry = await load_dataset_entry(db=db, dataset_id=dataset_id)
-    await enforce_dataset_access(entry=entry, user=user)
-
-    if entry.backend_type != "postgres":
-        raise HTTPException(400, "Querying only supported for postgres backend")
-
-    table_name = entry.backend_config.get("table") if entry.backend_config else None
-    if not table_name:
-        raise HTTPException(500, "Dataset missing backend table definition")
-
-    # ------------------------------------------------------------------
-    # Reflect physical table
-    # ------------------------------------------------------------------
-    # table = await reflect_table_async(db, table_name)
-
     # ------------------------------------------------------------------
     # Validate SQL
     # ------------------------------------------------------------------
-    raw_sql = complete_sql or f"SELECT * FROM {entry.dataset_id}"
+
+    if raw_sql is None or raw_sql.strip() == "":
+        raise HTTPException(400, "sql query not provided")
+
+    logger.debug(f"Parsing raw SQL: {raw_sql}")
     try:
         parsed = parse_sql_query(raw_sql)
     except HTTPException as exc:
@@ -130,6 +114,9 @@ async def execute_query(
     except Exception as exc:
         logger.exception("SQL validation failed")
         raise HTTPException(400, str(exc)) from exc
+
+    if not parsed.tables:
+        raise HTTPException(400, "Query references no datasets")
 
     datasets = await resolve_datasets_for_tables(db=db, table_names=parsed.tables)
     tables_map: dict[str, str] = {}
@@ -149,10 +136,12 @@ async def execute_query(
             )
             continue
 
+        logger.debug(f"Mapped SQL table {ref_table} -> {phy_table_name}")
         tables_map[ref_table] = phy_table_name
 
     # Replace tables ID with physical tables
     complete_sql = parsed.to_sql(tables_map=tables_map)
+    logger.debug(f"Complete SQL: {complete_sql}")
 
     # ------------------------------------------------------------------
     # Pagination & caps
@@ -197,10 +186,11 @@ async def execute_query(
             paginated_sql,
             {"limit": limit, "offset": offset},
         )
-    except HTTPException:
+    except HTTPException as e:
+        logger.error(f"Query execution failed: {e}")
         raise
     except Exception as exc:  # safety net
-        logger.exception("Query execution failed")
+        logger.error("Query execution failed: {e}")
         raise HTTPException(500, "Query execution failed") from None
 
     # ------------------------------------------------------------------
@@ -220,8 +210,9 @@ async def execute_query(
                     row[col] = json.loads(geojson)
         items.append(row)
 
+    logger.debug(f"SQL items={len(items)} total={total} offset={offset} limit={limit}")
+
     return DatasetQueryResult(
-        dataset_id=entry.dataset_id,
         items=items,
         offset=offset,
         limit=limit,

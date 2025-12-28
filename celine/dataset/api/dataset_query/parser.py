@@ -216,7 +216,6 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
     - Only explicitly allowed physical tables
     - CTEs and subqueries allowed
     """
-    logger.debug(f"Starting SQL validation RAW={sql}")
 
     if not sql or not sql.strip():
         raise _bad_request("Empty SQL query")
@@ -309,7 +308,7 @@ def parse_sql_query(sql: str) -> ParsedSQL:
 # -----------------------------------------------------------------------------
 
 
-def _check_ast_depth(ast: exp.Expression, depth_limit=50):
+def _check_ast_depth(ast: exp.Expression, depth_limit=200):
     ast_depth = max(len(list(node.walk())) for node in ast.walk())
     if ast_depth > depth_limit:
         raise _bad_request(f"Query too complex, max depth limit is {depth_limit}")

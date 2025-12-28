@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from celine.dataset.security.disclosure import DisclosureLevel, DISCLOSURE_MATRIX
+from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.security.opa import OPAClient
@@ -40,12 +40,12 @@ async def enforce_dataset_access(
     """
 
     try:
-        level = DisclosureLevel.from_value(entry.access_level)
+        level = AccessLevel.from_value(entry.access_level)
     except ValueError as exc:
         logger.warning(f"Failed to parse access_level={entry.access_level}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    policy = DISCLOSURE_MATRIX[level]
+    policy = ACCESS_LEVEL_MATRIX[level]
 
     # Step 1 — authentication
     if policy.requires_auth and user is None:
@@ -99,6 +99,7 @@ async def resolve_datasets_for_tables(
 
     missing = table_names - by_id.keys()
     if missing:
+        logger.debug(f"Failed to lookup dataset ids: {missing}")
         raise HTTPException(
             400,
             f"Query references unknown datasets: {sorted(missing)}",

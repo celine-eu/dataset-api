@@ -20,6 +20,7 @@ class AuthenticatedUser(BaseModel):
 
     roles: List[str] = Field(default_factory=list)
     groups: List[str] = Field(default_factory=list)
+    scopes: List[str] = Field(default_factory=list)
 
     issuer: Optional[str] = None
     audiences: list[str] = Field(default_factory=list)

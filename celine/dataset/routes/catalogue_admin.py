@@ -15,6 +15,7 @@ from celine.dataset.schemas.catalogue_import import CatalogueImportModel
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+tags = ["catalogue"]
 
 
 class CatalogueImportResponse(BaseModel):

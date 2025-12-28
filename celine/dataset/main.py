@@ -40,7 +40,7 @@ def create_app(use_lifespan: bool = True) -> FastAPI:
         import debugpy
 
         debugpy.listen(("0.0.0.0", 5678))
-        print("Debugger listening on 0.0.0.0:5678")
+        logger.info("Debugger listening on 0.0.0.0:5678")
 
     app = FastAPI(
         title=settings.app_name,
