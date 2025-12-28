@@ -73,8 +73,8 @@ def map_openlineage_to_catalogue(
     """Convert Marquez/OpenLineage dataset into our YAML entry."""
     name = ds.get("name")
     physical = ds.get("physicalName")
-    description = ds.get("description") or physical
     tags = ds.get("tags") or []
+    description = ds.get("description") or physical
 
     lineage = extract_lineage_info(ds)
 
@@ -149,6 +149,14 @@ def map_openlineage_to_catalogue(
         kw = set(entry["tags"].get("keywords") or [])
         kw.add(f"classification:{classification}")
         entry["tags"]["keywords"] = sorted(kw)
+
+    title = gov_data.get("title")
+    if title:
+        entry["title"] = title
+
+    description = gov_data.get("description")
+    if description:
+        entry["description"] = description
 
     # optionally keep the raw gov_data under lineage.facets for debugging
     if gov_data:

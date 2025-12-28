@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.db.engine import get_session
+from celine.dataset.db.reflection import reflect_table_async
 from celine.dataset.schemas.catalogue_import import CatalogueImportModel
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,73 @@ tags = ["catalogue"]
 class CatalogueImportResponse(BaseModel):
     created: int
     updated: int
+
+
+async def postgres_table_exists_via_reflection(
+    db: AsyncSession,
+    table_name: str,
+) -> bool:
+    try:
+        await reflect_table_async(db, table_name)
+        return True
+    except HTTPException:
+        return False
+    except Exception:
+        return False
+
+
+async def _cleanup_entries(
+    db: AsyncSession,
+    *,
+    skip_tables: set[str] | None = None,
+) -> int:
+    """
+    Remove catalogue entries whose physical backend no longer exists.
+
+    Returns the number of removed entries.
+    """
+    removed = 0
+    skip_tables = skip_tables or set()
+
+    stmt = select(DatasetEntry)
+    res = await db.execute(stmt)
+    entries = res.scalars().all()
+
+    for entry in entries:
+        # Only physical backends are checked for now
+        if entry.backend_type != "postgres":
+            continue
+
+        backend_config = entry.backend_config or {}
+        table = backend_config.get("table")
+        if not table:
+            logger.info(
+                "Removing dataset %s: missing backend table reference",
+                entry.dataset_id,
+            )
+            await db.delete(entry)
+            removed += 1
+            continue
+
+        if table in skip_tables:
+            logger.debug(
+                "Skipping cleanup for dataset %s (table %s validated this run)",
+                entry.dataset_id,
+                table,
+            )
+            continue
+
+        exists = await postgres_table_exists_via_reflection(db, table)
+        if not exists:
+            logger.info(
+                "Removing dataset %s: postgres table %s no longer exists",
+                entry.dataset_id,
+                table,
+            )
+            await db.delete(entry)
+            removed += 1
+
+    return removed
 
 
 @router.post(
@@ -38,8 +106,22 @@ async def import_catalogue(
     """
     created = 0
     updated = 0
+    validated_tables: set[str] = set()
 
     for ds in body.datasets:
+
+        if ds.backend_type == "postgres":
+            table = ds.backend_config.table if ds.backend_config else None
+            if table and not await postgres_table_exists_via_reflection(db, table):
+                logger.info(
+                    "Skipping dataset %s: postgres table %s does not exist",
+                    ds.dataset_id,
+                    table,
+                )
+                continue
+            if table:
+                validated_tables.add(table)
+
         # Check if dataset already exists
         stmt = select(DatasetEntry).where(DatasetEntry.dataset_id == ds.dataset_id)
         res = await db.execute(stmt)
@@ -90,6 +172,10 @@ async def import_catalogue(
             db.add(entry)
             created += 1
 
+    removed = await _cleanup_entries(db, skip_tables=validated_tables)
+    if removed:
+        logger.info("Catalogue cleanup removed %d stale entries", removed)
+
     try:
         await db.commit()
     except Exception as exc:  # pragma: no cover - defensive
@@ -100,5 +186,11 @@ async def import_catalogue(
             detail="Failed to import catalogue.",
         )
 
-    logger.info("Catalogue import completed. created=%d updated=%d", created, updated)
+    logger.info(
+        "Catalogue import completed. created=%d updated=%d removed=%d",
+        created,
+        updated,
+        removed,
+    )
+
     return CatalogueImportResponse(created=created, updated=updated)

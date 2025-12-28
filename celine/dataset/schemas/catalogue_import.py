@@ -38,6 +38,8 @@ class Tags(BaseModel):
 
 
 class Lineage(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
     namespace: Optional[str] = None
     name: Optional[str] = None
     sourceName: Optional[str] = None

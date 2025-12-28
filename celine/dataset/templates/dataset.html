@@ -4,11 +4,7 @@
 
 {% block content %}
 <section class="dataset-header">
-    <h2>{{ dataset.dataset_id }}</h2>
-
-    {% if dataset.title %}
-    <p class="title">{{ dataset.title }}</p>
-    {% endif %}
+    <h2>{{ dataset.title }}</h2>
 
     {% if dataset.description %}
     <p class="description">{{ dataset.description }}</p>
@@ -28,6 +24,35 @@
         <dt>Access level</dt>
         <dd>{{ dataset.access_level }}</dd>
         {% endif %}
+
+
+
+        {% if dataset.publisher_uri %}
+        <dt>Publisher URI</dt>
+        <dd>{{ dataset.publisher_uri }}</dd>
+        {% endif %}
+
+        {% if dataset.rights_holder_uri %}
+        <dt>Rights Older URI</dt>
+        <dd>{{ dataset.rights_holder_uri }}</dd>
+        {% endif %}
+
+        {% if dataset.license_uri %}
+        <dt>License</dt>
+        <dd>{{ dataset.license_uri }}</dd>
+        {% endif %}
+
+        {% if dataset.landing_page %}
+        <dt>Landing page</dt>
+        <dd>{{ dataset.landing_page }}</dd>
+        {% endif %}
+
+        {% if dataset.spatial_uris %}
+        <dt>Spatial URI</dt>
+        <dd>{{ dataset.spatial_uris }}</dd>
+        {% endif %}
+
+
     </dl>
 </section>
 
@@ -85,7 +110,7 @@
     {% if needs_auth %}
     <p>
         <strong>Authentication required.</strong>
-        Include a bearer token in the <code>Authorization</code> header.
+        Requires a bearer token in the <code>Authorization</code> header.
     </p>
     {% else %}
     <p>This dataset is publicly accessible.</p>

@@ -119,7 +119,12 @@ async def catalogue_view(
     for ds in datasets:
         # dataset = everything except last segment
         parts = ds.dataset_id.split(".")
-        dataset_name = ".".join(parts[:-1]) if len(parts) > 1 else ds.dataset_id
+
+        ns: str | None = None
+        if ds.lineage:
+            ns = str(ds.lineage["namespace"])
+
+        dataset_name = ns or ".".join(parts[:-1]) if len(parts) > 1 else ds.dataset_id
         ds.title = ds.title or ds.dataset_id
         grouped[dataset_name].append(ds)
 
@@ -140,8 +145,8 @@ async def dataset_view(
 ):
     dataset = await load_dataset_entry(db=db, dataset_id=dataset_id)
 
-    if dataset.title == dataset.dataset_id:
-        dataset.title = ""
+    dataset.title = dataset.title or dataset.dataset_id
+
     if dataset.description == dataset.dataset_id:
         dataset.description = ""
 
