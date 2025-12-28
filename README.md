@@ -1,88 +1,106 @@
 # Dataset API
 
 ## Overview
-The Dataset API provides a unified, lineage-aware, metadata-rich interface to datasets stored across heterogeneous backends (PostgreSQL, S3, filesystem). It exposes a DCAT-AP 3.0.0–compatible catalogue, OpenLineage-enriched metadata, and a controlled dataset exposure policy.
+The Dataset API provides a **secure, lineage-aware, metadata-rich interface** to heterogeneous datasets (PostgreSQL, object storage, filesystem).  
+It exposes a **DCAT-AP 3.0.0–compatible catalogue**, a **governed SQL query interface**, and **OpenLineage-integrated provenance**, designed to support Digital Twins and analytical applications.
 
-## Features
-- DCAT-AP 3.0.0 catalogue (`/catalogue`)
-- Detailed dataset metadata (`/dataset/<id>/metadata`)
-- Dataset schema (`/dataset/<id>/schema`)
-- Query API using SQL-like syntax (`/dataset/<id>/query`)
-- Strong governance through controlled dataset exposure (`expose: true/false`)
-- OpenLineage integration and provenance tracking
-- YAML-based catalogue import/export
-- CLI tools for validation, extraction, import, and migration
-- Backend-agnostic support for PostgreSQL, S3, and filesystem data
+This README gives a **high-level orientation**.  
+Detailed concepts and workflows are documented in `docs/*.md` (see links below).
 
-## Architecture Summary
-- **Catalogue layer** stored in PostgreSQL schema (`settings.catalogue_schema`)
-- **DatasetEntry** model capturing backend config, tags, lineage, licensing, and metadata
-- **DCAT builders** generate catalogue and dataset JSON-LD outputs
-- **OpenLineage extractor** fetches metadata via Marquez and exports YAML
-- **Importer CLI** loads YAML → validates via Pydantic → imports into catalogue DB
-- **Exposure semantics** ensure only selected datasets are queryable
-- **Alembic migrations** support async engines and schema scoping
+---
 
-## CLI Commands
-### Export OpenLineage to YAML
+## Core Capabilities
+
+- **Dataset catalogue (DCAT-AP 3.0.0)**  
+  Public catalogue endpoint exposing datasets and distributions.
+
+- **Governed query API**  
+  SQL `SELECT` queries over exposed datasets with:
+  - strict SQL validation
+  - server-side pagination & limits
+  - dataset-level access control (auth + OPA)
+
+- **Strong governance & disclosure model**
+  - `open`, `internal`, `restricted` access levels
+  - JWT-based authentication
+  - OPA policy evaluation
+
+- **Lineage & provenance**
+  - OpenLineage ingestion (Marquez)
+  - Namespace-based dataset grouping
+  - Provenance surfaced in catalogue & metadata
+
+- **Schema & metadata introspection**
+  - JSON Schema (2020-12) generated from physical tables
+  - Column-level metadata for UI and clients
+
+- **CLI-driven lifecycle**
+  - Export lineage → YAML
+  - Validate catalogue definitions
+  - Import & reconcile catalogue state
+  - Automatic cleanup of stale datasets
+
+---
+
+## API Surface (High-Level)
+
+| Area | Description |
+|-----|-------------|
+| `/catalogue` | DCAT-AP catalogue (exposed datasets only) |
+| `/catalogue/{dataset_id}/schema` | JSON Schema of dataset |
+| `/query` | Governed SQL query endpoint |
+| `/admin/catalogue` | Catalogue import (CLI-only) |
+| `/health` | Health check |
+
+Detailed endpoint semantics are described in the docs.
+
+---
+
+## CLI Overview
+
+The CLI is the **primary control plane** for the Dataset API.
+
+```bash
+dataset-cli --help
 ```
-dataset export openlineage --ns prod -o data/ --expose
-```
 
-### Import catalogue from YAML
-```
-dataset import catalogue -i data/*.yaml --api-url http://localhost:8000
-```
+Main commands:
+- `export openlineage` – extract lineage from Marquez
+- `import catalogue` – validate & import dataset catalogue
+- `validate catalogue` – schema validation only
+- `ontology` – ontology fetch, analysis, tree generation
 
-### Validate catalogue file(s)
-```
-dataset validate catalogue -i data/*.yaml --strict
-```
+---
 
-### Alembic migrations
-```
-uv run alembic upgrade head
-uv run alembic revision --autogenerate -m "update"
-```
+## Documentation
 
-## Backends
-- **postgres** – SQL tables
-- **s3** – raw objects with optional public URL
-- **fs** – direct file-based datasets
+Additional documentation available
 
-## Lineage Support
-The system stores structured lineage metadata from OpenLineage, including:
-- namespace
-- sourceName
-- timestamps
-- lifecycle state
-- facets
-- tags
+- [Architecture overview](docs/architecture.md)
+- [Catalogue Management](docs/catalogue-management.md)
+- [CLI operations](docs/cli-operations.md)
+- [Governance and security](docs/governance-security.md)
+- [Query engine](docs/query-engine.md)
 
-Pydantic models allow flexible ingestion (`extra="allow"`).
+---
 
-## DCAT-AP Compliance
-Each dataset includes:
-- identifiers, titles, descriptions
-- keywords, themes
-- publisher, rights holder, license
-- language & spatial coverage
-- distributions (API access and raw file access)
-- provenance (`prov:wasDerivedFrom`) using lineage information
+## Development & Contribution
 
-## Development
-### Dump all Python source files into a single file:
-A provided tool gathers all `dataset/**/*.py` into one bundle while ignoring `__pycache__`.
-
-### Supported Python tooling:
-- `uv` package runner
-- Typer CLI
+- Python ≥ 3.11
+- Async SQLAlchemy
 - Pydantic v2
-- SQLAlchemy (async)
-- Alembic (async migrations)
-- httpx (async HTTP calls)
+- FastAPI + httpx
+- sqlglot-based SQL validation
 
-## License
+Before opening a PR:
+- validate all YAML definitions
+- add tests for new API behavior
+- include migrations for schema changes
+- keep docs in sync with API behavior
+
+---
+
+## License 
 
 Copyright >=2025 Spindox Labs
 
@@ -97,17 +115,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
-
-## Contributing
-Ensure:
-- All YAML definitions validate via the CLI
-- No API endpoint accepts unvalidated data
-- Alembic migrations are generated for schema changes
-
-PRs should include tests for:
-- catalogue import
-- DCAT output
-- lineage extraction
-- backend resolution
-
