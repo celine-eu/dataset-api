@@ -1,6 +1,7 @@
 # dataset/cli/import_catalogue.py
 from __future__ import annotations
 
+import fnmatch
 import glob
 import logging
 from pathlib import Path
@@ -23,6 +24,49 @@ from celine.dataset.schemas.catalogue_import import (
 logger = logging.getLogger(__name__)
 
 import_app = typer.Typer(name="import", help="Import catalogue into Dataset API")
+
+
+def resolve_dataset_id_filters(
+    dataset_ids: List[str],
+    filters: List[str] | None,
+) -> List[str]:
+    """
+    Resolve dataset_id filters with +pattern / -pattern semantics.
+
+    Patterns are glob-based.
+    """
+    if not filters:
+        return dataset_ids
+
+    include_patterns: list[str] = []
+    exclude_patterns: list[str] = []
+
+    for f in filters:
+        if f.startswith("-"):
+            exclude_patterns.append(f[1:])
+        elif f.startswith("+"):
+            include_patterns.append(f[1:])
+        else:
+            include_patterns.append(f)
+
+    def matches_any(dataset_id: str, patterns: list[str]) -> bool:
+        return any(fnmatch.fnmatchcase(dataset_id, p) for p in patterns)
+
+    # Step 1: apply includes
+    if include_patterns:
+        selected = [
+            ds_id for ds_id in dataset_ids if matches_any(ds_id, include_patterns)
+        ]
+    else:
+        selected = list(dataset_ids)
+
+    # Step 2: apply excludes
+    if exclude_patterns:
+        selected = [
+            ds_id for ds_id in selected if not matches_any(ds_id, exclude_patterns)
+        ]
+
+    return selected
 
 
 def validate_catalogue_payload(
@@ -76,10 +120,24 @@ def import_catalogue(
         "--ns",
         help="Namespace filter (supports '*', +ns, -ns). Default: import ALL.",
     ),
+    datasets_filter: List[str] = typer.Option(
+        None,
+        "--datasets",
+        help=(
+            "Dataset filter by dataset_id using glob patterns. "
+            "Supports +pattern / -pattern (e.g. singer.*, -singer.tmp.*). "
+            "Can be passed multiple times."
+        ),
+    ),
     api_url: str = typer.Option(..., "--api-url", help="Dataset API base URL"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
     strict: bool = typer.Option(
         False, "--strict", help="Fail on first validation error."
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print selected dataset IDs and exit without importing.",
     ),
 ):
     setup_cli_logging(verbose)
@@ -136,6 +194,7 @@ def import_catalogue(
 
     typer.echo(f"Selected namespaces: {selected_namespaces}")
 
+    # 1. Namespace filtering
     filtered = {
         ds_id: entry
         for ds_id, entry in collected.items()
@@ -146,7 +205,28 @@ def import_catalogue(
         typer.echo("No datasets match the selected namespace filters.", err=True)
         raise typer.Exit(code=1)
 
+    # 2. Dataset ID filtering (glob)
+    resolved_ids = resolve_dataset_id_filters(
+        list(filtered.keys()),
+        datasets_filter,
+    )
+
+    filtered = {ds_id: filtered[ds_id] for ds_id in resolved_ids}
+
+    if not filtered:
+        typer.echo("No datasets match the dataset_id filters.", err=True)
+        raise typer.Exit(code=1)
+
+    if datasets_filter:
+        typer.echo(f"Dataset ID filters: {datasets_filter}")
+
     typer.echo(f"{len(filtered)} datasets remaining after filtering.")
+
+    if dry_run:
+        typer.echo("Dry run: selected dataset IDs")
+        for ds_id in sorted(filtered.keys()):
+            typer.echo(ds_id)
+        raise typer.Exit(code=0)
 
     validated = validate_catalogue_payload(filtered, strict)
     payload = CatalogueImportModel(datasets=validated).model_dump()
