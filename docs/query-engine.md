@@ -48,12 +48,6 @@ A typical paginated response:
   "count": 2
 }
 ```
-
-Depending on implementation you may also include:
-- `total` (if computed)
-- `next_offset` (convenience)
-- `schema` (optional)
-
 ---
 
 ## SQL Validation Rules
