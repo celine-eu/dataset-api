@@ -15,7 +15,7 @@ ontology_app = typer.Typer(
 @ontology_app.command("fetch")
 def cmd_fetch_ontologies(
     ontologies_file: Path = typer.Option(
-        Path(__file__).resolve().parent.parent.parent.parent
+        Path(__file__).resolve().parent.parent.parent.parent.parent
         / "ontologies"
         / "open-repository.yaml",
         "--input",

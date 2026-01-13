@@ -1,0 +1,581 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://celine-eu.github.io/ontologies/celine/schema/1.0.0",
+  "title": "CELINE JSON-LD API Schema (Lean)",
+  "type": "object",
+  "description": "JSON Schema for JSON-LD payloads conforming to the CELINE ontology profile. Uses @id/@type and terms defined in the CELINE JSON-LD context.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/EnergyCommunity"
+    },
+    {
+      "$ref": "#/$defs/Participant"
+    },
+    {
+      "$ref": "#/$defs/Membership"
+    },
+    {
+      "$ref": "#/$defs/Site"
+    },
+    {
+      "$ref": "#/$defs/Asset"
+    },
+    {
+      "$ref": "#/$defs/Meter"
+    },
+    {
+      "$ref": "#/$defs/Tariff"
+    },
+    {
+      "$ref": "#/$defs/TimeSeries"
+    },
+    {
+      "$ref": "#/$defs/Datapoint"
+    },
+    {
+      "$ref": "#/$defs/Forecast"
+    },
+    {
+      "$ref": "#/$defs/KPIAssessment"
+    },
+    {
+      "$ref": "#/$defs/Snapshot"
+    },
+    {
+      "$ref": "#/$defs/Scenario"
+    },
+    {
+      "$ref": "#/$defs/ModelRun"
+    },
+    {
+      "$ref": "#/$defs/WeatherObservation"
+    }
+  ],
+  "$defs": {
+    "Iri": {
+      "type": "string",
+      "format": "uri"
+    },
+    "JsonLdBase": {
+      "type": "object",
+      "properties": {
+        "@context": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "object"
+            }
+          ]
+        },
+        "@id": {
+          "$ref": "#/$defs/Iri"
+        },
+        "@type": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Iri"
+        },
+        "type": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "EnergyCommunity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "EnergyCommunity"
+            },
+            "type": {
+              "const": "EnergyCommunity"
+            },
+            "hasMember": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            },
+            "hasMembership": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Participant": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Participant"
+            },
+            "type": {
+              "const": "Participant"
+            },
+            "isMemberOf": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            },
+            "ownsAsset": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Membership": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Membership"
+            },
+            "type": {
+              "const": "Membership"
+            },
+            "membershipParticipant": {
+              "$ref": "#/$defs/Iri"
+            },
+            "membershipCommunity": {
+              "$ref": "#/$defs/Iri"
+            },
+            "membershipRole": {
+              "type": "string"
+            },
+            "votingWeight": {
+              "type": "number"
+            },
+            "validFrom": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "validTo": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "@id",
+            "membershipParticipant",
+            "membershipCommunity"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Site": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Site"
+            },
+            "type": {
+              "const": "Site"
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Asset": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Asset"
+            },
+            "type": {
+              "const": "Asset"
+            },
+            "isOwnedBy": {
+              "$ref": "#/$defs/Iri"
+            },
+            "locatedAt": {
+              "$ref": "#/$defs/Iri"
+            },
+            "hasMeter": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            },
+            "hasTimeSeries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            },
+            "hasTariff": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Meter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Meter"
+            },
+            "type": {
+              "const": "Meter"
+            },
+            "locatedAt": {
+              "$ref": "#/$defs/Iri"
+            },
+            "hasTimeSeries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            },
+            "hasTariff": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Tariff": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Tariff"
+            },
+            "type": {
+              "const": "Tariff"
+            },
+            "validFrom": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "validTo": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "TimeSeries": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "TimeSeries"
+            },
+            "type": {
+              "const": "TimeSeries"
+            },
+            "observedEntity": {
+              "$ref": "#/$defs/Iri"
+            },
+            "metric": {
+              "type": "string"
+            },
+            "unit": {
+              "type": "string"
+            },
+            "hasDatapoint": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Iri"
+              }
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Datapoint": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Datapoint"
+            },
+            "type": {
+              "const": "Datapoint"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "@id",
+            "timestamp",
+            "value"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Forecast": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/TimeSeries"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Forecast"
+            },
+            "type": {
+              "const": "Forecast"
+            },
+            "producedBy": {
+              "$ref": "#/$defs/Iri"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "KPIAssessment": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "KPIAssessment"
+            },
+            "type": {
+              "const": "KPIAssessment"
+            },
+            "producedBy": {
+              "$ref": "#/$defs/Iri"
+            },
+            "validFrom": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "validTo": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Snapshot": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Snapshot"
+            },
+            "type": {
+              "const": "Snapshot"
+            },
+            "validFrom": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "validTo": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Scenario": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "Scenario"
+            },
+            "type": {
+              "const": "Scenario"
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "ModelRun": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "ModelRun"
+            },
+            "type": {
+              "const": "ModelRun"
+            },
+            "usesSnapshot": {
+              "$ref": "#/$defs/Iri"
+            },
+            "usesScenario": {
+              "$ref": "#/$defs/Iri"
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "WeatherObservation": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/JsonLdBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "@type": {
+              "const": "WeatherObservation"
+            },
+            "type": {
+              "const": "WeatherObservation"
+            }
+          },
+          "required": [
+            "@id"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    }
+  }
+}

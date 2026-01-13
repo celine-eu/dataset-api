@@ -187,13 +187,13 @@ ontologies:
   #   keywords: [demand-response, signals, events]
   #   license: "Apache-2.0"
 
-  # - name: PECO
-  #   description: PARMENIDES community energy ontology for actors, assets, contracts and roles.
-  #   link: https://parmenides.ait.ac.at/docs/peco-core/index.html
-  #   definitions:
-  #     - https://purl.org/peco/peco-core
-  #   keywords: [energy-communities, stakeholders, assets]
-  #   license: "CC-BY-4.0"
+  - name: PECO
+    description: PARMENIDES community energy ontology for actors, assets, contracts and roles.
+    link: https://parmenides.ait.ac.at/docs/peco-core/index.html
+    definitions:
+      - https://purl.org/peco/peco-core
+    keywords: [energy-communities, stakeholders, assets]
+    license: "CC-BY-4.0"
 
   # - name: PQONT
   #   description: Power quality ontology for voltage events and disturbances.
