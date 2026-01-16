@@ -93,11 +93,11 @@ def safe_name(name: str) -> str:
     )
 
 
-def download_file(url: str) -> bytes:
+def download_file(url: str) -> tuple[bytes, httpx.URL]:
     with httpx.Client(timeout=20.0, follow_redirects=True) as client:
         resp = client.get(url)
         resp.raise_for_status()
-        return resp.content
+        return (resp.content, resp.url)
 
 
 def load_ontologies(path: Path) -> List[Dict[str, Any]]:
@@ -154,12 +154,12 @@ def fetch_ontologies(
         for url in defs:
             try:
                 logger.debug("Downloading %s", url)
-                content = download_file(url)
+                content, resolved_url = download_file(url)
             except Exception as exc:
                 logger.error("Failed to download %s: %s", url, exc)
                 continue
 
-            fname = url.split("/")[-1] or "definition"
+            fname = resolved_url.path.split("/")[-1] or "definition"
             outfile = subdir / fname
 
             try:
