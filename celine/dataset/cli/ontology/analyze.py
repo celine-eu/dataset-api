@@ -11,6 +11,7 @@ import typer
 from rdflib import Graph, URIRef
 from rdflib.namespace import RDF, RDFS, OWL, DC, DCTERMS, split_uri
 from xml.etree import ElementTree as ET
+import re
 
 from celine.dataset.cli.utils import setup_cli_logging, write_yaml_file
 
@@ -488,9 +489,11 @@ def _looks_like_xsd(path: Path) -> bool:
         try:
             with path.open("r", encoding="utf-8", errors="ignore") as f:
                 first_kb = f.read(1024)
-            return (
-                "schema" in first_kb and "http://www.w3.org/2001/XMLSchema" in first_kb
+            xsd_schema_pattern = re.compile(
+                r'.*<\s*[^>]*schema\b[^>]*"http:\/\/www\.w3\.org\/2001\/XMLSchema"\s*>.*',
+                re.IGNORECASE
             )
+            return bool(xsd_schema_pattern.search(first_kb))
         except Exception:
             return False
 
