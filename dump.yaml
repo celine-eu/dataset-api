@@ -1,12 +1,9 @@
 contents:
   - celine
   - tests
-  - ontologies
   - migrations
   - docs
   - README.md
   - alembic.ini
   - Dockerfile
   - pyproject.toml
-
-output: data/sources.txt
