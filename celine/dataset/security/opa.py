@@ -1,7 +1,6 @@
 import logging
 from typing import Any, Dict, Optional, List
 from dataclasses import asdict, dataclass
-from unittest import result
 import httpx
 
 from celine.dataset.api.catalogue.models import DatasetEntry

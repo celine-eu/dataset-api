@@ -62,7 +62,3 @@ tasks:
       - uv run semantic-release -v version --no-vcs-release
       - git push
       - git push --tags
-
-  dump-source:
-    cmds:
-      - uv run python scripts/dump_source.py
