@@ -12,7 +12,7 @@ COPY pyproject.toml poetry.lock* uv.lock* /app/
 RUN uv pip install --system --no-cache .
 
 # Copy application source
-COPY celine /app/celine
+COPY celine /app/src/celine
 COPY tests /app/tests
 
 # ------------------------------------------------------------
@@ -39,7 +39,7 @@ COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application source
-COPY celine /app/celine
+COPY src/celine /app/celine
 
 # Create non-root user
 RUN useradd -u 10001 -m appuser
