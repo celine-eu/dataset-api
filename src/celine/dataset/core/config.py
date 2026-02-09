@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Optional
 
 from pydantic import AnyUrl, HttpUrl, Field
@@ -22,26 +23,9 @@ class Settings(BaseSettings):
     marquez_url: Optional[AnyUrl] = None
     marquez_namespace: Optional[str] = None
 
-    oidc_issuer: str = Field(
-        default="http://keycloak.celine.localhost/realms/celine",
-        description="OIDC url",
+    api_url: str = Field(
+        default="http://api.celine.localhost", description="CELINE API endpoint"
     )
-    oidc_client_id: str = Field(
-        default="celine-cli",
-        description="OIDC client_id",
-    )
-    oidc_client_secret: str = Field(
-        default="celine-cli",
-        description="OIDC  client_secret",
-    )
-    oidc_audience: Optional[str] = Field(
-        default="",
-        description="OIDC token audience",
-    )
-
-    opa_enabled: bool = True
-    opa_url: str = "http://localhost:8181"
-    opa_policy_path: str = "celine/dataset/access"
 
     log_level: str = "INFO"
 
@@ -49,6 +33,63 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+    )
+
+    # =============================================================================
+    # OIDC/JWT Settings - UPDATED for celine.sdk.auth
+    # =============================================================================
+
+    # OIDC issuer (base URL of your auth server)
+    oidc_issuer: str = Field(
+        default="http://keycloak.celine.localhost/realms/celine",
+        description="OIDC issuer URL (e.g., https://auth.example.com/realms/celine)",
+    )
+
+    # JWKS URI for JWT signature verification
+    # NEW: celine.sdk.auth.JwtUser uses this directly
+    oidc_jwks_uri: str = Field(
+        default="http://keycloak.celine.localhost/realms/celine/protocol/openid-connect/certs",
+        description="JWKS URI for JWT verification (e.g., https://auth.example.com/realms/celine/protocol/openid-connect/certs)",
+    )
+
+    # Expected audience (optional - can validate multiple)
+    oidc_audience: str | None = Field(
+        default=None, description="Expected JWT audience (optional)"
+    )
+
+    # Client ID (for client-specific roles and audience validation)
+    oidc_client_id: str | None = Field(default=None, description="OIDC client ID")
+
+    # =============================================================================
+    # Policy Settings - UPDATED for in-process evaluation
+    # =============================================================================
+
+    policies_check_enabled: bool = Field(
+        default=True, description="Enable policy-based authorization"
+    )
+
+    # Policy engine settings (replaces api_url + "/policies")
+    policies_dir: Path = Field(
+        default=Path("./policies"),
+        description="Directory containing .rego policy files",
+    )
+    policies_data_dir: Path | None = Field(
+        default=None, description="Optional directory containing policy data JSON files"
+    )
+
+    # Policy package to evaluate
+    policies_package: str = Field(
+        default="celine.dataset",
+        description="Policy package to evaluate for dataset authorization",
+    )
+
+    # Cache settings
+    policies_cache_enabled: bool = Field(
+        default=True, description="Enable in-memory decision caching"
+    )
+    policies_cache_ttl: int = Field(default=300, description="Cache TTL in seconds")
+    policies_cache_maxsize: int = Field(
+        default=10000, description="Maximum cache entries"
     )
 
 

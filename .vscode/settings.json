@@ -1,5 +1,6 @@
 {
     "python.analysis.extraPaths": [
-        "dataset"
+        "src",
+        "../celine-sdk/src"
     ]
 }

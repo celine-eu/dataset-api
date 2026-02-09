@@ -8,10 +8,10 @@ from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 
 @pytest.fixture(autouse=True)
 def enable_opa_for_governance_tests():
-    old = settings.opa_enabled
-    settings.opa_enabled = True
+    old = settings.policies_check_enabled
+    settings.policies_check_enabled = True
     yield
-    settings.opa_enabled = old
+    settings.policies_check_enabled = old
 
 
 # ----------------------------------------------------------------------
