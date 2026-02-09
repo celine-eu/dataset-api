@@ -36,12 +36,6 @@ async def lifespan(app: FastAPI):
 
 def create_app(use_lifespan: bool = True) -> FastAPI:
 
-    if os.getenv("DEBUG_ATTACH") == "1":
-        import debugpy
-
-        debugpy.listen(("0.0.0.0", 5678))
-        logger.info("Debugger listening on 0.0.0.0:5678")
-
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",

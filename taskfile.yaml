@@ -8,7 +8,7 @@ tasks:
   debug:
     desc: "Run development server with debugger"
     cmds:
-      - DEBUG_ATTACH=1 uv run uvicorn celine.dataset.main:create_app --reload --host 0.0.0.0 --port 8001
+      - DEBUG_ATTACH=nowait DEBUG_PORT=48001 uv run uvicorn celine.dataset.main:create_app --reload --host 0.0.0.0 --port 8001
   test:
     desc: "Run tests"
     cmds:
