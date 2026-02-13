@@ -13,7 +13,6 @@ from celine.dataset.cli.utils import resolve_namespaces, setup_cli_logging
 from celine.dataset.core.config import settings
 
 logger = logging.getLogger(__name__)
-export_app = typer.Typer(name="export", help="Export OpenLineage datasets into YAML")
 
 
 def fetch_namespaces(marquez_url: str) -> list[str]:
@@ -167,8 +166,7 @@ def map_openlineage_to_catalogue(
     return entry
 
 
-@export_app.command("openlineage")
-def export_openlineage(
+def export_openlineage_cmd(
     ns: List[str] = typer.Option(
         ..., "--ns", help="Namespaces to include/exclude. Supports '*', +ns, -ns."
     ),

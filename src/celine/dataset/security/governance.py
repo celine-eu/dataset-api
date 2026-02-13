@@ -62,7 +62,7 @@ def _get_policy_engine() -> Optional[CachedPolicyEngine]:
             # Wrap with cache
             _policy_engine = CachedPolicyEngine(
                 engine=engine,
-                cache_enabled=settings.policies_cache_enabled,
+                enabled=settings.policies_cache_enabled,
             )
 
             logger.info(
@@ -104,10 +104,7 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
     if not isinstance(groups, list):
         groups = []
 
-    # Determine subject type
-    # If client_id exists and matches sub, it's a service account
-    client_id = user.claims.get("client_id")
-    if client_id and client_id == user.sub:
+    if _is_service_account(user.claims):
         subject_type = SubjectType.SERVICE
     else:
         subject_type = SubjectType.USER
@@ -119,6 +116,10 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
         scopes=scopes,
         claims=user.claims,
     )
+
+
+def _is_service_account(claims: dict) -> bool:
+    return claims.get("typ") == "Bearer"  # its ID for Users
 
 
 async def enforce_dataset_access(
@@ -159,6 +160,7 @@ async def enforce_dataset_access(
 
     # Step 2 — Policy evaluation
     if policy.requires_policy:
+
         # Get policy engine
         engine = _get_policy_engine()
 
@@ -190,9 +192,12 @@ async def enforce_dataset_access(
             if namespace:
                 resource_attributes["namespace"] = namespace
 
-        # Add governance metadata if available
-        if entry.governance:
-            resource_attributes["governance"] = entry.governance
+        if entry.lineage:
+            governance = entry.lineage.get("facets", {}).get("governance")
+            if governance:
+                resource_attributes["governance"] = {
+                    k: v for k, v in governance.items() if not k.startswith("_")
+                }
 
         # Build subject
         subject = _build_subject_from_user(user)
@@ -330,37 +335,6 @@ async def resolve_datasets_for_tables(
         )
 
     return by_id
-
-
-# =============================================================================
-# Optional: Engine management utilities
-# =============================================================================
-
-
-def reload_policies() -> dict:
-    """
-    Reload policies from disk.
-
-    Useful for development or dynamic policy updates.
-
-    Returns:
-        Dictionary with reload status and stats
-    """
-    global _policy_engine
-
-    if _policy_engine is None:
-        return {"status": "not_initialized"}
-
-    try:
-        _policy_engine.reload()
-        return {
-            "status": "reloaded",
-            "policy_count": _policy_engine.policy_count,
-            "packages": _policy_engine.get_packages(),
-        }
-    except Exception as e:
-        logger.error(f"Failed to reload policies: {e}")
-        return {"status": "error", "error": str(e)}
 
 
 def get_policy_stats() -> dict:

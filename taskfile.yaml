@@ -14,31 +14,22 @@ tasks:
     cmds:
       - uv run pytest -- {{.CLI_ARGS}}
 
-  cli:export-lineage:
+  cli:export:openlineage:
     desc: Export lineage from marquez
     cmds:
       - mkdir -p ./data/openlineage
-      - uv run python -m celine.dataset.cli.main export openlineage --ns '*' -o ./data/openlineage --expose
+      - uv run dataset-cli export openlineage --ns '*' -o ./data/openlineage --expose
+  cli:export:postgres:
+    desc: Export lineage from marquez
+    cmds:
+      - mkdir -p ./data/openlineage
+      - uv run dataset-cli export postgres -o ./data/postgres --expose --tables 'ds_dev_gold.*' --namespace 'ds_dev_gold'
 
   cli:import-datasets:
     desc: Import exported datasets to API catalogue
     cmds:
-      - uv run python -m celine.dataset.cli.main import catalogue -i "./data/openlineage/*.yaml" --api-url http://localhost:8001
-
-  cli:ontology-fetch:
-    desc: Fetch ontologies
-    cmds:
-      - uv run python -m celine.dataset.cli.main ontology fetch -o ./data/ontologies
-
-  cli:ontology-analyze:
-    desc: Fetch ontologies
-    cmds:
-      - uv run python -m celine.dataset.cli.main ontology analyze -- {{.CLI_ARGS}}
-
-  cli:ontology-view:
-    desc: View ontologies (requires xdot)
-    cmds:
-      - xdot data/ontologies/ontology-graph.dot
+      - uv run dataset-cli import catalogue --input "./data/openlineage/*.yaml" --api-url http://localhost:8001 --verbose || true
+      - uv run dataset-cli import catalogue --input ./data/postgres/*.yaml --api-url http://localhost:8001 --verbose || true
 
   alembic:migrate:
     desc: "Run migrations"

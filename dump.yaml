@@ -1,9 +1,32 @@
-contents:
-  - src
-  - tests
-  - migrations
-  - docs
-  - README.md
-  - alembic.ini
-  - Dockerfile
-  - pyproject.toml
+extensions:
+  - .py
+  - .md
+  - .json
+  - .yaml
+  - .toml
+  - .svelte
+  - .ts
+  - .js
+  - .rego
+
+dumps:
+  - name: all
+    contents:
+      - src
+      - tests
+      - migrations
+      - docs
+      - README.md
+      - alembic.ini
+      - Dockerfile
+      - pyproject.toml
+      - policies
+
+  - name: sources
+    contents:
+      - src
+      - migrations
+      - alembic.ini
+      - Dockerfile
+      - pyproject.toml
+      - policies

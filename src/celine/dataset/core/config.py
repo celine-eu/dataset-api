@@ -17,7 +17,9 @@ class Settings(BaseSettings):
     catalog_uri: AnyUrl = HttpUrl("https://example.org/catalog")
     dataset_base_uri: AnyUrl = HttpUrl("https://example.org/dataset")
 
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/datasets"
+    database_url: str = (
+        "postgresql+psycopg://postgres:securepassword123@172.17.0.1:5432/datasets"
+    )
     catalogue_schema: str = "dataset_api"
 
     marquez_url: Optional[AnyUrl] = None

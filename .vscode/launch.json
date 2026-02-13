@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Attach to Dataset API",
+            "name": "dataset-api debugger",
             "type": "debugpy",
             "request": "attach",
             "connect": {

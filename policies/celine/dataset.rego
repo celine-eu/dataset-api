@@ -7,28 +7,64 @@ package celine.dataset
 
 import rego.v1
 
-import data.celine.scopes
-
 # =============================================================================
 # DATASET AUTHORIZATION
 # =============================================================================
 #
-# Specialized policy for datasets with access_level attribute:
+# Subjects:
+#   - service: client credentials with scopes (dataset.query, dataset.admin, etc.)
+#   - user: human users with groups (admins, managers, etc.)
 #
-#   open       - any authenticated service can query/read (no scope needed)
-#   internal   - requires matching scope (default behavior)
-#   restricted - requires dataset.admin scope only
-#
-# Scope mapping:
-#   dataset.query  - execute queries
-#   dataset.read   - read dataset metadata/schema
-#   dataset.write  - modify dataset data
-#   dataset.admin  - full access (create/delete, manage permissions)
+# Access levels:
+#   - open: any authenticated subject can read
+#   - internal: services need scope, users need group membership
+#   - restricted: requires dataset.admin scope or admins group
 #
 # =============================================================================
 
 default allow := false
 default reason := "unauthorized"
+
+# =============================================================================
+# SUBJECT TYPE HELPERS (inline, no import alias)
+# =============================================================================
+
+is_service if {
+    input.subject.type == "service"
+}
+
+is_user if {
+    input.subject.type == "user"
+}
+
+is_anonymous if {
+    input.subject == null
+}
+
+is_anonymous if {
+    input.subject.type == "anonymous"
+}
+
+# =============================================================================
+# SCOPE HELPERS (inline, no import alias)
+# =============================================================================
+
+has_scope(required) if {
+    some have in input.subject.scopes
+    scope_matches(have, required)
+}
+
+# Exact match
+scope_matches(have, want) if {
+    have == want
+}
+
+# Admin override: {service}.admin matches {service}.*
+scope_matches(have, want) if {
+    endswith(have, ".admin")
+    service := trim_suffix(have, ".admin")
+    startswith(want, concat("", [service, "."]))
+}
 
 # =============================================================================
 # ACCESS LEVEL HELPERS
@@ -48,89 +84,120 @@ is_internal if {
 }
 
 # =============================================================================
+# REQUIRED SCOPE (single function, no conflicts)
+# =============================================================================
+
+get_required_scope(action) := "dataset.query" if {
+    action in ["query", "read"]
+}
+
+get_required_scope(action) := "dataset.write" if {
+    action == "write"
+}
+
+get_required_scope(action) := "dataset.admin" if {
+    action in ["create", "delete", "admin"]
+}
+
+# =============================================================================
 # OPEN DATASETS
 # =============================================================================
 
-# Any authenticated service can query/read open datasets
+# Any authenticated subject can read open datasets
 allow if {
-    scopes.is_service
+    is_open
+    input.action.name in ["query", "read"]
+    not is_anonymous
+}
+
+reason := "open dataset access granted" if {
+    allow
     is_open
     input.action.name in ["query", "read"]
 }
 
-reason := "open dataset - public access" if {
-    scopes.is_service
-    is_open
-    input.action.name in ["query", "read"]
-}
-
-# Write operations on open datasets still require scope
+# Write on open datasets requires scope
 allow if {
-    scopes.is_service
     is_open
+    is_service
     input.action.name in ["write", "create", "delete", "admin"]
-    scopes.has_scope(required_scope)
-}
-
-reason := "open dataset - write authorized" if {
-    scopes.is_service
-    is_open
-    input.action.name in ["write", "create", "delete", "admin"]
-    scopes.has_scope(required_scope)
+    has_scope(get_required_scope(input.action.name))
 }
 
 # =============================================================================
 # RESTRICTED DATASETS
 # =============================================================================
 
-# Only dataset.admin can access restricted datasets
+# Services need dataset.admin
 allow if {
-    scopes.is_service
     is_restricted
-    scopes.has_scope("dataset.admin")
+    is_service
+    has_scope("dataset.admin")
 }
 
-reason := "restricted dataset - admin authorized" if {
-    scopes.is_service
+reason := "restricted dataset - admin scope granted" if {
+    allow
     is_restricted
-    scopes.has_scope("dataset.admin")
+    is_service
 }
 
-# =============================================================================
-# INTERNAL DATASETS (default)
-# =============================================================================
-
-# Standard scope-based access
+# Users need admins group
 allow if {
-    scopes.is_service
-    is_internal
-    scopes.has_scope(required_scope)
+    is_restricted
+    is_user
+    "admins" in input.subject.groups
 }
 
-reason := "dataset access authorized" if {
-    scopes.is_service
-    is_internal
-    scopes.has_scope(required_scope)
+reason := "restricted dataset - admin group granted" if {
+    allow
+    is_restricted
+    is_user
 }
 
 # =============================================================================
-# SCOPE DERIVATION
+# INTERNAL DATASETS
 # =============================================================================
 
-required_scope := "dataset.query" if {
-    input.action.name == "query"
+# Services need matching scope
+allow if {
+    is_internal
+    is_service
+    has_scope(get_required_scope(input.action.name))
 }
 
-required_scope := "dataset.read" if {
-    input.action.name == "read"
+reason := "internal dataset - scope granted" if {
+    allow
+    is_internal
+    is_service
 }
 
-required_scope := "dataset.write" if {
-    input.action.name == "write"
+# Users with admins group get full access
+allow if {
+    is_internal
+    is_user
+    "admins" in input.subject.groups
 }
 
-required_scope := "dataset.admin" if {
-    input.action.name in ["create", "delete", "admin"]
+reason := "internal dataset - admin group granted" if {
+    allow
+    is_internal
+    is_user
+    "admins" in input.subject.groups
+}
+
+# Users with managers group can read
+allow if {
+    is_internal
+    is_user
+    "managers" in input.subject.groups
+    input.action.name in ["query", "read"]
+}
+
+reason := "internal dataset - manager group granted" if {
+    allow
+    is_internal
+    is_user
+    "managers" in input.subject.groups
 }
 
 # =============================================================================
@@ -139,24 +206,22 @@ required_scope := "dataset.admin" if {
 
 reason := "anonymous access denied" if {
     not allow
-    scopes.is_anonymous
+    is_anonymous
 }
 
-reason := "restricted dataset requires admin scope" if {
+reason := "restricted dataset requires admin scope or group" if {
     not allow
-    scopes.is_service
     is_restricted
 }
 
-reason := "missing dataset scope" if {
+reason := "missing required scope" if {
     not allow
-    scopes.is_service
+    is_service
     is_internal
 }
 
-reason := "missing write scope for open dataset" if {
+reason := "user not in authorized group" if {
     not allow
-    scopes.is_service
-    is_open
-    input.action.name in ["write", "create", "delete", "admin"]
+    is_user
+    is_internal
 }

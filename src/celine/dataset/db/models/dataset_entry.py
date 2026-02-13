@@ -48,5 +48,5 @@ class DatasetEntry(Base):
     # Coarse dataset access level (used together with OPA)
     # Suggested values: "open", "restricted", "internal"
     access_level: Mapped[Optional[str]] = mapped_column(
-        String(32), nullable=True, default="open"
+        String(32), nullable=True, default="internal"
     )
