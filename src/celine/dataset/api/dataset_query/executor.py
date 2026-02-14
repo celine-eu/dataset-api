@@ -212,7 +212,8 @@ async def execute_query(
             db,
             count_sql,
         )
-    except HTTPException:
+    except HTTPException as e:
+        logger.error(f"Query count failed: {e}")
         raise
     except Exception as exc:  # safety net
         logger.exception("Count query failed")
