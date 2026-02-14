@@ -44,7 +44,6 @@ async def _decode_and_validate_token(token: str) -> JwtUser:
             audience=_get_expected_audiences(),
             algorithms=["RS256"],
         )
-        print("************************", user)
         return user
 
     except ValueError as exc:

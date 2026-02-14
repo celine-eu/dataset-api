@@ -1,8 +1,9 @@
+# src/celine/dataset/api/dataset_query/executor.py
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional, Dict, Sequence
+from typing import Optional, Dict, Sequence, List
 from fastapi import HTTPException
 from sqlalchemy import RowMapping, Table, text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,11 @@ from celine.dataset.security.governance import (
 )
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.api.dataset_query.parser import parse_sql_query
+from celine.dataset.api.dataset_query.user_filter import (
+    get_user_filter_column,
+    inject_user_filter,
+    is_admin_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +103,7 @@ async def execute_query(
     - SQL validated (SELECT-only, table allowlist)
     - LIMIT/OFFSET enforced server-side
     - hard row cap applied
+    - user filtering applied (if userFilterColumn defined)
     """
     # ------------------------------------------------------------------
     # Validate SQL
@@ -120,6 +127,8 @@ async def execute_query(
 
     datasets = await resolve_datasets_for_tables(db=db, table_names=parsed.tables)
     tables_map: dict[str, str] = {}
+    user_filters: List[dict] = []  # Collect filters to apply
+
     for ref_table, ds in datasets.items():
         if not ds.expose:
             raise HTTPException(403, "Dataset not available")
@@ -139,9 +148,41 @@ async def execute_query(
         logger.debug(f"Mapped SQL table {ref_table} -> {phy_table_name}")
         tables_map[ref_table] = phy_table_name
 
+        # ------------------------------------------------------------------
+        # Check for user filtering requirement
+        # ------------------------------------------------------------------
+        filter_column = get_user_filter_column(ds)
+        if filter_column:
+            if user is None:
+                raise HTTPException(
+                    401,
+                    f"Dataset {ref_table} requires authentication for user filtering",
+                )
+
+            # Admins bypass user filtering
+            if not is_admin_user(user):
+                user_filters.append(
+                    {
+                        "table": phy_table_name,
+                        "column": filter_column,
+                        "user_sub": user.sub,
+                    }
+                )
+                logger.debug(
+                    f"User filter required for {ref_table}: "
+                    f"{filter_column} = {user.sub}"
+                )
+
     # Replace tables ID with physical tables
     complete_sql = parsed.to_sql(tables_map=tables_map)
-    logger.debug(f"Complete SQL: {complete_sql}")
+    logger.debug(f"Complete SQL (before user filter): {complete_sql}")
+
+    # ------------------------------------------------------------------
+    # Inject user filters
+    # ------------------------------------------------------------------
+    if user_filters:
+        complete_sql = inject_user_filter(complete_sql, user_filters)
+        logger.debug(f"Complete SQL (after user filter): {complete_sql}")
 
     # ------------------------------------------------------------------
     # Pagination & caps
