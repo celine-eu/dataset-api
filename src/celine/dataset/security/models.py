@@ -28,6 +28,8 @@ class AuthenticatedUser(BaseModel):
     # Keep raw JWT claims for OPA / auditing / future extensions
     claims: Dict[str, Any] = Field(default_factory=dict)
 
+    token: Optional[str] = Field(default=None, exclude=True)
+
     model_config = ConfigDict(
         frozen=True,
         extra="ignore",

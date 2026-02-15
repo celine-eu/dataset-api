@@ -119,7 +119,8 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
 
 
 def _is_service_account(claims: dict) -> bool:
-    return claims.get("typ") == "Bearer"  # its ID for Users
+    # client have scopes, users have groups
+    return claims.get("scopes", None) is not None
 
 
 async def enforce_dataset_access(

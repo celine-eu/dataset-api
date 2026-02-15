@@ -8,12 +8,14 @@ from typing import Literal, Optional
 from pydantic import AnyUrl, HttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from celine.sdk.settings.models import OidcSettings
+
 
 class Settings(BaseSettings):
     app_name: str = "Dataset API"
     env: Literal["dev", "prod", "test"] = "dev"
 
-    api_base_url: HttpUrl = HttpUrl("http://localhost:8000")
+    api_base_url: HttpUrl = HttpUrl("http://api.celine.localhost/dataset")
     catalog_uri: AnyUrl = HttpUrl("https://example.org/catalog")
     dataset_base_uri: AnyUrl = HttpUrl("https://example.org/dataset")
 
@@ -31,41 +33,15 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    oidc: OidcSettings = OidcSettings(audience="svc-dataset-api")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
-    # =============================================================================
-    # OIDC/JWT Settings - UPDATED for celine.sdk.auth
-    # =============================================================================
-
-    # OIDC issuer (base URL of your auth server)
-    oidc_issuer: str = Field(
-        default="http://keycloak.celine.localhost/realms/celine",
-        description="OIDC issuer URL (e.g., https://auth.example.com/realms/celine)",
-    )
-
-    # JWKS URI for JWT signature verification
-    # NEW: celine.sdk.auth.JwtUser uses this directly
-    oidc_jwks_uri: str = Field(
-        default="http://keycloak.celine.localhost/realms/celine/protocol/openid-connect/certs",
-        description="JWKS URI for JWT verification (e.g., https://auth.example.com/realms/celine/protocol/openid-connect/certs)",
-    )
-
-    # Expected audience (optional - can validate multiple)
-    oidc_audience: str | None = Field(
-        default=None, description="Expected JWT audience (optional)"
-    )
-
-    # Client ID (for client-specific roles and audience validation)
-    oidc_client_id: str | None = Field(default=None, description="OIDC client ID")
-
-    # =============================================================================
-    # Policy Settings - UPDATED for in-process evaluation
-    # =============================================================================
-
+    # Policy Settings
     policies_check_enabled: bool = Field(
         default=True, description="Enable policy-based authorization"
     )
@@ -94,10 +70,25 @@ class Settings(BaseSettings):
         default=10000, description="Maximum cache entries"
     )
 
+    # =============================================================================
+    # Row filter handlers
+    # =============================================================================
 
-@lru_cache
-def get_settings() -> Settings:
-    return Settings()
+    row_filters_modules: list[str] = Field(
+        default_factory=list,
+        description="Optional list of python modules to import to register row filter handlers",
+    )
+    row_filters_cache_ttl: int = Field(
+        default=300, description="Row filter resolution cache TTL upper bound (seconds)"
+    )
+    row_filters_cache_maxsize: int = Field(
+        default=10000, description="Row filter resolution cache max entries"
+    )
+
+    rec_registry_url: str = Field(
+        default="http://api.celine.localhost/rec-registry",
+        description="REC Registry URL",
+    )
 
 
-settings = get_settings()
+settings = Settings()

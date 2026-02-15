@@ -4,7 +4,7 @@ from __future__ import annotations
 from turtle import title
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from celine.dataset.db.engine import get_session

@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import json
 import logging
+
+import httpx
+import sqlglot
 from typing import Optional, Dict, Sequence, List
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from sqlalchemy import RowMapping, Table, text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import DBAPIError
@@ -19,11 +22,12 @@ from celine.dataset.security.governance import (
 )
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.api.dataset_query.parser import parse_sql_query
-from celine.dataset.api.dataset_query.user_filter import (
-    get_user_filter_column,
-    inject_user_filter,
-    is_admin_user,
+from celine.dataset.api.dataset_query.row_filters import (
+    apply_row_filter_plans,
+    get_row_filter_registry,
+    get_row_filter_specs,
 )
+from celine.dataset.api.dataset_query.row_filters.utils import is_admin_user
 
 logger = logging.getLogger(__name__)
 
@@ -103,20 +107,15 @@ async def execute_query(
     - SQL validated (SELECT-only, table allowlist)
     - LIMIT/OFFSET enforced server-side
     - hard row cap applied
-    - user filtering applied (if userFilterColumn defined)
+    - row-level filters applied (pluggable governance handlers)
     """
-    # ------------------------------------------------------------------
-    # Validate SQL
-    # ------------------------------------------------------------------
-
     if raw_sql is None or raw_sql.strip() == "":
         raise HTTPException(400, "sql query not provided")
 
     logger.debug(f"Parsing raw SQL: {raw_sql}")
     try:
         parsed = parse_sql_query(raw_sql)
-    except HTTPException as exc:
-        logger.error(f"SQL validation failed: {exc}")
+    except HTTPException:
         raise
     except Exception as exc:
         logger.exception("SQL validation failed")
@@ -126,12 +125,16 @@ async def execute_query(
         raise HTTPException(400, "Query references no datasets")
 
     datasets = await resolve_datasets_for_tables(db=db, table_names=parsed.tables)
+
     tables_map: dict[str, str] = {}
-    user_filters: List[dict] = []  # Collect filters to apply
+    row_filter_plans = []
+
+    registry = get_row_filter_registry()
 
     for ref_table, ds in datasets.items():
         if not ds.expose:
             raise HTTPException(403, "Dataset not available")
+
         await enforce_dataset_access(entry=ds, user=user)
 
         if ds.backend_config is None:
@@ -148,45 +151,80 @@ async def execute_query(
         logger.debug(f"Mapped SQL table {ref_table} -> {phy_table_name}")
         tables_map[ref_table] = phy_table_name
 
-        # ------------------------------------------------------------------
-        # Check for user filtering requirement
-        # ------------------------------------------------------------------
-        filter_column = get_user_filter_column(ds)
-        if filter_column:
-            if user is None:
+        specs = get_row_filter_specs(ds)
+        if not specs:
+            continue
+
+        if user is None:
+            raise HTTPException(
+                401,
+                f"Dataset {ref_table} requires authentication for row filtering",
+            )
+
+        if is_admin_user(user):
+            continue
+
+        for spec in specs:
+            handler_name = spec.get("handler")
+            args = spec.get("args") or {}
+            if not isinstance(handler_name, str) or not handler_name:
                 raise HTTPException(
-                    401,
-                    f"Dataset {ref_table} requires authentication for user filtering",
+                    500,
+                    f"Invalid row filter spec for dataset {ref_table}: missing handler",
+                )
+            if not isinstance(args, dict):
+                raise HTTPException(
+                    500,
+                    f"Invalid row filter spec for dataset {ref_table}: args must be object",
                 )
 
-            # Admins bypass user filtering
-            if not is_admin_user(user):
-                user_filters.append(
-                    {
-                        "table": phy_table_name,
-                        "column": filter_column,
-                        "user_sub": user.sub,
-                    }
+            try:
+                plan = await registry.resolve_with_cache(
+                    handler_name=handler_name,
+                    table=phy_table_name,
+                    user=user,
+                    args=args,
+                    request_context={},
                 )
-                logger.debug(
-                    f"User filter required for {ref_table}: "
-                    f"{filter_column} = {user.sub}"
+            except KeyError:
+                logger.error(
+                    f"Unknown row filter handler '{handler_name}' for dataset {ref_table}"
+                )
+                raise HTTPException(
+                    500,
+                    f"Unknown row filter handler '{handler_name}' for dataset {ref_table}",
+                )
+            except httpx.HTTPError:
+                logger.error(f"Row filter resolution failed for dataset {ref_table}")
+                raise HTTPException(
+                    403,
+                    f"Row filter resolution failed for dataset {ref_table}",
+                )
+            except Exception as e:
+                logger.error(f"Row filter handler failed: {e}")
+                raise HTTPException(
+                    500,
+                    f"Row filter handler '{handler_name}' failed for dataset {ref_table}",
                 )
 
-    # Replace tables ID with physical tables
+            row_filter_plans.append(plan)
+
+    # Logical -> physical substitution
     complete_sql = parsed.to_sql(tables_map=tables_map)
-    logger.debug(f"Complete SQL (before user filter): {complete_sql}")
+    logger.debug(f"Complete SQL (after table mapping): {complete_sql}")
 
-    # ------------------------------------------------------------------
-    # Inject user filters
-    # ------------------------------------------------------------------
-    if user_filters:
-        complete_sql = inject_user_filter(complete_sql, user_filters)
-        logger.debug(f"Complete SQL (after user filter): {complete_sql}")
+    # Apply row-level filters
+    if row_filter_plans:
+        try:
+            ast = sqlglot.parse_one(complete_sql)
+            ast = apply_row_filter_plans(ast, row_filter_plans)
+            complete_sql = ast.sql()
+        except Exception:
+            logger.exception("Failed to apply row filters")
+            raise HTTPException(500, "Failed to apply row filters") from None
+        logger.debug(f"Complete SQL (after row filters): {complete_sql}")
 
-    # ------------------------------------------------------------------
     # Pagination & caps
-    # ------------------------------------------------------------------
     limit = _clamp_limit(limit)
     offset = max(offset, 0)
 
@@ -204,40 +242,29 @@ async def execute_query(
         ) AS q
     """
 
-    # ------------------------------------------------------------------
     # Execute count
-    # ------------------------------------------------------------------
     try:
-        total = await execute_scalar_with_timeout(
-            db,
-            count_sql,
-        )
-    except HTTPException as e:
-        logger.error(f"Query count failed: {e}")
+        total = await execute_scalar_with_timeout(db, count_sql)
+    except HTTPException:
         raise
-    except Exception as exc:  # safety net
+    except Exception:
         logger.exception("Count query failed")
         raise HTTPException(500, "Query failed") from None
 
-    # ------------------------------------------------------------------
     # Execute data query
-    # ------------------------------------------------------------------
     try:
         rows = await execute_rows_with_timeout(
             db,
             paginated_sql,
             {"limit": limit, "offset": offset},
         )
-    except HTTPException as e:
-        logger.error(f"Query execution failed: {e}")
+    except HTTPException:
         raise
-    except Exception as exc:  # safety net
-        logger.error("Query execution failed: {e}")
+    except Exception:
+        logger.exception("Query execution failed")
         raise HTTPException(500, "Query execution failed") from None
 
-    # ------------------------------------------------------------------
     # Post-process rows (geometry → GeoJSON)
-    # ------------------------------------------------------------------
     items = []
     for r in rows:
         row = dict(r)

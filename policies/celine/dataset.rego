@@ -193,6 +193,13 @@ allow if {
     input.action.name in ["query", "read"]
 }
 
+allow if {
+    is_internal
+    is_user
+    "viewers" in input.subject.groups
+    input.action.name in ["query", "read"]
+}
+
 reason := "internal dataset - manager group granted" if {
     allow
     is_internal

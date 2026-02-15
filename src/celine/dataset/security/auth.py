@@ -38,11 +38,7 @@ async def _decode_and_validate_token(token: str) -> JwtUser:
         # Use celine.sdk.auth.JwtUser for validation
         user = JwtUser.from_token(
             token,
-            verify=True,  # Always verify signatures
-            jwks_uri=settings.oidc_jwks_uri,
-            issuer=settings.oidc_issuer,
-            audience=_get_expected_audiences(),
-            algorithms=["RS256"],
+            oidc=settings.oidc,
         )
         return user
 
@@ -61,29 +57,7 @@ async def _decode_and_validate_token(token: str) -> JwtUser:
         ) from exc
 
 
-def _get_expected_audiences() -> list[str] | str | None:
-    """
-    Get expected audience(s) for token validation.
-
-    Returns:
-        List of audience strings, single string, or None to skip aud validation
-    """
-    audiences = []
-
-    if settings.oidc_audience:
-        audiences.append(settings.oidc_audience)
-
-    if settings.oidc_client_id:
-        audiences.append(settings.oidc_client_id)
-
-    # Keycloak default
-    audiences.append("account")
-
-    # Return list if we have audiences, None to skip validation
-    return audiences if audiences else None
-
-
-def _normalize_user(jwt_user: JwtUser) -> AuthenticatedUser:
+def _normalize_user(jwt_user: JwtUser, token: Optional[str]) -> AuthenticatedUser:
     """
     Convert JwtUser from celine.sdk to our AuthenticatedUser model.
 
@@ -104,7 +78,7 @@ def _normalize_user(jwt_user: JwtUser) -> AuthenticatedUser:
     # Extract client-specific roles
     client_roles = (
         jwt_user.claims.get("resource_access", {})
-        .get(settings.oidc_client_id, {})
+        .get(settings.oidc.client_id, {})
         .get("roles", [])
     )
 
@@ -128,6 +102,7 @@ def _normalize_user(jwt_user: JwtUser) -> AuthenticatedUser:
         scopes=scopes,
         audiences=aud,
         claims=jwt_user.claims,
+        token=token,
     )
 
 
@@ -154,7 +129,7 @@ async def get_optional_user(
         return None
 
     jwt_user = await _decode_and_validate_token(credentials.credentials)
-    return _normalize_user(jwt_user)
+    return _normalize_user(jwt_user, token=credentials.credentials)
 
 
 async def get_current_user(
@@ -175,4 +150,4 @@ async def get_current_user(
         HTTPException: 401 if authentication fails
     """
     jwt_user = await _decode_and_validate_token(credentials.credentials)
-    return _normalize_user(jwt_user)
+    return _normalize_user(jwt_user, token=credentials.credentials)
