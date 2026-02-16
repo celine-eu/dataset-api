@@ -21,6 +21,9 @@ COPY pyproject.toml uv.lock README.md ./
 
 # Copy application code
 COPY ./src ./src
+COPY ./policies ./policies
+COPY ./alembic ./alembic
+COPY ./alembic.ini ./alembic.ini
 
 # Install deps (no dev deps declared; adjust if you add optional groups)
 RUN uv sync --no-editable

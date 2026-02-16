@@ -3,8 +3,50 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile
+    volumes:
+      - ./policies:/app/policies:ro
     ports:
       - "8001:8001"
+    depends_on:
+      dataset-api-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    extra_hosts:
+      - "keycloak.celine.localhost:172.17.0.1"
+      - "api.celine.localhost:172.17.0.1"
+
+  dataset-api-migrate:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    restart: "no"
+    entrypoint: ["/bin/sh", "-euc"]
+    command:
+      - >
+        alembic upgrade head
+    extra_hosts:
+      - "keycloak.celine.localhost:172.17.0.1"
+      - "api.celine.localhost:172.17.0.1"
+
+  dataset-api-import:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    restart: "no"
+    depends_on:
+      dataset-api:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-euc"]
+    command:
+      - >
+        uv run dataset-cli import catalogue --input "/app/data/openlineage/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
+        uv run dataset-cli import catalogue --input "/app/data/postgres/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
+    volumes:
+      - ./data:/app/data:ro
     extra_hosts:
       - "keycloak.celine.localhost:172.17.0.1"
       - "api.celine.localhost:172.17.0.1"
