@@ -3,11 +3,12 @@ name = "dataset"
 version = "1.0.0"
 description = "CELINE Digital Twin API prototype"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 dependencies = [
     "alembic>=1.17.2",
     "asyncpg>=0.30.0",
+    "celine-sdk>=1.1.0",
     "fastapi>=0.121.2",
     "geoalchemy2>=0.18.1",
     "httpx>=0.28.1",
@@ -29,6 +30,9 @@ package = true
 where = ["src"]
 include = ["celine.dataset*"]
 exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+"celine.dataset" = ["static/**/*"]
 
 [dependency-groups]
 dev = [

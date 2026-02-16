@@ -12,15 +12,22 @@ from celine.sdk.settings.models import OidcSettings
 
 
 class Settings(BaseSettings):
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     app_name: str = "Dataset API"
     env: Literal["dev", "prod", "test"] = "dev"
 
-    api_base_url: HttpUrl = HttpUrl("http://api.celine.localhost/dataset")
-    catalog_uri: AnyUrl = HttpUrl("https://example.org/catalog")
-    dataset_base_uri: AnyUrl = HttpUrl("https://example.org/dataset")
+    api_base_url: HttpUrl = HttpUrl("http://api.celine.localhost/datasets")
+    catalog_uri: AnyUrl = HttpUrl("http://api.celine.localhost/datasets/catalog")
+    dataset_base_uri: AnyUrl = HttpUrl("http://api.celine.localhost/datasets/dataset")
 
     database_url: str = (
-        "postgresql+psycopg://postgres:securepassword123@172.17.0.1:5432/datasets"
+        "postgresql+psycopg://postgres:securepassword123@172.17.0.1:15432/datasets"
     )
     catalogue_schema: str = "dataset_api"
 
@@ -34,12 +41,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     oidc: OidcSettings = OidcSettings(audience="svc-dataset-api")
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
 
     # Policy Settings
     policies_check_enabled: bool = Field(
