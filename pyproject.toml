@@ -32,7 +32,12 @@ include = ["celine.dataset*"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
-"celine.dataset" = ["static/**/*"]
+"celine.dataset" = [
+    "static/**/*",
+    "templates/**/*",
+]
+
+
 
 [dependency-groups]
 dev = [
