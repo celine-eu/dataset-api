@@ -73,6 +73,15 @@ ALLOWED_EXPRESSIONS = (
     exp.Having,
     # --- Subqueries (allowed for now) ---
     exp.Subquery,
+    # --- Arithmetic ---
+    exp.Add,
+    exp.Sub,        
+    exp.Mul,
+    exp.Div,
+    # --- Date/time ---
+    exp.Interval,   
+    exp.Var,   
+    exp.TsOrDsToTimestamp,
 )
 
 # Hard-disallowed statement types
@@ -138,10 +147,11 @@ ALLOWED_FUNCTIONS = {
     "date",
     "date_trunc",
     "extract",
+    "now",
 }
 
 # Reject statement stacking
-_SEMICOLON_RE = re.compile(r";")
+_SEMICOLON_RE = re.compile(r";\s*\S")
 
 
 @dataclass(frozen=True)
@@ -358,7 +368,8 @@ def _reject_statement_stacking(sql: str) -> None:
     """
     Reject multiple SQL statements.
     """
-    if _SEMICOLON_RE.search(sql):
+    stripped = sql.strip().rstrip(";").strip()
+    if _SEMICOLON_RE.search(stripped):
         raise _bad_request("Multiple SQL statements are not allowed")
 
 

@@ -19,6 +19,7 @@ from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.core.config import settings
+from celine.sdk.auth.jwt import is_service_account
 
 # Import from celine-sdk (in-process policies)
 from celine.sdk.policies import (
@@ -104,7 +105,7 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
     if not isinstance(groups, list):
         groups = []
 
-    if _is_service_account(user.claims):
+    if is_service_account(user.claims):
         subject_type = SubjectType.SERVICE
     else:
         subject_type = SubjectType.USER
@@ -116,12 +117,6 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
         scopes=scopes,
         claims=user.claims,
     )
-
-
-def _is_service_account(claims: dict) -> bool:
-    # client have scopes, users have groups
-    return claims.get("scopes", None) is not None
-
 
 async def enforce_dataset_access(
     *,
