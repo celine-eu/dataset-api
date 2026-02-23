@@ -1,6 +1,11 @@
 version: "3"
 
 tasks:
+  setup:
+    desc: Setup environment
+    cmds:
+      - uv sync
+
   run:
     desc: "Run development server"
     cmds:
