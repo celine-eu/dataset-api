@@ -14,19 +14,18 @@ dumps:
     contents:
       - src
       - tests
-      - migrations
-      - docs
-      - README.md
+      - policies
+      - alembic
       - alembic.ini
       - Dockerfile
+      - docker-compose.yaml
       - pyproject.toml
-      - policies
 
   - name: sources
     contents:
       - src
-      - migrations
+      - alembic
       - alembic.ini
+      - policies
       - Dockerfile
       - pyproject.toml
-      - policies

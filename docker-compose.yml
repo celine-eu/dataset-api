@@ -25,9 +25,7 @@ services:
       dockerfile: Dockerfile
     restart: "no"
     entrypoint: ["/bin/sh", "-euc"]
-    command:
-      - >
-        alembic upgrade head
+    command: alembic upgrade head
     extra_hosts:
       - "keycloak.celine.localhost:172.17.0.1"
       - "api.celine.localhost:172.17.0.1"

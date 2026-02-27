@@ -1,0 +1,15 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: dataset-api
+
+build:
+  artifacts:
+    - image: ghcr.io/celine-eu/dataset-api
+      docker:
+        dockerfile: Dockerfile
+  local:
+    push: false
+    useDockerCLI: true
+  tagPolicy:
+    sha256: {}
