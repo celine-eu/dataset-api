@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-03-02)
+
+### Bug Fixes
+
+- Compose healthcheck
+  ([`78682bc`](https://github.com/celine-eu/dataset-api/commit/78682bc307bb7692d21034b27868fa7b9bb8631a))
+
+- Update docker setup
+  ([`9806fc6`](https://github.com/celine-eu/dataset-api/commit/9806fc604bbbd60933004008a47606d4f23cda0a))
+
+
 ## v1.1.0 (2026-02-26)
 
 ### Bug Fixes
