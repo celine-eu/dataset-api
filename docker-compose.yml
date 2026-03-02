@@ -11,7 +11,13 @@ services:
       dataset-api-migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')",
+        ]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -24,7 +30,7 @@ services:
       context: ./
       dockerfile: Dockerfile
     restart: "no"
-    entrypoint: ["/bin/sh", "-euc"]
+    entrypoint: ["/bin/sh"]
     command: alembic upgrade head
     extra_hosts:
       - "keycloak.celine.localhost:172.17.0.1"
@@ -41,8 +47,8 @@ services:
     entrypoint: ["/bin/sh", "-euc"]
     command:
       - >
-        uv run dataset-cli import catalogue --input "/app/data/openlineage/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
-        uv run dataset-cli import catalogue --input "/app/data/postgres/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
+        dataset-cli import catalogue --input "/app/data/openlineage/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
+        dataset-cli import catalogue --input "/app/data/postgres/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
     volumes:
       - ./data:/app/data:ro
     extra_hosts:
