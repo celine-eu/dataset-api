@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.2 (2026-03-03)
+
+### Bug Fixes
+
+- Bump
+  ([`31cdd6b`](https://github.com/celine-eu/dataset-api/commit/31cdd6b26af39ffc1c12278a210138029713ef07))
+
+
 ## v1.1.1 (2026-03-02)
 
 ### Bug Fixes
