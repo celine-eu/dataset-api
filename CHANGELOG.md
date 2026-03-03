@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.3 (2026-03-03)
+
+### Bug Fixes
+
+- Drop duplicates
+  ([`c988d1b`](https://github.com/celine-eu/dataset-api/commit/c988d1bb76d75196b640297ac396050ad853807a))
+
+
 ## v1.1.2 (2026-03-03)
 
 ### Bug Fixes
