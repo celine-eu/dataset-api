@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from celine.dataset.db.models.dataset_entry import DatasetEntry
-from celine.dataset.db.engine import get_session
+from celine.dataset.db.engine import get_session, get_datasets_session
 from celine.dataset.db.reflection import reflect_table_async
 from celine.dataset.schemas.catalogue_import import CatalogueImportModel
 
@@ -40,6 +40,7 @@ async def postgres_table_exists_via_reflection(
 async def _cleanup_entries(
     db: AsyncSession,
     *,
+    datasets_db: AsyncSession,
     skip_tables: set[str] | None = None,
 ) -> int:
     """
@@ -78,7 +79,7 @@ async def _cleanup_entries(
             )
             continue
 
-        exists = await postgres_table_exists_via_reflection(db, table)
+        exists = await postgres_table_exists_via_reflection(datasets_db, table)
         if not exists:
             logger.info(
                 "Removing dataset %s: postgres table %s no longer exists",
@@ -99,6 +100,7 @@ async def _cleanup_entries(
 async def import_catalogue(
     body: CatalogueImportModel,
     db: AsyncSession = Depends(get_session),
+    datasets_db: AsyncSession = Depends(get_datasets_session),
 ):
     """Import or update datasets in the internal catalogue.
 
@@ -112,7 +114,7 @@ async def import_catalogue(
 
         if ds.backend_type == "postgres":
             table = ds.backend_config.table if ds.backend_config else None
-            if table and not await postgres_table_exists_via_reflection(db, table):
+            if table and not await postgres_table_exists_via_reflection(datasets_db, table):
                 logger.info(
                     "Skipping dataset %s: postgres table %s does not exist",
                     ds.dataset_id,
@@ -172,7 +174,7 @@ async def import_catalogue(
             db.add(entry)
             created += 1
 
-    removed = await _cleanup_entries(db, skip_tables=validated_tables)
+    removed = await _cleanup_entries(db, datasets_db=datasets_db, skip_tables=validated_tables)
     if removed:
         logger.info("Catalogue cleanup removed %d stale entries", removed)
 

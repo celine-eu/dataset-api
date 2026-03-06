@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://postgres:securepassword123@172.17.0.1:15432/datasets"
     )
+    datasets_database_url: Optional[str] = (
+        "postgresql+psycopg://postgres:securepassword123@172.17.0.1:15432/datasets"
+    )
+
+    """Connection URL for the datasets DB (tables exposed via the API).
+    Defaults to database_url when not set."""
     catalogue_schema: str = "dataset_api"
 
     marquez_url: Optional[AnyUrl] = None

@@ -93,7 +93,8 @@ async def execute_scalar_with_timeout(
 
 async def execute_query(
     *,
-    db: AsyncSession,
+    catalogue_db: AsyncSession,
+    datasets_db: AsyncSession,
     raw_sql: Optional[str],
     limit: int,
     offset: int,
@@ -124,7 +125,7 @@ async def execute_query(
     if not parsed.tables:
         raise HTTPException(400, "Query references no datasets")
 
-    datasets = await resolve_datasets_for_tables(db=db, table_names=parsed.tables)
+    datasets = await resolve_datasets_for_tables(db=catalogue_db, table_names=parsed.tables)
 
     tables_map: dict[str, str] = {}
     row_filter_plans = []
@@ -244,7 +245,7 @@ async def execute_query(
 
     # Execute count
     try:
-        total = await execute_scalar_with_timeout(db, count_sql)
+        total = await execute_scalar_with_timeout(datasets_db, count_sql)
     except HTTPException:
         raise
     except Exception:
@@ -254,7 +255,7 @@ async def execute_query(
     # Execute data query
     try:
         rows = await execute_rows_with_timeout(
-            db,
+            datasets_db,
             paginated_sql,
             {"limit": limit, "offset": offset},
         )
@@ -274,7 +275,7 @@ async def execute_query(
             if hasattr(val, "__geo_interface__"):
                 row[col] = val.__geo_interface__
             elif val.__class__.__name__ == "WKBElement":
-                geojson = await db.scalar(select(func.ST_AsGeoJSON(val)))
+                geojson = await datasets_db.scalar(select(func.ST_AsGeoJSON(val)))
                 if geojson:
                     row[col] = json.loads(geojson)
         items.append(row)
