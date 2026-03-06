@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.3 (2026-03-06)
+
+### Bug Fixes
+
+- Policies allowed reason label is misleading
+  ([`de44943`](https://github.com/celine-eu/dataset-api/commit/de449435476d0d837fa49eae34faab5dfa2f77ce))
+
+
 ## v1.3.2 (2026-03-06)
 
 ### Bug Fixes
