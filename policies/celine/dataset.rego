@@ -207,6 +207,13 @@ reason := "internal dataset - manager group granted" if {
     "managers" in input.subject.groups
 }
 
+reason := "internal dataset - viewer group granted" if {
+    allow
+    is_internal
+    is_user
+    "viewers" in input.subject.groups
+}
+
 # =============================================================================
 # DENIAL REASONS
 # =============================================================================
