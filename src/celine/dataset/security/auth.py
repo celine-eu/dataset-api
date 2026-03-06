@@ -129,7 +129,7 @@ async def get_optional_user(
         return None
 
     jwt_user = await _decode_and_validate_token(credentials.credentials)
-    return _normalize_user(jwt_user, token=credentials.credentials)
+    return _normalize_user(jwt_user, token=jwt_user.token)
 
 
 async def get_current_user(
@@ -150,4 +150,4 @@ async def get_current_user(
         HTTPException: 401 if authentication fails
     """
     jwt_user = await _decode_and_validate_token(credentials.credentials)
-    return _normalize_user(jwt_user, token=credentials.credentials)
+    return _normalize_user(jwt_user, token=jwt_user.token)
