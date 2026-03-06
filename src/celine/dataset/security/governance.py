@@ -310,16 +310,27 @@ async def resolve_datasets_for_tables(
             detail="No datasets referenced in query",
         )
 
-    # Query database for datasets
+    # 1. Exact match — fast path (covers postgres-exported 2-part IDs)
     stmt = select(DatasetEntry).where(DatasetEntry.dataset_id.in_(table_names))
     res = await db.execute(stmt)
     entries = res.scalars().all()
-
-    # Build lookup map
     by_id = {e.dataset_id: e for e in entries}
 
-    # Check for missing datasets
+    # 2. Suffix fallback for 2-part SQL refs vs 3-part OpenLineage catalogue IDs
+    # e.g. SQL ref "ds_dev_gold.meters_data_15m" matches catalogue
+    # "datasets.ds_dev_gold.meters_data_15m"
     missing = table_names - by_id.keys()
+    for ref in list(missing):
+        if ref.count(".") == 1:
+            stmt2 = select(DatasetEntry).where(
+                DatasetEntry.dataset_id.like(f"%.{ref}")
+            )
+            res2 = await db.execute(stmt2)
+            found = res2.scalars().first()
+            if found:
+                by_id[ref] = found
+                missing = missing - {ref}
+
     if missing:
         logger.warning(
             "Query references unknown datasets: %s",
