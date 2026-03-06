@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.2 (2026-03-06)
+
+### Bug Fixes
+
+- Handle 3 parts ds reference
+  ([`cdfaf74`](https://github.com/celine-eu/dataset-api/commit/cdfaf74d60c5c11b0dbd34a222044d273530f440))
+
+
 ## v1.3.1 (2026-03-06)
 
 ### Bug Fixes
