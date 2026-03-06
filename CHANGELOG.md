@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-03-06)
+
+### Features
+
+- Add row filter handling via CLI
+  ([`20fad6c`](https://github.com/celine-eu/dataset-api/commit/20fad6cfb8f18c6cb45d64b416dcad0778b8b2fc))
+
+
 ## v1.1.3 (2026-03-03)
 
 ### Bug Fixes
