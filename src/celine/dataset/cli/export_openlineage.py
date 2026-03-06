@@ -44,8 +44,12 @@ def fetch_all_datasets(marquez_url: str, namespace: str) -> list[dict]:
 
 
 def normalize_dataset_id(ds: dict) -> str:
-    name = ds.get("name", "")
-    return name.lower().replace(" ", "_")
+    name = ds.get("name", "").lower().replace(" ", "_")
+    parts = name.split(".")
+    if len(parts) == 3:
+        # Drop database prefix: db.schema.table → schema.table
+        return f"{parts[1]}.{parts[2]}"
+    return name
 
 
 def extract_lineage_info(mq: dict) -> dict:
