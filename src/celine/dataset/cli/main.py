@@ -4,11 +4,13 @@ import typer
 
 from celine.dataset.cli.export import export_app
 from celine.dataset.cli.import_catalogue import import_app
+from celine.dataset.cli.row_filter import row_filter_app
 
 app = typer.Typer(help="Dataset command-line utilities", no_args_is_help=True)
 
 app.add_typer(export_app, name="export")
 app.add_typer(import_app, name="import")
+app.add_typer(row_filter_app, name="row-filter")
 
 
 def run():
