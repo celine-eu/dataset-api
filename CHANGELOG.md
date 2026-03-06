@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.1 (2026-03-06)
+
+### Bug Fixes
+
+- Improve ds normalization
+  ([`ca84159`](https://github.com/celine-eu/dataset-api/commit/ca84159c31c4d4f1ea502dc4e08e57e4daf0bc3b))
+
+
 ## v1.3.0 (2026-03-06)
 
 ### Features
