@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-03-06)
+
+### Features
+
+- Split catalogue vs datasets connection
+  ([`f75a452`](https://github.com/celine-eu/dataset-api/commit/f75a452f9652ac114f09c8e08afe0becf90e4679))
+
+
 ## v1.2.0 (2026-03-06)
 
 ### Features
