@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.4 (2026-03-06)
+
+### Bug Fixes
+
+- Review token passing in row filter
+  ([`05bec51`](https://github.com/celine-eu/dataset-api/commit/05bec510f47393dcb5b3a3feda414169cfe71a9a))
+
+
 ## v1.3.3 (2026-03-06)
 
 ### Bug Fixes
