@@ -1,4 +1,4 @@
-# Dataset API
+# CELINE Dataset API
 
 ## Overview
 The Dataset API provides a **secure, lineage-aware, metadata-rich interface** to heterogeneous datasets (PostgreSQL, object storage, filesystem).  
