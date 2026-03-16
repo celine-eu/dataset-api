@@ -77,11 +77,11 @@ Main commands:
 
 Additional documentation available
 
-- [Architecture overview](https://celine-eu.github.io/projects/dataset-api/docs/architecture.md)
-- [Catalogue Management](https://celine-eu.github.io/projects/dataset-api/docs/catalogue-management.md)
-- [CLI operations](https://celine-eu.github.io/projects/dataset-api/docs/cli-operations.md)
-- [Governance and security](https://celine-eu.github.io/projects/dataset-api/docs/governance-security.md)
-- [Query engine](https://celine-eu.github.io/projects/dataset-api/docs/query-engine.md)
+- [Architecture overview](https://celine-eu.github.io/projects/dataset-api/docs/architecture)
+- [Catalogue Management](https://celine-eu.github.io/projects/dataset-api/docs/catalogue-management)
+- [CLI operations](https://celine-eu.github.io/projects/dataset-api/docs/cli-operations)
+- [Governance and security](https://celine-eu.github.io/projects/dataset-api/docs/governance-security)
+- [Query engine](https://celine-eu.github.io/projects/dataset-api/docs/query-engine)
 
 ---
 
