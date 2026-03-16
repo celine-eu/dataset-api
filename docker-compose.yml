@@ -3,6 +3,9 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - ./policies:/app/policies:ro
     ports:
@@ -22,25 +25,33 @@ services:
       timeout: 3s
       retries: 5
     extra_hosts:
-      - "keycloak.celine.localhost:172.17.0.1"
-      - "api.celine.localhost:172.17.0.1"
+      - "host.docker.internal:host-gateway"
+      - "keycloak.celine.localhost:host-gateway"
+      - "api.celine.localhost:host-gateway"
 
   dataset-api-migrate:
     build:
       context: ./
       dockerfile: Dockerfile
     restart: "no"
+    env_file:
+      - path: .env
+        required: false
     entrypoint: ["/bin/sh"]
     command: alembic upgrade head
     extra_hosts:
-      - "keycloak.celine.localhost:172.17.0.1"
-      - "api.celine.localhost:172.17.0.1"
+      - "host.docker.internal:host-gateway"
+      - "keycloak.celine.localhost:host-gateway"
+      - "api.celine.localhost:host-gateway"
 
   dataset-api-import:
     build:
       context: ./
       dockerfile: Dockerfile
     restart: "no"
+    env_file:
+      - path: .env
+        required: false
     depends_on:
       dataset-api:
         condition: service_healthy
@@ -52,5 +63,6 @@ services:
     volumes:
       - ./data:/app/data:ro
     extra_hosts:
-      - "keycloak.celine.localhost:172.17.0.1"
-      - "api.celine.localhost:172.17.0.1"
+      - "host.docker.internal:host-gateway"
+      - "keycloak.celine.localhost:host-gateway"
+      - "api.celine.localhost:host-gateway"
