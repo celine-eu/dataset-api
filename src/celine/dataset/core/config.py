@@ -27,10 +27,10 @@ class Settings(BaseSettings):
     dataset_base_uri: AnyUrl = HttpUrl("http://api.celine.localhost/datasets/dataset")
 
     database_url: str = (
-        "postgresql+psycopg://postgres:securepassword123@172.17.0.1:15432/datasets"
+        "postgresql+psycopg://postgres:securepassword123@host.docker.internal:15432/datasets"
     )
     datasets_database_url: Optional[str] = (
-        "postgresql+psycopg://postgres:securepassword123@172.17.0.1:15432/datasets"
+        "postgresql+psycopg://postgres:securepassword123@host.docker.internal:15432/datasets"
     )
 
     """Connection URL for the datasets DB (tables exposed via the API).
