@@ -24,17 +24,21 @@ tasks:
     cmds:
       - mkdir -p ./data/openlineage
       - uv run dataset-cli export openlineage --ns '*' -o ./data/openlineage --expose
-  cli:export:postgres:
-    desc: Export lineage from marquez
+  cli:export:governance:
+    desc: Export from governance.yaml
     cmds:
-      - mkdir -p ./data/openlineage
-      - uv run dataset-cli export postgres -o ./data/postgres --expose --tables 'ds_dev_gold.*' --namespace 'ds_dev_gold'
+      - mkdir -p ./data/governance
+      - dataset-cli export governance "../celine-pipelines/**/governance.yaml" -o ./data/governance --verbose
+      - dataset-cli export governance "../../../demo3/pipelines/**/governance.yaml" -o ./data/governance --verbose
 
-  cli:import-datasets:
-    desc: Import exported datasets to API catalogue
+  cli:import:openlineage:
+    desc: Import datasets to API catalogue
     cmds:
       - uv run dataset-cli import catalogue --input "./data/openlineage/*.yaml" --api-url http://localhost:8001 --verbose || true
-      - uv run dataset-cli import catalogue --input ./data/postgres/*.yaml --api-url http://localhost:8001 --verbose || true
+  cli:import:governance:
+    desc: Import datasets to API catalogue
+    cmds:
+      - uv run dataset-cli import catalogue --input "./data/governance/*.yaml" --api-url http://localhost:8001 --verbose
 
   alembic:migrate:
     desc: "Run migrations"

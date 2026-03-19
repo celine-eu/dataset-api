@@ -58,10 +58,14 @@ services:
     entrypoint: ["/bin/sh", "-euc"]
     command:
       - >
-        dataset-cli import catalogue --input "/app/data/openlineage/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
-        dataset-cli import catalogue --input "/app/data/postgres/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
+        # dataset-cli import catalogue --input "/app/data/openlineage/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
+        # dataset-cli import catalogue --input "/app/data/postgres/*.yaml" --api-url http://api.celine.localhost/datasets --verbose || true
+        # directly load governance.yaml files and import
+        dataset-cli export governance "/app/governance-pipelines/**/governance.yaml" -o /tmp/celine-pipelines --verbose
+        dataset-cli import catalogue --input "/tmp/celine-pipelines/*.yaml" --api-url http://api.celine.localhost/datasets --verbose
     volumes:
       - ./data:/app/data:ro
+      - ../celine-pipelines/apps:/app/governance-pipelines:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
       - "keycloak.celine.localhost:host-gateway"
