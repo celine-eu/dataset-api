@@ -125,7 +125,9 @@ async def execute_query(
     if not parsed.tables:
         raise HTTPException(400, "Query references no datasets")
 
-    datasets = await resolve_datasets_for_tables(db=catalogue_db, table_names=parsed.tables)
+    datasets = await resolve_datasets_for_tables(
+        db=catalogue_db, table_names=parsed.tables
+    )
 
     tables_map: dict[str, str] = {}
     row_filter_plans = []
@@ -134,6 +136,7 @@ async def execute_query(
 
     for ref_table, ds in datasets.items():
         if not ds.expose:
+            logger.warning(f"Requested datasets {ds.dataset_id} is not exposed.")
             raise HTTPException(403, "Dataset not available")
 
         await enforce_dataset_access(entry=ds, user=user)

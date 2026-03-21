@@ -28,8 +28,8 @@ tasks:
     desc: Export from governance.yaml
     cmds:
       - mkdir -p ./data/governance
-      - dataset-cli export governance "../celine-pipelines/**/governance.yaml" -o ./data/governance --verbose
-      - dataset-cli export governance "../../../demo3/pipelines/**/governance.yaml" -o ./data/governance --verbose
+      - dataset-cli export governance "../celine-pipelines/**/governance.yaml" -o ./data/governance --expose --verbose
+      - dataset-cli export governance "../../../demo3/pipelines/**/governance.yaml" -o ./data/governance --expose --verbose
 
   cli:import:openlineage:
     desc: Import datasets to API catalogue
