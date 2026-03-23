@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-03-23)
+
+### Chores
+
+- Add gov import/export cli
+  ([`f2776a1`](https://github.com/celine-eu/dataset-api/commit/f2776a1ffd3fb41a21f37eae72f4afa395425297))
+
+- Upgrade celine-sdk to 1.4.3
+  ([`17e6d8e`](https://github.com/celine-eu/dataset-api/commit/17e6d8eaa7258ad8bf8204a2137b9c3c98dfd6b7))
+
+### Features
+
+- Add catalogue load directly from governance.yaml
+  ([`f5e8fe5`](https://github.com/celine-eu/dataset-api/commit/f5e8fe536c64ccfeb296684b5c32ef0ffa39bbde))
+
+
 ## v1.3.4 (2026-03-06)
 
 ### Bug Fixes
