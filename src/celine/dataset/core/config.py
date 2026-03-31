@@ -97,5 +97,25 @@ class Settings(BaseSettings):
         description="REC Registry URL",
     )
 
+    # ---------------------------------------------------------------------------
+    # Dataspace EDR PEP
+    # ---------------------------------------------------------------------------
+
+    edr_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable EDR token enforcement. When True, requests carrying the "
+            "Edc-Contract-Agreement-Id header are treated as EDC data-plane "
+            "proxy requests and validated against ds-connector before serving data."
+        ),
+    )
+    connector_internal_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "Base URL of the ds-connector internal API "
+            "(e.g. http://ds-connector:30001). Required when edr_enabled=True."
+        ),
+    )
+
 
 settings = Settings()

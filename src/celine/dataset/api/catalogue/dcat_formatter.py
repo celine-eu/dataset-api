@@ -21,7 +21,22 @@ DCAT_CONTEXT = {
     "owl": "http://www.w3.org/2002/07/owl#",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
     "vcard": "http://www.w3.org/2006/vcard/ns#",
+    "odrl": "http://www.w3.org/ns/odrl/2/",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "ds": "https://dataspaces.localhost/ns/energy#",
 }
+
+# EU Publications Office access-right authority table
+_ACCESS_RIGHTS_URI = {
+    "open": "http://publications.europa.eu/resource/authority/access-right/PUBLIC",
+    "internal": "http://publications.europa.eu/resource/authority/access-right/RESTRICTED",
+    "restricted": "http://publications.europa.eu/resource/authority/access-right/NON_PUBLIC",
+}
+
+# DSSC namespace shortcut (resolved via DCAT_CONTEXT above)
+_DS_ACCESS_SCOPE = "ds:accessScope"
+_DS_CONSENT_STATUS = "ds:consentStatus"
+
 
 # --------------------------------------------------------
 # Helpers
@@ -43,85 +58,204 @@ def _iso_date(value: Optional[str | dt.datetime]) -> Optional[str]:
         return value
 
 
+def _gov_facet(entry: DatasetEntry) -> dict[str, Any]:
+    """Extract the governance facet from lineage JSON."""
+    return ((entry.lineage or {}).get("facets") or {}).get("governance") or {}
+
+
+def _build_odrl_offer(entry_uri: str, entry: DatasetEntry) -> dict[str, Any]:
+    """Build a minimal ODRL Offer derived from access_level + governance facet.
+
+    - open:       no constraints
+    - internal:   ds:accessScope eq dataspaces.query
+    - restricted: ds:accessScope eq dataspaces.query + ds:consentStatus eq active
+    consent_required also adds ds:consentStatus when set via governance facet.
+    """
+    level = entry.access_level or "internal"
+    gov = _gov_facet(entry)
+    consent_required = bool(
+        gov.get("userFilterColumn") or gov.get("consentRequired")
+    )
+
+    constraints: list[dict[str, Any]] = []
+    if level in ("internal", "restricted"):
+        constraints.append({
+            "odrl:leftOperand": {"@id": _DS_ACCESS_SCOPE},
+            "odrl:operator": {"@id": "odrl:eq"},
+            "odrl:rightOperand": "dataspaces.query",
+        })
+    if level == "restricted" or consent_required:
+        constraints.append({
+            "odrl:leftOperand": {"@id": _DS_CONSENT_STATUS},
+            "odrl:operator": {"@id": "odrl:eq"},
+            "odrl:rightOperand": "active",
+        })
+
+    permission: dict[str, Any] = {
+        "@type": "odrl:Permission",
+        "odrl:action": {"@id": "odrl:use"},
+    }
+    if constraints:
+        permission["odrl:constraint"] = constraints
+
+    return {
+        "@id": f"{entry_uri}#offer",
+        "@type": "odrl:Offer",
+        "odrl:permission": [permission],
+    }
+
+
+def _build_dataset_node(
+    entry: DatasetEntry,
+    query_service_id: str,
+    api_base: str,
+) -> dict[str, Any]:
+    """Convert a single DatasetEntry to a dcat:Dataset JSON-LD node."""
+    entry_uri = get_dataset_uri(entry.dataset_id)
+    backend = entry.backend_config or {}
+    tags = entry.tags or {}
+    ns = (entry.lineage or {}).get("namespace")
+    gov = _gov_facet(entry)
+    level = entry.access_level or "internal"
+
+    # ── Distribution node ──────────────────────────────────────────────────
+    dist: dict[str, Any] = {
+        "@id": f"{entry_uri}#distribution",
+        "@type": "dcat:Distribution",
+        "dct:title": entry.title or entry.dataset_id,
+        "dct:identifier": entry.dataset_id,
+        "dcat:mediaType": "application/json",
+        "dcat:accessURL": {"@id": f"{api_base}/query"},
+        "dcat:accessService": {"@id": query_service_id},
+        "odrl:hasPolicy": _build_odrl_offer(entry_uri, entry),
+    }
+
+    ar_uri = _ACCESS_RIGHTS_URI.get(level)
+    if ar_uri:
+        dist["dct:accessRights"] = {"@id": ar_uri}
+
+    if entry.license_uri:
+        dist["dct:license"] = {"@id": entry.license_uri}
+    if entry.rights_holder_uri:
+        dist["dct:rightsHolder"] = {"@id": entry.rights_holder_uri}
+    if tags.get("keywords"):
+        dist["dcat:keyword"] = tags["keywords"]
+    if isinstance(backend.get("size_bytes"), int):
+        dist["dcat:byteSize"] = backend["size_bytes"]
+
+    # BC-4: downloadURL only for open datasets
+    if level == "open" and backend.get("public_url"):
+        dist["dcat:downloadURL"] = {"@id": backend["public_url"]}
+
+    # ── Dataset node ───────────────────────────────────────────────────────
+    dataset: dict[str, Any] = {
+        "@id": entry_uri,
+        "@type": "dcat:Dataset",
+        "dct:title": entry.title or entry.dataset_id,
+        "dct:identifier": entry.dataset_id,
+        "dcat:distribution": [dist],
+    }
+
+    if entry.description:
+        dataset["dct:description"] = entry.description
+    if ns:
+        dataset["dct:isPartOf"] = {"@id": get_dataset_uri(ns)}
+    publisher = entry.publisher_uri or str(settings.catalog_uri)
+    dataset["dct:publisher"] = {"@id": publisher}
+    if entry.landing_page:
+        dataset["dcat:landingPage"] = {"@id": entry.landing_page}
+    if entry.language_uris:
+        dataset["dct:language"] = [{"@id": u} for u in entry.language_uris]
+    if entry.spatial_uris:
+        dataset["dct:spatial"] = [{"@id": u} for u in entry.spatial_uris]
+
+    if tags.get("themes"):
+        dataset["dcat:theme"] = [{"@id": t} for t in tags["themes"]]
+    if tags.get("accrualPeriodicity"):
+        dataset["dct:accrualPeriodicity"] = {"@id": tags["accrualPeriodicity"]}
+    if tags.get("conformsTo"):
+        dataset["dct:conformsTo"] = {"@id": tags["conformsTo"]}
+    if tags.get("temporal"):
+        temp: dict[str, Any] = {}
+        if tags["temporal"].get("start"):
+            temp["dcat:startDate"] = tags["temporal"]["start"]
+        if tags["temporal"].get("end"):
+            temp["dcat:endDate"] = tags["temporal"]["end"]
+        if temp:
+            dataset["dct:temporal"] = temp
+    if tags.get("contactPoint"):
+        cp = tags["contactPoint"]
+        vcard: dict[str, Any] = {"@type": "vcard:Kind"}
+        if cp.get("fn"):
+            vcard["vcard:fn"] = cp["fn"]
+        if cp.get("email"):
+            vcard["vcard:hasEmail"] = cp["email"]
+        dataset["dcat:contactPoint"] = vcard
+
+    # Medallion from governance facet or dataset name inference
+    medallion = gov.get("medallion") or _infer_medallion(
+        (entry.lineage or {}).get("name") or entry.dataset_id
+    )
+    if medallion:
+        dataset["ds:medallion"] = medallion
+
+    return dataset
+
+
+def _infer_medallion(name: str) -> Optional[str]:
+    for level in ("gold", "silver", "bronze"):
+        if level in name.lower():
+            return level
+    return None
+
+
 def build_catalog(entries: Iterable[DatasetEntry]) -> dict[str, Any]:
+    """Build a DCAT-AP 3 Catalog where each DatasetEntry is a dcat:Dataset.
+
+    BC-2: Each DatasetEntry becomes its own dcat:Dataset (not grouped by namespace).
+          Namespace lineage is expressed via dct:isPartOf.
+    BC-3: dct:accessRights uses EU authority URIs, not raw strings.
+    BC-4: dcat:downloadURL only appears on open-access datasets.
     """
-    Build DCAT-AP Catalog where:
-
-    - DCAT Dataset = OL namespace
-    - DCAT Distribution = each DatasetEntry row within that namespace
-
-    The catalog MUST embed distributions directly.
-    """
-
     catalog_uri = str(settings.catalog_uri)
-    entries = list(entries)
+    api_base = str(settings.api_base_url).rstrip("/")
+    query_service_id = f"{catalog_uri}/service"
 
-    # Group by lineage namespace
-    by_ns: dict[str, list[DatasetEntry]] = {}
-
-    for e in entries:
-        ns = (e.lineage or {}).get("namespace")
-        if not ns:
-            raise ValueError(f"DatasetEntry {e.dataset_id} missing namespace")
-        by_ns.setdefault(ns, []).append(e)
+    data_service: dict[str, Any] = {
+        "@id": query_service_id,
+        "@type": "dcat:DataService",
+        "dct:title": f"{settings.app_name} Query Service",
+        "dcat:endpointURL": {"@id": f"{api_base}/query"},
+        "dcat:servesDataset": [],
+    }
 
     dataset_nodes = []
-
-    for namespace, dist_entries in by_ns.items():
-
-        dataset_uri = get_dataset_uri(namespace)
-
-        # Build DCAT Dataset node
-        node = {
-            "@id": dataset_uri,
-            "@type": "dcat:Dataset",
-            "dct:title": namespace,
-            "dct:identifier": namespace,
-            "dcat:distribution": [],
-        }
-
-        # Attach each DatasetEntry as a distribution
-        for e in dist_entries:
-            dist_id = e.dataset_id
-            backend = e.backend_config or {}
-            media_type = backend.get("format", "application/json")
-
-            dist_node = {
-                "@id": f"{dataset_uri}#{dist_id}",
-                "@type": "dcat:Distribution",
-                "dct:title": e.title or dist_id,
-                "dct:identifier": dist_id,
-                "dct:format": media_type or "application/json",
-                "dcat:mediaType": media_type,
-                "dcat:accessURL": get_dataset_uri(dist_id) + "/query",
-                "dcat:landingPage": get_dataset_uri(dist_id) + "/metadata",
-            }
-
-            # governance fields
-            if e.license_uri:
-                dist_node["dct:license"] = e.license_uri
-            if e.rights_holder_uri:
-                dist_node["dct:rightsHolder"] = e.rights_holder_uri
-            if e.access_level:
-                dist_node["dct:accessRights"] = e.access_level
-            if e.tags and e.tags.get("keywords", []):
-                dist_node["dcat:keyword"] = e.tags.get("keywords", [])
-
-            # Optional fields
-            if backend.get("public_url"):
-                dist_node["dcat:downloadURL"] = backend["public_url"]
-            if isinstance(backend.get("size_bytes"), int):
-                dist_node["dcat:byteSize"] = backend["size_bytes"]
-
-            node["dcat:distribution"].append(dist_node)
-
+    for e in list(entries):
+        if e.access_level == "secret":
+            continue
+        node = _build_dataset_node(e, query_service_id, api_base)
+        data_service["dcat:servesDataset"].append({"@id": node["@id"]})
         dataset_nodes.append(node)
 
-    # Full catalog
     return {
         "@context": DCAT_CONTEXT,
         "@id": catalog_uri,
         "@type": "dcat:Catalog",
         "dct:title": settings.app_name,
+        "dct:issued": dt.date.today().isoformat(),
+        "dcat:service": [data_service],
         "dcat:dataset": dataset_nodes,
+    }
+
+
+def build_dataset(entry: DatasetEntry) -> dict[str, Any]:
+    """Build a single dcat:Dataset JSON-LD document for GET /catalogue/{id}."""
+    api_base = str(settings.api_base_url).rstrip("/")
+    catalog_uri = str(settings.catalog_uri)
+    query_service_id = f"{catalog_uri}/service"
+
+    node = _build_dataset_node(entry, query_service_id, api_base)
+    return {
+        "@context": DCAT_CONTEXT,
+        **node,
     }

@@ -12,6 +12,8 @@ from sqlalchemy import RowMapping, Table, text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import DBAPIError
 
+from sqlglot import exp as sqlglot_exp
+
 from celine.dataset.schemas.dataset_query import DatasetQueryResult
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.db.reflection import reflect_table_async
@@ -20,6 +22,7 @@ from celine.dataset.security.governance import (
     enforce_dataset_access,
     resolve_datasets_for_tables,
 )
+from celine.dataset.security.edr import EDRRequestContext, edr_pep_check
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.api.dataset_query.parser import parse_sql_query
 from celine.dataset.api.dataset_query.row_filters import (
@@ -27,6 +30,7 @@ from celine.dataset.api.dataset_query.row_filters import (
     get_row_filter_registry,
     get_row_filter_specs,
 )
+from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
 from celine.dataset.api.dataset_query.row_filters.utils import is_admin_user
 
 logger = logging.getLogger(__name__)
@@ -99,6 +103,7 @@ async def execute_query(
     limit: int,
     offset: int,
     user: Optional[AuthenticatedUser],
+    edr_context: Optional[EDRRequestContext] = None,
 ) -> DatasetQueryResult:
     """
     Execute a validated SQL query against a dataset.
@@ -139,8 +144,6 @@ async def execute_query(
             logger.warning(f"Requested datasets {ds.dataset_id} is not exposed.")
             raise HTTPException(403, "Dataset not available")
 
-        await enforce_dataset_access(entry=ds, user=user)
-
         if ds.backend_config is None:
             logger.warning(f"Table {ref_table} has no backend_config table mapping")
             continue
@@ -154,6 +157,56 @@ async def execute_query(
 
         logger.debug(f"Mapped SQL table {ref_table} -> {phy_table_name}")
         tables_map[ref_table] = phy_table_name
+
+        # ------------------------------------------------------------------
+        # EDR path — request came through the EDC data plane
+        # ------------------------------------------------------------------
+        if edr_context is not None:
+            # EDC already validated the JWT; we enforce agreement + consent.
+            user_filter_col: Optional[str] = None
+            if ds.lineage and ds.lineage.get("facets", {}).get("governance", {}).get(
+                "userFilterColumn"
+            ):
+                user_filter_col = ds.lineage["facets"]["governance"]["userFilterColumn"]
+
+            auth_result = await edr_pep_check(
+                agreement_id=edr_context.agreement_id,
+                consumer_id=edr_context.consumer_id,
+                dataset_id=ds.dataset_id,
+                user_filter_column=user_filter_col,
+            )
+
+            if auth_result.subject_ids is not None:
+                if not auth_result.subject_ids:
+                    # Consent required but no grants → deny all rows
+                    row_filter_plans.append(
+                        RowFilterPlan(table=phy_table_name, kind="deny")
+                    )
+                else:
+                    predicate = sqlglot_exp.In(
+                        this=sqlglot_exp.Column(
+                            this=sqlglot_exp.Identifier(
+                                this=user_filter_col, quoted=False
+                            )
+                        ),
+                        expressions=[
+                            sqlglot_exp.Literal.string(s)
+                            for s in auth_result.subject_ids
+                        ],
+                    )
+                    row_filter_plans.append(
+                        RowFilterPlan(
+                            table=phy_table_name,
+                            kind="predicate",
+                            predicate_template=predicate,
+                        )
+                    )
+            continue  # skip normal auth + spec loop for this dataset
+
+        # ------------------------------------------------------------------
+        # Normal path — Keycloak / OPA authenticated request
+        # ------------------------------------------------------------------
+        await enforce_dataset_access(entry=ds, user=user)
 
         specs = get_row_filter_specs(ds)
         if not specs:

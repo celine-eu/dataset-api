@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 import typer
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from celine.dataset.cli.utils import setup_cli_logging
 
@@ -24,13 +24,49 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Inline governance models (mirrors celine-utils GovernanceRule/Config)
+# Inline governance models (self-contained; mirrors celine-utils GovernanceRule)
 # ---------------------------------------------------------------------------
 
 
 class GovernanceOwner(BaseModel):
     name: str
     type: str = "OWNER"
+
+
+class TemporalCoverage(BaseModel):
+    start: Optional[str] = None
+    end: Optional[str] = None
+
+
+class DcatConfig(BaseModel):
+    """DCAT-AP metadata for catalogue exposition."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    publisher_uri: Optional[str] = None
+    themes: List[str] = Field(default_factory=list)
+    language_uris: List[str] = Field(default_factory=list)
+    spatial_uris: List[str] = Field(default_factory=list)
+    accrual_periodicity: Optional[str] = None
+    conforms_to: Optional[str] = None
+    temporal: Optional[TemporalCoverage] = None
+
+
+class DataspaceConfig(BaseModel):
+    """Dataspace ODRL policy hints.
+
+    Extra fields (e.g. EDC-specific asset/data_address/contract sub-objects written
+    by the dataspaces connector) are silently ignored so that a single governance.yaml
+    can be shared between dataset-api and the dataspaces connector.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    medallion: Optional[str] = None
+    contract_required: bool = False
+    consent_required: bool = False
+    odrl_action: str = "use"
+    purpose: List[str] = Field(default_factory=list)
 
 
 class GovernanceRule(BaseModel):
@@ -47,6 +83,9 @@ class GovernanceRule(BaseModel):
     documentation_url: Optional[str] = None
     source_system: Optional[str] = None
     user_filter_column: Optional[str] = None
+    expose: bool = False                     # catalogue visibility (set per-source)
+    dcat: Optional[DcatConfig] = None
+    dataspace: Optional[DataspaceConfig] = None
 
 
 class GovernanceConfig(BaseModel):
@@ -58,20 +97,59 @@ class GovernanceConfig(BaseModel):
 # Parsing
 # ---------------------------------------------------------------------------
 
+_KNOWN_KEYS = {
+    "title", "description", "license", "attribution", "ownership",
+    "access_level", "access_requirements", "classification", "tags",
+    "retention_days", "documentation_url", "source_system",
+    "user_filter_column", "expose", "dcat", "dataspace",
+    # v2 keys from dataspaces connector — ignored here
+    "policy",
+}
+
+
+def _parse_rule(data: dict[str, Any]) -> GovernanceRule:
+    block: dict[str, Any] = (
+        data.get("governance") if "governance" in data else data
+    ) or {}
+
+    owners_raw = block.get("ownership") or []
+    owners = [
+        GovernanceOwner(**o) if isinstance(o, dict) else GovernanceOwner(name=str(o))
+        for o in owners_raw
+    ]
+
+    dcat_raw = block.get("dcat") or {}
+    dataspace_raw = block.get("dataspace") or {}
+
+    return GovernanceRule(
+        title=block.get("title"),
+        description=block.get("description"),
+        license=block.get("license"),
+        attribution=block.get("attribution"),
+        ownership=owners,
+        access_level=block.get("access_level"),
+        access_requirements=block.get("access_requirements"),
+        classification=block.get("classification"),
+        tags=block.get("tags") or [],
+        retention_days=block.get("retention_days"),
+        documentation_url=block.get("documentation_url"),
+        source_system=block.get("source_system"),
+        user_filter_column=block.get("user_filter_column"),
+        expose=bool(block.get("expose", False)),
+        dcat=DcatConfig.model_validate(dcat_raw) if dcat_raw else None,
+        dataspace=DataspaceConfig.model_validate(dataspace_raw) if dataspace_raw else None,
+    )
+
 
 def load_governance_yaml(path: Path) -> GovernanceConfig:
     with path.open(encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
 
-    defaults_raw = raw.get("defaults") or {}
-    sources_raw = raw.get("sources") or {}
-
-    defaults = GovernanceRule.model_validate(defaults_raw)
-
-    sources: Dict[str, GovernanceRule] = {}
-    for name, rule_raw in sources_raw.items():
-        sources[name] = GovernanceRule.model_validate(rule_raw or {})
-
+    defaults = _parse_rule(raw.get("defaults") or {})
+    sources: Dict[str, GovernanceRule] = {
+        name: _parse_rule(rule_raw or {})
+        for name, rule_raw in (raw.get("sources") or {}).items()
+    }
     return GovernanceConfig(defaults=defaults, sources=sources)
 
 
@@ -176,12 +254,26 @@ def governance_rule_to_entry(
     if rule.user_filter_column:
         gov_facet["userFilterColumn"] = rule.user_filter_column
 
+    # Dataspace hints go into the governance facet so the DCAT formatter can read them
+    ds_cfg = rule.dataspace
+    if ds_cfg:
+        if ds_cfg.medallion:
+            gov_facet["medallion"] = ds_cfg.medallion
+        if ds_cfg.contract_required:
+            gov_facet["contractRequired"] = True
+        if ds_cfg.consent_required:
+            gov_facet["consentRequired"] = True
+        if ds_cfg.odrl_action != "use":
+            gov_facet["odrlAction"] = ds_cfg.odrl_action
+        if ds_cfg.purpose:
+            gov_facet["purpose"] = ds_cfg.purpose
+
     lineage: dict[str, Any] = {
         "name": dataset_name,
         "facets": {"governance": gov_facet},
     }
 
-    # Build tags
+    # Build tags block
     keywords: set[str] = set(rule.tags)
     owners = rule.ownership or []
     if owners:
@@ -191,14 +283,31 @@ def governance_rule_to_entry(
 
     tags: dict[str, Any] = {"keywords": sorted(keywords)}
     if rule.access_level:
-        tags["accessRights"] = rule.access_level
+        tags["accessRights"] = rule.access_level  # stored as string; DCAT converts to URI
+
+    # Map dcat sub-fields into tags (catalogue_admin reads tags.themes etc.)
+    dcat = rule.dcat
+    if dcat:
+        if dcat.themes:
+            tags["themes"] = dcat.themes
+        if dcat.accrual_periodicity:
+            tags["accrualPeriodicity"] = dcat.accrual_periodicity
+        if dcat.conforms_to:
+            tags["conformsTo"] = dcat.conforms_to
+        if dcat.temporal:
+            tags["temporal"] = {
+                k: v for k, v in dcat.temporal.model_dump().items() if v is not None
+            }
+
+    # Effective expose: CLI --expose flag OR per-source expose: true in governance.yaml
+    effective_expose = expose or rule.expose
 
     entry: dict[str, Any] = {
         "title": title,
         "description": description,
         "backend_type": backend_type,
         "backend_config": {},
-        "expose": expose,
+        "expose": effective_expose,
         "ontology_path": None,
         "schema_override_path": None,
         "tags": tags,
@@ -206,6 +315,11 @@ def governance_rule_to_entry(
         "access_level": rule.access_level,
         "license_uri": rule.license,
         "rights_holder_uri": f"urn:team:{owners[0].name}" if owners else None,
+        # DCAT-specific ORM fields — populated from dcat block
+        "publisher_uri": dcat.publisher_uri if dcat else None,
+        "language_uris": (dcat.language_uris or None) if dcat else None,
+        "spatial_uris": (dcat.spatial_uris or None) if dcat else None,
+        "landing_page": rule.documentation_url,
     }
 
     if backend_type == "postgres":
@@ -239,7 +353,10 @@ def export_governance_cmd(
     expose: bool = typer.Option(
         False,
         "--expose",
-        help="Mark exported datasets as exposed (visible in catalogue).",
+        help=(
+            "Mark all exported datasets as exposed (visible in catalogue). "
+            "Can also be set per-dataset via expose: true directly on the source in governance.yaml."
+        ),
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ):
@@ -294,7 +411,6 @@ def export_governance_cmd(
 
         # If file already exists (two apps share a parent dir name), append suffix
         if out_file.exists():
-            # Use grandparent.parent for disambiguation
             stem = f"{gov_path.parent.parent.name}__{stem}"
             out_file = out_dir / f"{stem}.yaml"
 
