@@ -76,7 +76,6 @@ class DatasetEntryModel(BaseModel):
     language_uris: Optional[List[str]] = None
     spatial_uris: Optional[List[str]] = None
 
-    # Synced with catalogue_import.py — coarse access control level
     access_level: Optional[str] = None  # open | internal | restricted | secret
 
     @field_validator("backend_type")

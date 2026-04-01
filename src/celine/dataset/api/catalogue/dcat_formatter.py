@@ -8,6 +8,7 @@ from typing import Any, Iterable, Optional
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.core.config import settings
 from celine.dataset.core.utils import get_dataset_uri
+from celine.utils.pipelines.owners import OwnersRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ DCAT_CONTEXT = {
     "vcard": "http://www.w3.org/2006/vcard/ns#",
     "odrl": "http://www.w3.org/ns/odrl/2/",
     "skos": "http://www.w3.org/2004/02/skos/core#",
+    "schema": "https://schema.org/",
     "ds": "https://dataspaces.localhost/ns/energy#",
 }
 
@@ -61,6 +63,32 @@ def _iso_date(value: Optional[str | dt.datetime]) -> Optional[str]:
 def _gov_facet(entry: DatasetEntry) -> dict[str, Any]:
     """Extract the governance facet from lineage JSON."""
     return ((entry.lineage or {}).get("facets") or {}).get("governance") or {}
+
+
+def _build_agent_node(
+    uri: str,
+    owners: Optional[OwnersRegistry],
+) -> dict[str, Any]:
+    """Build a foaf:Agent JSON-LD node.
+
+    When the owners registry has a matching entry the node is inlined with
+    ``foaf:name``, ``foaf:homepage``, and the Schema.org subtype alongside
+    ``foaf:Organization`` (required by DCAT-AP for ``dct:publisher``).
+    Falls back to a bare ``{"@id": uri}`` when no match is found.
+    """
+    if owners is not None:
+        entry = owners.by_uri(uri)
+        if entry is not None:
+            types: list[str] = ["foaf:Organization"]
+            if entry.type and entry.type != "foaf:Organization":
+                types.append(entry.type)
+            node: dict[str, Any] = {"@id": uri, "@type": types}
+            if entry.name:
+                node["foaf:name"] = entry.name
+            if entry.url:
+                node["foaf:homepage"] = {"@id": entry.url}
+            return node
+    return {"@id": uri}
 
 
 def _build_odrl_offer(entry_uri: str, entry: DatasetEntry) -> dict[str, Any]:
@@ -109,6 +137,7 @@ def _build_dataset_node(
     entry: DatasetEntry,
     query_service_id: str,
     api_base: str,
+    owners: Optional[OwnersRegistry] = None,
 ) -> dict[str, Any]:
     """Convert a single DatasetEntry to a dcat:Dataset JSON-LD node."""
     entry_uri = get_dataset_uri(entry.dataset_id)
@@ -137,7 +166,7 @@ def _build_dataset_node(
     if entry.license_uri:
         dist["dct:license"] = {"@id": entry.license_uri}
     if entry.rights_holder_uri:
-        dist["dct:rightsHolder"] = {"@id": entry.rights_holder_uri}
+        dist["dct:rightsHolder"] = _build_agent_node(entry.rights_holder_uri, owners)
     if tags.get("keywords"):
         dist["dcat:keyword"] = tags["keywords"]
     if isinstance(backend.get("size_bytes"), int):
@@ -161,7 +190,7 @@ def _build_dataset_node(
     if ns:
         dataset["dct:isPartOf"] = {"@id": get_dataset_uri(ns)}
     publisher = entry.publisher_uri or str(settings.catalog_uri)
-    dataset["dct:publisher"] = {"@id": publisher}
+    dataset["dct:publisher"] = _build_agent_node(publisher, owners)
     if entry.landing_page:
         dataset["dcat:landingPage"] = {"@id": entry.landing_page}
     if entry.language_uris:
@@ -209,7 +238,10 @@ def _infer_medallion(name: str) -> Optional[str]:
     return None
 
 
-def build_catalog(entries: Iterable[DatasetEntry]) -> dict[str, Any]:
+def build_catalog(
+    entries: Iterable[DatasetEntry],
+    owners: Optional[OwnersRegistry] = None,
+) -> dict[str, Any]:
     """Build a DCAT-AP 3 Catalog where each DatasetEntry is a dcat:Dataset.
 
     BC-2: Each DatasetEntry becomes its own dcat:Dataset (not grouped by namespace).
@@ -233,7 +265,7 @@ def build_catalog(entries: Iterable[DatasetEntry]) -> dict[str, Any]:
     for e in list(entries):
         if e.access_level == "secret":
             continue
-        node = _build_dataset_node(e, query_service_id, api_base)
+        node = _build_dataset_node(e, query_service_id, api_base, owners=owners)
         data_service["dcat:servesDataset"].append({"@id": node["@id"]})
         dataset_nodes.append(node)
 
@@ -248,13 +280,16 @@ def build_catalog(entries: Iterable[DatasetEntry]) -> dict[str, Any]:
     }
 
 
-def build_dataset(entry: DatasetEntry) -> dict[str, Any]:
+def build_dataset(
+    entry: DatasetEntry,
+    owners: Optional[OwnersRegistry] = None,
+) -> dict[str, Any]:
     """Build a single dcat:Dataset JSON-LD document for GET /catalogue/{id}."""
     api_base = str(settings.api_base_url).rstrip("/")
     catalog_uri = str(settings.catalog_uri)
     query_service_id = f"{catalog_uri}/service"
 
-    node = _build_dataset_node(entry, query_service_id, api_base)
+    node = _build_dataset_node(entry, query_service_id, api_base, owners=owners)
     return {
         "@context": DCAT_CONTEXT,
         **node,

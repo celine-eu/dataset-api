@@ -1,0 +1,45 @@
+# Owner identity registry for dataset-api.
+#
+# Maps the short alias strings used in governance.yaml `ownership` blocks to
+# canonical machine-readable identifiers and rich metadata.
+#
+# This file is loaded at API startup (OWNERS_YAML_PATH setting, default ./owners.yaml)
+# and used by:
+#   - the DCAT-AP formatter to inline foaf:Agent nodes in GET /catalogue responses
+#   - the export-governance CLI to resolve publisher_uri and rights_holder_uri
+#     (pass via --owners flag or place alongside each governance.yaml)
+#
+# Fields
+# ------
+# id   : alias matching the `name` field in governance.yaml ownership blocks
+# type : Schema.org type CURIE — emitted alongside foaf:Organization in JSON-LD
+#        common values: schema:Corporation, schema:GovernmentOrganization,
+#                       schema:ResearchOrganization, schema:NGO, schema:Project
+# name : human-readable display name (foaf:name in DCAT output)
+# did  : did:web: URI — set once the owner operates a dataspace connector;
+#        takes priority over url as the canonical @id
+# url  : canonical homepage URI (foaf:homepage in DCAT output)
+#
+# No personal data (e-mail, phone) is stored here.
+
+owners:
+  - id: spxl
+    type: schema:Corporation
+    name: Spindox Labs srl
+    url: https://spindoxlabs.com/en
+    # did: did:web:provider.dataspaces.localhost   # uncomment after onboarding
+
+  - id: celine
+    type: schema:ResearchOrganization
+    name: CELINE Consortium
+    url: https://celine-eu.github.io
+
+  - id: dwd
+    type: schema:GovernmentOrganization
+    name: Deutscher Wetterdienst
+    url: https://www.dwd.de
+
+  - id: openstreetmap
+    type: schema:NGO
+    name: OpenStreetMap Foundation
+    url: https://osmfoundation.org

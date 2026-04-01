@@ -101,6 +101,15 @@ class Settings(BaseSettings):
     # Dataspace EDR PEP
     # ---------------------------------------------------------------------------
 
+    owners_yaml_path: Path = Field(
+        default=Path("./owners.yaml"),
+        description=(
+            "Path to owners.yaml registry. When found, owner aliases are resolved "
+            "to canonical URIs and foaf:Agent nodes are inlined in DCAT-AP output. "
+            "If the file does not exist a warning is logged and enrichment is skipped."
+        ),
+    )
+
     edr_enabled: bool = Field(
         default=False,
         description=(

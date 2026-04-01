@@ -19,6 +19,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from celine.dataset.cli.utils import setup_cli_logging
+from celine.utils.pipelines.owners import OwnersRegistry, load_owners_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ class DataspaceConfig(BaseModel):
     consent_required: bool = False
     odrl_action: str = "use"
     purpose: List[str] = Field(default_factory=list)
+    expose: bool = False                     # catalogue visibility (set per-source)
 
 
 class GovernanceRule(BaseModel):
@@ -83,7 +85,6 @@ class GovernanceRule(BaseModel):
     documentation_url: Optional[str] = None
     source_system: Optional[str] = None
     user_filter_column: Optional[str] = None
-    expose: bool = False                     # catalogue visibility (set per-source)
     dcat: Optional[DcatConfig] = None
     dataspace: Optional[DataspaceConfig] = None
 
@@ -101,7 +102,7 @@ _KNOWN_KEYS = {
     "title", "description", "license", "attribution", "ownership",
     "access_level", "access_requirements", "classification", "tags",
     "retention_days", "documentation_url", "source_system",
-    "user_filter_column", "expose", "dcat", "dataspace",
+    "user_filter_column", "dcat", "dataspace",
     # v2 keys from dataspaces connector — ignored here
     "policy",
 }
@@ -135,7 +136,6 @@ def _parse_rule(data: dict[str, Any]) -> GovernanceRule:
         documentation_url=block.get("documentation_url"),
         source_system=block.get("source_system"),
         user_filter_column=block.get("user_filter_column"),
-        expose=bool(block.get("expose", False)),
         dcat=DcatConfig.model_validate(dcat_raw) if dcat_raw else None,
         dataspace=DataspaceConfig.model_validate(dataspace_raw) if dataspace_raw else None,
     )
@@ -158,16 +158,37 @@ def load_governance_yaml(path: Path) -> GovernanceConfig:
 # ---------------------------------------------------------------------------
 
 
+def _merge_dataspace(
+    base: Optional[DataspaceConfig], override: Optional[DataspaceConfig]
+) -> Optional[DataspaceConfig]:
+    if base is None:
+        return override
+    if override is None:
+        return base
+    return DataspaceConfig(
+        medallion=override.medallion or base.medallion,
+        contract_required=base.contract_required or override.contract_required,
+        consent_required=base.consent_required or override.consent_required,
+        odrl_action=override.odrl_action if override.odrl_action != "use" else base.odrl_action,
+        purpose=sorted(set(base.purpose) | set(override.purpose)),
+        expose=base.expose or override.expose,
+    )
+
+
 def _merge_rule(base: GovernanceRule, override: GovernanceRule) -> GovernanceRule:
     """Overlay non-None/non-empty fields from override onto base."""
     data = base.model_dump()
     for field, value in override.model_dump().items():
+        if field == "dataspace":
+            continue  # handled separately below
         if value is None:
             continue
         if isinstance(value, list) and len(value) == 0:
             continue
         data[field] = value
-    return GovernanceRule.model_validate(data)
+    merged = GovernanceRule.model_validate(data)
+    merged.dataspace = _merge_dataspace(base.dataspace, override.dataspace)
+    return merged
 
 
 def resolve_rule(config: GovernanceConfig, dataset_name: str) -> GovernanceRule:
@@ -216,7 +237,7 @@ def governance_rule_to_entry(
     dataset_name: str,
     rule: GovernanceRule,
     backend_type: str,
-    expose: bool,
+    owners: OwnersRegistry | None = None,
 ) -> dict[str, Any]:
     physical_table = _derive_physical_table(dataset_name)
     title = rule.title or dataset_name
@@ -299,8 +320,23 @@ def governance_rule_to_entry(
                 k: v for k, v in dcat.temporal.model_dump().items() if v is not None
             }
 
-    # Effective expose: CLI --expose flag OR per-source expose: true in governance.yaml
-    effective_expose = expose or rule.expose
+    effective_expose = rule.dataspace.expose if rule.dataspace else False
+
+    # Resolve rights_holder and publisher URIs via owners registry when available.
+    # Priority: DID > URL > urn:owner:<alias> fallback.
+    def _owner_uri(alias: str) -> str:
+        if owners_registry := owners:
+            uri = owners_registry.canonical_uri(alias)
+            if uri:
+                return uri
+        return f"urn:owner:{alias}"
+
+    rights_holder_uri = _owner_uri(rule.ownership[0].name) if rule.ownership else None
+
+    # publisher_uri: prefer explicit dcat.publisher_uri, then first owner
+    publisher_uri = (dcat.publisher_uri if dcat else None) or (
+        _owner_uri(rule.ownership[0].name) if rule.ownership else None
+    )
 
     entry: dict[str, Any] = {
         "title": title,
@@ -314,9 +350,9 @@ def governance_rule_to_entry(
         "lineage": lineage,
         "access_level": rule.access_level,
         "license_uri": rule.license,
-        "rights_holder_uri": f"urn:team:{owners[0].name}" if owners else None,
-        # DCAT-specific ORM fields — populated from dcat block
-        "publisher_uri": dcat.publisher_uri if dcat else None,
+        "rights_holder_uri": rights_holder_uri,
+        # DCAT-specific ORM fields — populated from dcat block or ownership
+        "publisher_uri": publisher_uri,
         "language_uris": (dcat.language_uris or None) if dcat else None,
         "spatial_uris": (dcat.spatial_uris or None) if dcat else None,
         "landing_page": rule.documentation_url,
@@ -350,12 +386,14 @@ def export_governance_cmd(
         "--backend-type",
         help="Backend type for the datasets (postgres, s3, fs).",
     ),
-    expose: bool = typer.Option(
-        False,
-        "--expose",
+    owners_path: Optional[Path] = typer.Option(
+        None,
+        "--owners",
         help=(
-            "Mark all exported datasets as exposed (visible in catalogue). "
-            "Can also be set per-dataset via expose: true directly on the source in governance.yaml."
+            "Path to owners.yaml registry. When set, owner aliases in governance "
+            "files are resolved to canonical URIs (DID or URL) for publisher_uri "
+            "and rights_holder_uri fields. If not set, a ./owners.yaml alongside "
+            "each governance.yaml is tried automatically."
         ),
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
@@ -368,6 +406,15 @@ def export_governance_cmd(
     Does not require a database connection or Marquez.
     """
     setup_cli_logging(verbose)
+
+    # Load owners registry — explicit flag > ./owners.yaml beside each governance file
+    _global_owners: OwnersRegistry | None = None
+    if owners_path is not None:
+        try:
+            _global_owners = load_owners_yaml(owners_path)
+            typer.echo(f"Loaded {len(_global_owners)} owner(s) from {owners_path}")
+        except Exception as exc:
+            typer.echo(f"WARNING: could not load owners registry at {owners_path}: {exc}", err=True)
 
     matched = sorted(glob_module.glob(glob_pattern, recursive=True))
     if not matched:
@@ -382,6 +429,17 @@ def export_governance_cmd(
     for gov_path_str in matched:
         gov_path = Path(gov_path_str)
         logger.debug("Processing %s", gov_path)
+
+        # Per-file owners registry: global flag > sibling owners.yaml > None
+        file_owners = _global_owners
+        if file_owners is None:
+            sibling = gov_path.parent / "owners.yaml"
+            if sibling.is_file():
+                try:
+                    file_owners = load_owners_yaml(sibling)
+                    logger.debug("Using sibling owners.yaml at %s", sibling)
+                except Exception as exc:
+                    logger.warning("Could not load %s: %s", sibling, exc)
 
         try:
             config = load_governance_yaml(gov_path)
@@ -401,7 +459,7 @@ def export_governance_cmd(
                 dataset_name=dataset_name,
                 rule=rule,
                 backend_type=backend_type,
-                expose=expose,
+                owners=file_owners,
             )
 
         # Name output file after the parent directory of the governance.yaml

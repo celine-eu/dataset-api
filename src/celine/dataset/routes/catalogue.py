@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select, or_
@@ -27,27 +27,30 @@ class CatalogueSearchRequest(BaseModel):
 
 
 @router.get("/catalogue")
-async def list_catalogue(db: AsyncSession = Depends(get_session)):
+async def list_catalogue(request: Request, db: AsyncSession = Depends(get_session)):
     """Return the full DCAT-AP 3 catalog as JSON-LD (application/ld+json).
 
     Only includes entries with expose=True. Entries with access_level='secret'
     are silently omitted even when expose=True.
     """
+    owners = getattr(request.app.state, "owners", None)
     stmt = select(DatasetEntry).where(DatasetEntry.expose.is_(True))
     res = await db.execute(stmt)
     entries = res.scalars().all()
-    return JSONResponse(content=build_catalog(entries), media_type=_LD_MEDIA_TYPE)
+    return JSONResponse(content=build_catalog(entries, owners=owners), media_type=_LD_MEDIA_TYPE)
 
 
 @router.get("/catalogue/{dataset_id}")
 async def get_catalogue_entry(
     dataset_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_session),
 ):
     """Return a single dcat:Dataset JSON-LD document.
 
     Only exposed, non-secret entries are accessible here.
     """
+    owners = getattr(request.app.state, "owners", None)
     stmt = select(DatasetEntry).where(
         DatasetEntry.dataset_id == dataset_id,
         DatasetEntry.expose.is_(True),
@@ -58,12 +61,13 @@ async def get_catalogue_entry(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
     if entry.access_level == "secret":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
-    return JSONResponse(content=build_dataset(entry), media_type=_LD_MEDIA_TYPE)
+    return JSONResponse(content=build_dataset(entry, owners=owners), media_type=_LD_MEDIA_TYPE)
 
 
 @router.post("/catalogue/search")
 async def search_catalogue(
     body: CatalogueSearchRequest,
+    request: Request,
     db: AsyncSession = Depends(get_session),
 ):
     """Search the exposed catalogue.
@@ -73,6 +77,7 @@ async def search_catalogue(
     - access_level: exact match on access_level
     - keywords: at least one keyword must appear in tags.keywords
     """
+    owners = getattr(request.app.state, "owners", None)
     stmt = select(DatasetEntry).where(DatasetEntry.expose.is_(True))
     res = await db.execute(stmt)
     entries = list(res.scalars().all())
@@ -93,4 +98,4 @@ async def search_catalogue(
             if wanted & {kw.lower() for kw in ((e.tags or {}).get("keywords") or [])}
         ]
 
-    return JSONResponse(content=build_catalog(entries), media_type=_LD_MEDIA_TYPE)
+    return JSONResponse(content=build_catalog(entries, owners=owners), media_type=_LD_MEDIA_TYPE)
