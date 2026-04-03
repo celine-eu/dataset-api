@@ -12,7 +12,7 @@ from celine.dataset.core.config import settings
 from celine.dataset.api.healthcheck import is_healthly
 from celine.dataset.core.logging import setup_logging
 from celine.dataset.routes import register_routes
-from celine.utils.pipelines.owners import OwnersRegistry, load_owners_yaml
+from celine.dataset.core.owners import OwnersRegistry, load_owners_yaml
 
 setup_logging()
 logger = logging.getLogger(__name__)

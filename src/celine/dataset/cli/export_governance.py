@@ -19,7 +19,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from celine.dataset.cli.utils import setup_cli_logging
-from celine.utils.pipelines.owners import OwnersRegistry, load_owners_yaml
+from celine.dataset.core.owners import OwnersRegistry, load_owners_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ class GovernanceRule(BaseModel):
     retention_days: Optional[int] = None
     documentation_url: Optional[str] = None
     source_system: Optional[str] = None
-    user_filter_column: Optional[str] = None
+    row_filters: List[dict] = Field(default_factory=list)
     dcat: Optional[DcatConfig] = None
     dataspace: Optional[DataspaceConfig] = None
 
@@ -102,7 +102,7 @@ _KNOWN_KEYS = {
     "title", "description", "license", "attribution", "ownership",
     "access_level", "access_requirements", "classification", "tags",
     "retention_days", "documentation_url", "source_system",
-    "user_filter_column", "dcat", "dataspace",
+    "row_filters", "dcat", "dataspace",
     # v2 keys from dataspaces connector — ignored here
     "policy",
 }
@@ -135,7 +135,7 @@ def _parse_rule(data: dict[str, Any]) -> GovernanceRule:
         retention_days=block.get("retention_days"),
         documentation_url=block.get("documentation_url"),
         source_system=block.get("source_system"),
-        user_filter_column=block.get("user_filter_column"),
+        row_filters=block.get("row_filters") or [],
         dcat=DcatConfig.model_validate(dcat_raw) if dcat_raw else None,
         dataspace=DataspaceConfig.model_validate(dataspace_raw) if dataspace_raw else None,
     )
@@ -272,8 +272,8 @@ def governance_rule_to_entry(
         gov_facet["documentationUrl"] = rule.documentation_url
     if rule.source_system:
         gov_facet["sourceSystem"] = rule.source_system
-    if rule.user_filter_column:
-        gov_facet["userFilterColumn"] = rule.user_filter_column
+    if rule.row_filters:
+        gov_facet["rowFilters"] = rule.row_filters
 
     # Dataspace hints go into the governance facet so the DCAT formatter can read them
     ds_cfg = rule.dataspace
@@ -296,9 +296,9 @@ def governance_rule_to_entry(
 
     # Build tags block
     keywords: set[str] = set(rule.tags)
-    owners = rule.ownership or []
-    if owners:
-        keywords.update(f"owner:{o.name}" for o in owners)
+    ownership = rule.ownership or []
+    if ownership:
+        keywords.update(f"owner:{o.name}" for o in ownership)
     if rule.classification:
         keywords.add(f"classification:{rule.classification}")
 

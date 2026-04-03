@@ -75,13 +75,18 @@ ALLOWED_EXPRESSIONS = (
     exp.Subquery,
     # --- Arithmetic ---
     exp.Add,
-    exp.Sub,        
+    exp.Sub,
     exp.Mul,
     exp.Div,
     # --- Date/time ---
-    exp.Interval,   
-    exp.Var,   
+    exp.Interval,
+    exp.Var,
     exp.TsOrDsToTimestamp,
+    exp.CurrentDate,
+    exp.CurrentDatetime,
+    exp.CurrentTimestamp,
+    exp.DateAdd,
+    exp.DateSub,
 )
 
 # Hard-disallowed statement types

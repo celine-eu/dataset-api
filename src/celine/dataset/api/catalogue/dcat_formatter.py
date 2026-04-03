@@ -8,7 +8,7 @@ from typing import Any, Iterable, Optional
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.core.config import settings
 from celine.dataset.core.utils import get_dataset_uri
-from celine.utils.pipelines.owners import OwnersRegistry
+from celine.dataset.core.owners import OwnersRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ def _build_odrl_offer(entry_uri: str, entry: DatasetEntry) -> dict[str, Any]:
     level = entry.access_level or "internal"
     gov = _gov_facet(entry)
     consent_required = bool(
-        gov.get("userFilterColumn") or gov.get("consentRequired")
+        gov.get("rowFilters") or gov.get("consentRequired")
     )
 
     constraints: list[dict[str, Any]] = []
