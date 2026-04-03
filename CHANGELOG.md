@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-04-03)
+
+### Bug Fixes
+
+- Uniform expose flag, add owners.yaml support, review DataspaceConfig
+  ([`657ef78`](https://github.com/celine-eu/dataset-api/commit/657ef78a4e22032579008a9366eceb5da3698fdd))
+
+### Chores
+
+- Upgrade celine-sdk to 1.5.0
+  ([`15dd734`](https://github.com/celine-eu/dataset-api/commit/15dd734de758718e248bccf403fa1ba3bc7757e2))
+
+- **deps**: Bump the runtime-dependencies group across 1 directory with 4 updates
+  ([`528e42e`](https://github.com/celine-eu/dataset-api/commit/528e42ee4cac3a3a80c3244506e93739fc4a6e04))
+
+- **deps-dev**: Bump the development-dependencies group across 1 directory with 3 updates
+  ([`16db176`](https://github.com/celine-eu/dataset-api/commit/16db1766a6afc7089c363246cfe6930506c765d0))
+
+### Features
+
+- Add compliant dssc catalogue, add EDC key handling
+  ([`e484727`](https://github.com/celine-eu/dataset-api/commit/e48472720c08de9ef8920c69ccc8c6c41ce2c528))
+
+- Refactor owners. Add time function to SQL AST
+  ([`a017a3b`](https://github.com/celine-eu/dataset-api/commit/a017a3b774b87962d38b56550434178d7aea5cf8))
+
+
 ## v1.4.0 (2026-03-23)
 
 ### Chores
