@@ -10,6 +10,7 @@ from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
 from celine.dataset.core.config import settings
 from celine.dataset.security.models import AuthenticatedUser
 
+from celine.sdk.auth.jwt import is_service_account
 from celine.sdk.rec_registry import RecRegistryUserClient
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,15 @@ class RecRegistryHandler:
         args: dict[str, Any],
         request_context: dict[str, Any] | None = None,
     ) -> RowFilterPlan:
+
+        # Service accounts are not registry members and see all rows unfiltered.
+        # (Policy-level access control already validated dataset.query scope.)
+        if is_service_account(user.claims):
+            logger.debug(
+                "Service account %s — bypassing rec_registry row filter for %s",
+                user.sub, table,
+            )
+            return RowFilterPlan(table=table, kind="predicate", predicate_template=None)
 
         base_url = args.get("url") or settings.rec_registry_url
         if not isinstance(base_url, str) or not base_url:
