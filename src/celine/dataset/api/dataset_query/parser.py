@@ -59,6 +59,7 @@ ALLOWED_EXPRESSIONS = (
     exp.LTE,
     exp.In,
     exp.Between,
+    exp.Is,
     # --- Literals ---
     exp.Literal,
     exp.Boolean,
@@ -71,6 +72,8 @@ ALLOWED_EXPRESSIONS = (
     # --- Aggregation (safe) ---
     exp.Group,
     exp.Having,
+    exp.ArrayAgg,
+    exp.Filter,
     # --- Subqueries (allowed for now) ---
     exp.Subquery,
     # --- Arithmetic ---
@@ -87,6 +90,10 @@ ALLOWED_EXPRESSIONS = (
     exp.CurrentTimestamp,
     exp.DateAdd,
     exp.DateSub,
+    # --- Type casting ---
+    exp.Cast,
+    exp.DataType,
+    exp.DataTypeParam,
 )
 
 # Hard-disallowed statement types
@@ -170,7 +177,7 @@ class ParsedSQL:
         Logical SQL rendered from the validated AST.
         Table names are dataset IDs (no physical substitution).
         """
-        return self.ast.sql()
+        return self.ast.sql(dialect="postgres")
 
     def to_sql(self, tables_map: Optional[Dict[str, str]] = None) -> str:
         """
@@ -182,7 +189,7 @@ class ParsedSQL:
         table_map: {logical_name -> physical_table}
         """
         if not tables_map:
-            return self.ast.sql()
+            return self.ast.sql(dialect="postgres")
 
         # Work on a copy to keep ParsedSQL immutable
         ast = self.ast.copy()
@@ -207,7 +214,7 @@ class ParsedSQL:
             table.set("db", None)
             table.set("catalog", None)
 
-        return ast.sql()
+        return ast.sql(dialect="postgres")
 
 
 # -----------------------------------------------------------------------------
@@ -256,10 +263,14 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
 
     for node in ast.walk():
 
-        # Reject tautologies eg 1=1
+        # Alert on tautologies eg 1=1 — allowed but suspicious
         if isinstance(node, exp.EQ):
             if node.left.sql() == node.right.sql():
-                raise _bad_request("Tautological predicates are not allowed")
+                logger.warning(
+                    "Tautological predicate detected in query: %s = %s",
+                    node.left.sql(),
+                    node.right.sql(),
+                )
 
         # --- Allowlisted functions ---
         if isinstance(node, exp.Anonymous):
