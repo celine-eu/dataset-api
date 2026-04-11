@@ -23,6 +23,12 @@
 # No personal data (e-mail, phone) is stored here.
 
 owners:
+  - id: dso-operator
+    type: schema:Corporation
+    name: Example Distribution Network Operator
+    url: https://example.org
+    role: dso
+
   - id: spxl
     type: schema:Corporation
     name: Spindox Labs srl

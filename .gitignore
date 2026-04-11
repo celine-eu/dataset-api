@@ -211,3 +211,5 @@ __marimo__/
 # Dumpster output
 .dumpster
 skaffold
+
+/owners.*.yaml
