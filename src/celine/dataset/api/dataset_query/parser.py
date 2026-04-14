@@ -263,13 +263,24 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
 
     for node in ast.walk():
 
-        # Alert on tautologies eg 1=1 — allowed but suspicious
+        # Alert on tautologies eg 1=1
+        # Standalone (WHERE 1=1) is a common query-builder pattern — warn only.
+        # Inside OR it can unconditionally satisfy any predicate (injection bypass) — reject.
         if isinstance(node, exp.EQ):
-            if node.left.sql() == node.right.sql():
+            left_sql = node.left.sql()
+            right_sql = node.right.sql()
+            if left_sql == right_sql:
+                ancestor = node.parent
+                while ancestor is not None:
+                    if isinstance(ancestor, exp.Or):
+                        raise _bad_request(
+                            f"Tautological predicate in OR context is not allowed: {left_sql} = {right_sql}"
+                        )
+                    ancestor = ancestor.parent
                 logger.warning(
                     "Tautological predicate detected in query: %s = %s",
-                    node.left.sql(),
-                    node.right.sql(),
+                    left_sql,
+                    right_sql,
                 )
 
         # --- Allowlisted functions ---
