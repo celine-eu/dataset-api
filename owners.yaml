@@ -23,17 +23,31 @@
 # No personal data (e-mail, phone) is stored here.
 
 owners:
-  - id: dso-operator
+  - id: example_dso
     type: schema:Corporation
     name: Example Distribution Network Operator
     url: https://example.org
-    role: dso
+    organization:
+      create: true
+      role: dso
+
+  - id: example_rec
+    type: schema:NGO
+    name: Example REC
+    url: https://example.com
+    organization:
+      create: true
+      role: rec
+    aliases: [rec] # open-source pipelines (rec_it, rec_metering, rec_flexibility) use "rec" as a generic owner placeholder
 
   - id: spxl
     type: schema:Corporation
     name: Spindox Labs srl
     url: https://spindoxlabs.com/en
     # did: did:web:provider.dataspaces.localhost   # uncomment after onboarding
+    organization:
+      create: true
+      role: org
 
   - id: celine
     type: schema:ResearchOrganization
