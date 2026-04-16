@@ -2,6 +2,45 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-04-16)
+
+### Bug Fixes
+
+- Allow scoped client to bypass row filter
+  ([`e5065d9`](https://github.com/celine-eu/dataset-api/commit/e5065d9394caf7a7d0e09207289c7e6f409b1111))
+
+- Allow tautological queries (1=1)
+  ([`d853cb5`](https://github.com/celine-eu/dataset-api/commit/d853cb5f8f2a040ba5b83e4db0d24a7d73a69659))
+
+### Chores
+
+- Update owners
+  ([`3919a63`](https://github.com/celine-eu/dataset-api/commit/3919a632fc47854e72344a9cb65f57ed55a2258b))
+
+- Update sample owners
+  ([`1d9fa2b`](https://github.com/celine-eu/dataset-api/commit/1d9fa2bc214f406f570192924f3bf27673f717ce))
+
+- Upgrade celine-sdk to 1.10.0
+  ([`0126265`](https://github.com/celine-eu/dataset-api/commit/0126265749e1f284fb9af1d6d228b75a21843190))
+
+- Upgrade celine-sdk to 1.6.0
+  ([`cfa8c07`](https://github.com/celine-eu/dataset-api/commit/cfa8c074e4b31d239ac09e7170874effbdb39a93))
+
+- Upgrade celine-sdk to 1.7.0
+  ([`8df28dd`](https://github.com/celine-eu/dataset-api/commit/8df28dd779b98f8ee7dd88b601b9776072f6f9c9))
+
+- Upgrade celine-sdk to 1.8.0
+  ([`ec210d3`](https://github.com/celine-eu/dataset-api/commit/ec210d31d1553f446bbc2a7b124dd6a61805c8f5))
+
+- Upgrade celine-sdk to 1.9.0
+  ([`1469aac`](https://github.com/celine-eu/dataset-api/commit/1469aac31c56c23b66430580ee8910b70eb7d585))
+
+### Features
+
+- Allow more sql function
+  ([`47b6bd9`](https://github.com/celine-eu/dataset-api/commit/47b6bd95b299706fd5070b6612df924446f8d45f))
+
+
 ## v1.5.0 (2026-04-03)
 
 ### Bug Fixes
