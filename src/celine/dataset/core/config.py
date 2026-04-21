@@ -111,7 +111,7 @@ class Settings(BaseSettings):
     )
 
     query_statement_timeout_ms: int = Field(
-        default=2000,
+        default=5000,
         description="PostgreSQL statement_timeout for dataset queries (milliseconds)",
     )
 
