@@ -28,15 +28,16 @@ owners:
     name: Example Distribution Network Operator
     url: https://example.org
     organization:
-      create: true
+      create: true # creates a keycloak organization
       role: dso
+    aliases: [dso] # from open-source pipelines
 
   - id: example_rec
     type: schema:NGO
     name: Example REC
     url: https://example.com
     organization:
-      create: true
+      create: true # creates a keycloak organization
       role: rec
     aliases: [rec] # open-source pipelines (rec_it, rec_metering, rec_flexibility) use "rec" as a generic owner placeholder
 
