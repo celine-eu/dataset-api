@@ -110,6 +110,11 @@ class Settings(BaseSettings):
         ),
     )
 
+    query_statement_timeout_ms: int = Field(
+        default=2000,
+        description="PostgreSQL statement_timeout for dataset queries (milliseconds)",
+    )
+
     edr_enabled: bool = Field(
         default=False,
         description=(
