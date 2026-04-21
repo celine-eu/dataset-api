@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.6.1 (2026-04-21)
+
+### Bug Fixes
+
+- Add configurable query timeout
+  ([`2663d17`](https://github.com/celine-eu/dataset-api/commit/2663d177ea7c1b51cb7c0d76cf2e745db57de186))
+
+### Chores
+
+- Add comments to onwers
+  ([`275bef6`](https://github.com/celine-eu/dataset-api/commit/275bef65d053a963a7b4f504d2af1927b3264a90))
+
+
 ## v1.6.0 (2026-04-16)
 
 ### Bug Fixes
