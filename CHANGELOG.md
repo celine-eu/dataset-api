@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.6.2 (2026-04-21)
+
+### Bug Fixes
+
+- Increase default timeout
+  ([`bdd4e8c`](https://github.com/celine-eu/dataset-api/commit/bdd4e8c3d6541cdbcfee794e0e98be9687a13a5e))
+
+
 ## v1.6.1 (2026-04-21)
 
 ### Bug Fixes
