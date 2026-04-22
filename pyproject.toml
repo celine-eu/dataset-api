@@ -1,6 +1,6 @@
 [project]
 name = "dataset"
-version = "1.6.3"
+version = "1.6.4"
 description = "CELINE Digital Twin API prototype"
 readme = "README.md"
 requires-python = ">=3.12"

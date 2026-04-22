@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.6.4 (2026-04-22)
+
+### Bug Fixes
+
+- Add ST_Transform
+  ([`82714be`](https://github.com/celine-eu/dataset-api/commit/82714be7586bac81815095c7a773983d29866edb))
+
+
 ## v1.6.3 (2026-04-22)
 
 ### Bug Fixes
