@@ -132,6 +132,7 @@ ALLOWED_FUNCTIONS = {
     "st_intersects",
     "st_within",
     "st_contains",
+    "st_transform",
     "st_distance",
     "st_setsrid",
     "st_geomfromgeojson",
