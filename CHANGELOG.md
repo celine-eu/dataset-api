@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.6.3 (2026-04-22)
+
+### Bug Fixes
+
+- Add skip_count option, allow more st_* SQL functions
+  ([`9452731`](https://github.com/celine-eu/dataset-api/commit/945273187b3f01e099226c90fc0844453719a969))
+
+### Chores
+
+- Upgrade celine-sdk to 1.11.0
+  ([`bb360cb`](https://github.com/celine-eu/dataset-api/commit/bb360cbc345a4185168415fc55d17c3b1a97aff6))
+
+
 ## v1.6.2 (2026-04-21)
 
 ### Bug Fixes
