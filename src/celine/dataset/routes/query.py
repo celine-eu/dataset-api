@@ -48,4 +48,5 @@ async def query_post(
         offset=body.offset,
         user=user,
         edr_context=edr_context,
+        skip_count=body.skip_count,
     )

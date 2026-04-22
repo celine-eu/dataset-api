@@ -19,3 +19,4 @@ class DatasetQueryModel(BaseModel):
     sql: Optional[str] = None
     limit: int = 100
     offset: int = 0
+    skip_count: bool = False

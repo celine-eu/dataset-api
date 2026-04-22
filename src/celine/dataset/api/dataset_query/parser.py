@@ -136,6 +136,11 @@ ALLOWED_FUNCTIONS = {
     "st_setsrid",
     "st_geomfromgeojson",
     "st_point",
+    "st_xmin",
+    "st_ymin",
+    "st_xmax",
+    "st_ymax",
+    "st_extent",
     # string
     "lower",
     "upper",

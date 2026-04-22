@@ -105,6 +105,7 @@ async def execute_query(
     offset: int,
     user: Optional[AuthenticatedUser],
     edr_context: Optional[EDRRequestContext] = None,
+    skip_count: bool = False,
 ) -> DatasetQueryResult:
     """
     Execute a validated SQL query against a dataset.
@@ -300,14 +301,16 @@ async def execute_query(
         ) AS q
     """
 
-    # Execute count
-    try:
-        total = await execute_scalar_with_timeout(datasets_db, count_sql)
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("Count query failed")
-        raise HTTPException(500, "Query failed") from None
+    # Execute count (skipped when caller does not need total — saves one full table scan)
+    total: Optional[int] = None
+    if not skip_count:
+        try:
+            total = await execute_scalar_with_timeout(datasets_db, count_sql)
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Count query failed")
+            raise HTTPException(500, "Query failed") from None
 
     # Execute data query
     try:
