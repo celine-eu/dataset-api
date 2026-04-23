@@ -153,6 +153,40 @@ def load_governance_yaml(path: Path) -> GovernanceConfig:
     return GovernanceConfig(defaults=defaults, sources=sources)
 
 
+def _merge_configs(base: GovernanceConfig, override: GovernanceConfig) -> GovernanceConfig:
+    """Merge two GovernanceConfigs (base + deployer override)."""
+    merged_defaults = _merge_rule(base.defaults, override.defaults)
+    merged_sources: Dict[str, GovernanceRule] = {**base.sources}
+    for key, rule in override.sources.items():
+        if key in merged_sources:
+            merged_sources[key] = _merge_rule(merged_sources[key], rule)
+        else:
+            merged_sources[key] = rule
+    return GovernanceConfig(defaults=merged_defaults, sources=merged_sources)
+
+
+def load_governance_with_override(
+    base_path: Path, app_name: Optional[str] = None
+) -> GovernanceConfig:
+    """Load governance.yaml and merge a deployer override if present.
+
+    Looks for governance.<app_name>.yaml next to the base file.
+    If app_name is not provided, it is inferred from the parent directory name.
+    """
+    config = load_governance_yaml(base_path)
+    name = app_name or base_path.parent.name
+    if not name:
+        return config
+
+    override_path = base_path.parent / f"governance.{name}.yaml"
+    if override_path.is_file():
+        logger.info("Merging deployer override %s", override_path)
+        override_config = load_governance_yaml(override_path)
+        config = _merge_configs(config, override_config)
+
+    return config
+
+
 # ---------------------------------------------------------------------------
 # Resolution (exact match → fnmatch glob → defaults)
 # ---------------------------------------------------------------------------
@@ -442,7 +476,7 @@ def export_governance_cmd(
                     logger.warning("Could not load %s: %s", sibling, exc)
 
         try:
-            config = load_governance_yaml(gov_path)
+            config = load_governance_with_override(gov_path)
         except Exception as exc:
             typer.echo(f"  ERROR loading {gov_path}: {exc}", err=True)
             continue
