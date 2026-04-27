@@ -58,6 +58,7 @@ ALLOWED_EXPRESSIONS = (
     exp.LT,
     exp.LTE,
     exp.In,
+    exp.Tuple,
     exp.Between,
     exp.Is,
     # --- Literals ---
