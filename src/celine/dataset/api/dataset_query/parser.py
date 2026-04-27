@@ -352,7 +352,14 @@ def parse_sql_query(sql: str) -> ParsedSQL:
 
 
 def _check_ast_depth(ast: exp.Expression, depth_limit=200):
-    ast_depth = max(len(list(node.walk())) for node in ast.walk())
+    def _max_depth(node: exp.Expression) -> int:
+        child_depths = [
+            _max_depth(child)
+            for child in node.iter_expressions()
+        ]
+        return 1 + max(child_depths) if child_depths else 1
+
+    ast_depth = _max_depth(ast)
     if ast_depth > depth_limit:
         raise _bad_request(f"Query too complex, max depth limit is {depth_limit}")
 
