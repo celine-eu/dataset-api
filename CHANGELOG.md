@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.7.0 (2026-04-27)
+
+### Chores
+
+- Upgrade celine-sdk to 1.12.0
+  ([`bd2850b`](https://github.com/celine-eu/dataset-api/commit/bd2850b8dde913680bfcf4ceb3f93f017a48daee))
+
+### Features
+
+- Add governance override logic
+  ([`3967fd7`](https://github.com/celine-eu/dataset-api/commit/3967fd7540d36e93b9422d666480f7514973a2d1))
+
+
 ## v1.6.4 (2026-04-22)
 
 ### Bug Fixes

@@ -370,7 +370,7 @@ wheels = [
 
 [[package]]
 name = "dataset"
-version = "1.6.4"
+version = "1.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
