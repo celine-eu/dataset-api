@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.7.2 (2026-04-27)
+
+### Bug Fixes
+
+- Add Tuple
+  ([`e40c808`](https://github.com/celine-eu/dataset-api/commit/e40c8087c51f9b774c2534a116b7d91559fe836a))
+
+
 ## v1.7.1 (2026-04-27)
 
 ### Bug Fixes
