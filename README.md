@@ -42,6 +42,7 @@ CONNECTOR_INTERNAL_URL=http://ds-connector:30001
 ```
 
 EDR query flow:
+
 1. Detects `Edc-Contract-Agreement-Id` and `Edc-Bpn` headers
 2. Calls `ds-connector GET /internal/agreements/{id}/status` — checks the agreement is active
 3. If the dataset has a `user_filter_column`, calls `ds-connector GET /internal/consent/check` — retrieves the list of subject IDs the consumer has consent for

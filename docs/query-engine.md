@@ -77,6 +77,7 @@ The engine enforces a separation between:
 - **physical names**: actual table/view names
 
 Resolution steps:
+
 1. parse SQL and extract table identifiers
 2. map identifiers to catalogue entries
 3. substitute physical references into the execution query (or bind via prepared mapping)

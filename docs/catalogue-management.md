@@ -110,6 +110,7 @@ A robust import process includes a cleanup phase.
 **Goal:** remove catalogue entries whose physical tables no longer exist.
 
 Recommended algorithm:
+
 1. list catalogue entries
 2. for each, check existence (reflection / information_schema)
 3. if missing, delete entry unless protected
