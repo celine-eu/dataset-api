@@ -22,10 +22,14 @@ The `downloadURL` is only present on distributions with `access_level: open`. Al
 
 SQL `SELECT` queries over exposed datasets with strict validation, server-side pagination, hard row caps, and row-level filters.
 
-- `POST /query` — accepts `{"sql": "SELECT ...", "limit": 50, "offset": 0}`
-- Validates SQL (SELECT-only, table allowlist)
+- `POST /query` — accepts `{"sql": "SELECT ...", "limit": 50, "offset": 0, "skip_count": false}`
+- Validates SQL (SELECT-only, table allowlist, function allowlist)
+- Supports spatial PostGIS functions: `ST_Intersects`, `ST_Within`, `ST_Contains`, `ST_Transform`, `ST_Distance`, `ST_SetSRID`, `ST_GeomFromGeoJSON`, `ST_Point`, `ST_XMin/YMin/XMax/YMax`, `ST_Extent`
+- Supports `IN` clauses with tuples, string/numeric/date functions, aggregates
 - Enforces `LIMIT`/`OFFSET` server-side
-- Applies row-level filter plans from governance handlers (OPA, HTTP allow-list, direct user match)
+- Configurable query timeout via `QUERY_STATEMENT_TIMEOUT_MS` (default 5000ms)
+- `skip_count: true` skips the `COUNT(*)` query to avoid full table scans
+- Applies row-level filter plans from governance handlers (`direct_user_match`, `rec_registry`, `http_in_list`, `table_pointer`)
 
 ### EDR-gated query path (dataspace integration)
 
@@ -54,7 +58,15 @@ Access levels:
 - `restricted` — JWT + contract required; `ds:contractRequired eq "true"` in ODRL
 - `secret` — not exposed in catalogue or EDC
 
-Row-level filtering via the pluggable governance handler registry. When `user_filter_column` is set and `consent_required: true`, the consent handler injects an `IN (subject_ids)` predicate.
+Row-level filtering via the pluggable governance handler registry. Four built-in handlers are supported:
+- `direct_user_match` — filter by user column
+- `rec_registry` — lookup via REC registry
+- `http_in_list` — HTTP-based allow list
+- `table_pointer` — table-based lookup
+
+Users in the `admins` group bypass row filters entirely. Service accounts bypass the `rec_registry` filter.
+
+Governance overrides are supported via `governance.<app_name>.yaml` files merged with the base `governance.yaml`.
 
 ### Lineage and provenance
 
@@ -76,7 +88,7 @@ Row-level filtering via the pluggable governance handler registry. When `user_fi
 - `GET /catalogue/{id}` — single dataset
 - `POST /catalogue/search` — filtered search
 - `POST /query` — governed SQL query; EDR-gated when `EDR_ENABLED=true`
-- `GET /admin/catalogue` — catalogue import (CLI-only)
+- `POST /admin/catalogue` — catalogue import
 - `GET /health`
 
 ---
@@ -92,9 +104,9 @@ dataset-cli --help
 Main commands:
 - `export openlineage` — extract lineage from Marquez
 - `export governance` — export governance rules to dataset entries
+- `export postgres` — generate catalogue YAML from PostgreSQL schema introspection
 - `import catalogue` — validate and import dataset catalogue
-- `validate catalogue` — schema validation only
-- `ontology` — ontology fetch, analysis, tree generation
+- `row-filter add|remove|list` — manage row filters in exported YAML files
 
 The `export governance` command reads `governance.yaml` files and propagates `dcat:` and `dataspace:` blocks to `DatasetEntry` records. The `expose: true` field on a source entry controls whether the dataset is visible in the catalogue and registered in EDC.
 
@@ -136,7 +148,7 @@ Dataset-api reads governance rules resolved by `celine-utils` `GovernanceResolve
 
 ## Development and contribution
 
-- Python ≥ 3.11
+- Python >= 3.12
 - Async SQLAlchemy
 - Pydantic v2
 - FastAPI + httpx
