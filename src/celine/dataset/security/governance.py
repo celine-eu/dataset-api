@@ -19,7 +19,7 @@ from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.core.config import settings
-from celine.sdk.auth.jwt import is_service_account
+from celine.sdk.auth.jwt import extract_groups, is_service_account
 
 # Import from celine-sdk (in-process policies)
 from celine.sdk.policies import (
@@ -100,10 +100,7 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
     elif not isinstance(scopes, list):
         scopes = []
 
-    # Extract groups from user claims
-    groups = user.claims.get("groups", [])
-    if not isinstance(groups, list):
-        groups = []
+    groups = extract_groups(user.claims)
 
     if is_service_account(user.claims):
         subject_type = SubjectType.SERVICE

@@ -4,6 +4,7 @@ import time
 from typing import Any, Optional
 
 from celine.dataset.security.models import AuthenticatedUser
+from celine.sdk.auth.jwt import extract_groups
 
 ADMIN_GROUPS = {"admins"}
 
@@ -11,9 +12,7 @@ ADMIN_GROUPS = {"admins"}
 def is_admin_user(user: Optional[AuthenticatedUser]) -> bool:
     if user is None:
         return False
-    groups = user.claims.get("groups", [])
-    if not isinstance(groups, list):
-        groups = []
+    groups = extract_groups(user.claims)
     return bool(ADMIN_GROUPS & set(groups))
 
 

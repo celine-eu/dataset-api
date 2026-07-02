@@ -11,6 +11,7 @@ from celine.dataset.security.models import AuthenticatedUser
 
 # Use celine.sdk for JWT validation
 from celine.sdk.auth import JwtUser
+from celine.sdk.auth.jwt import extract_groups
 
 logger = logging.getLogger(__name__)
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -82,8 +83,7 @@ def _normalize_user(jwt_user: JwtUser, token: Optional[str]) -> AuthenticatedUse
         .get("roles", [])
     )
 
-    # Extract groups
-    groups = jwt_user.claims.get("groups", [])
+    groups = extract_groups(jwt_user.claims)
 
     # Extract scopes
     scopes = jwt_user.claims.get("scope", "")
