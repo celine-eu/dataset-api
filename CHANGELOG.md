@@ -2,6 +2,48 @@
 
 <!-- version list -->
 
+## v1.8.0 (2026-07-02)
+
+### Chores
+
+- Update docs
+  ([`513a612`](https://github.com/celine-eu/dataset-api/commit/513a612c898ef70cbd0eb7c21d3251a503529cfe))
+
+- Update docs
+  ([`1eb20b7`](https://github.com/celine-eu/dataset-api/commit/1eb20b7c09ff6e3b920846f3b2a68978d60d340b))
+
+- Upgrade celine-sdk to 1.12.1
+  ([`16eff2e`](https://github.com/celine-eu/dataset-api/commit/16eff2ea02f22f7f2660bca5ae3b69b919f5ddd3))
+
+- Upgrade celine-sdk to 1.13.0
+  ([`f59e63e`](https://github.com/celine-eu/dataset-api/commit/f59e63e09c6520868c20233dfa6487d01cb94236))
+
+- **deps**: Bump fastapi from 0.128.0 to 0.136.1
+  ([`e2d7131`](https://github.com/celine-eu/dataset-api/commit/e2d7131f7a78cb5c0aa426150b1c68330b5052fa))
+
+- **deps**: Bump pydantic-settings from 2.12.0 to 2.13.1
+  ([`32d78d9`](https://github.com/celine-eu/dataset-api/commit/32d78d9e8518e20a87b44d5a842cdccccb6a25cf))
+
+- **deps**: Bump rdflib from 7.5.0 to 7.6.0
+  ([`167e3c6`](https://github.com/celine-eu/dataset-api/commit/167e3c6f8eba555793905dbba1b9bdfde78902ad))
+
+- **deps**: Bump sqlglot from 28.6.0 to 30.1.0
+  ([`4033487`](https://github.com/celine-eu/dataset-api/commit/4033487a594a228e833ec78ee45db4eab53e05a0))
+
+- **deps-dev**: Bump the development-dependencies group across 1 directory with 2 updates
+  ([`96759a4`](https://github.com/celine-eu/dataset-api/commit/96759a4488f00d676cf92436329e25e0a7555948))
+
+### Continuous Integration
+
+- Bump the actions group across 1 directory with 2 updates
+  ([`8f77eac`](https://github.com/celine-eu/dataset-api/commit/8f77eac767337adaf510fe2b011247e7d2320cf4))
+
+### Features
+
+- Use sdk group extraction
+  ([`e474d42`](https://github.com/celine-eu/dataset-api/commit/e474d42a7bcedda014218daea251d68a6b1fa9f6))
+
+
 ## v1.7.2 (2026-04-27)
 
 ### Bug Fixes
