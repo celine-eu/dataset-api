@@ -471,18 +471,18 @@ class TestBackendConfigFiware:
         from celine.dataset.api.catalogue.schema import DatasetEntryModel, BackendConfig
 
         entry = DatasetEntryModel(
-            dataset_id="fiware.crs4.ACMeasurement",
+            dataset_id="fiware.energy.ACMeasurement",
             title="AC Measurement Telemetry",
             backend_type="quantumleap",
             backend_config=BackendConfig(
                 base_url="https://ql-proxy.celine.eu",
-                fiware_service="crs4",
+                fiware_service="energy",
                 entity_type="ACMeasurement",
             ),
         )
         assert entry.backend_type == "quantumleap"
         assert entry.backend_config.base_url == "https://ql-proxy.celine.eu"
-        assert entry.backend_config.fiware_service == "crs4"
+        assert entry.backend_config.fiware_service == "energy"
         assert entry.backend_config.entity_type == "ACMeasurement"
 
     def test_context_broker_accepted(self):
