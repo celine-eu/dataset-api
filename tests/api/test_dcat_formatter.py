@@ -8,18 +8,19 @@ def test_catalogue_listing_basic():
             dataset_id="test.ds",
             title="Test dataset",
             tags={},
-            lineage={"namespace": "test"},  # REQUIRED
+            lineage={"namespace": "test"},
         ),
         DatasetEntry(
             dataset_id="test2.ds",
             title="Another dataset",
             tags={},
-            lineage={"namespace": "test"},  # groups under same namespace
+            lineage={"namespace": "test"},
         ),
     ]
 
     catalogue = build_catalog(entries)
 
     assert "dcat:dataset" in catalogue
-    assert len(catalogue["dcat:dataset"]) == 1
-    assert catalogue["dcat:dataset"][0]["dct:identifier"] == "test"
+    assert len(catalogue["dcat:dataset"]) == 2
+    ids = {d["dct:identifier"] for d in catalogue["dcat:dataset"]}
+    assert ids == {"test.ds", "test2.ds"}
