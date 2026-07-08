@@ -32,7 +32,7 @@ from celine.dataset.api.dataset_query.row_filters import (
 )
 from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
 from celine.dataset.api.dataset_query.row_filters.utils import is_admin_user
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 10_000
-STATEMENT_TIMEOUT_MS = settings.query_statement_timeout_ms
+STATEMENT_TIMEOUT_MS = get_settings().query_statement_timeout_ms
 
 # ---------------------------------------------------------------------------
 # Helpers

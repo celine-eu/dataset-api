@@ -6,7 +6,7 @@ import logging
 from typing import Any, Iterable, Optional
 
 from celine.dataset.db.models.dataset_entry import DatasetEntry
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 from celine.dataset.core.utils import get_dataset_uri
 from celine.dataset.core.owners import OwnersRegistry
 
@@ -189,7 +189,7 @@ def _build_dataset_node(
         dataset["dct:description"] = entry.description
     if ns:
         dataset["dct:isPartOf"] = {"@id": get_dataset_uri(ns)}
-    publisher = entry.publisher_uri or str(settings.catalog_uri)
+    publisher = entry.publisher_uri or str(get_settings().catalog_uri)
     dataset["dct:publisher"] = _build_agent_node(publisher, owners)
     if entry.landing_page:
         dataset["dcat:landingPage"] = {"@id": entry.landing_page}
@@ -249,14 +249,14 @@ def build_catalog(
     BC-3: dct:accessRights uses EU authority URIs, not raw strings.
     BC-4: dcat:downloadURL only appears on open-access datasets.
     """
-    catalog_uri = str(settings.catalog_uri)
-    api_base = str(settings.api_base_url).rstrip("/")
+    catalog_uri = str(get_settings().catalog_uri)
+    api_base = str(get_settings().api_base_url).rstrip("/")
     query_service_id = f"{catalog_uri}/service"
 
     data_service: dict[str, Any] = {
         "@id": query_service_id,
         "@type": "dcat:DataService",
-        "dct:title": f"{settings.app_name} Query Service",
+        "dct:title": f"{get_settings().app_name} Query Service",
         "dcat:endpointURL": {"@id": f"{api_base}/query"},
         "dcat:servesDataset": [],
     }
@@ -273,7 +273,7 @@ def build_catalog(
         "@context": DCAT_CONTEXT,
         "@id": catalog_uri,
         "@type": "dcat:Catalog",
-        "dct:title": settings.app_name,
+        "dct:title": get_settings().app_name,
         "dct:issued": dt.date.today().isoformat(),
         "dcat:service": [data_service],
         "dcat:dataset": dataset_nodes,
@@ -285,8 +285,8 @@ def build_dataset(
     owners: Optional[OwnersRegistry] = None,
 ) -> dict[str, Any]:
     """Build a single dcat:Dataset JSON-LD document for GET /catalogue/{id}."""
-    api_base = str(settings.api_base_url).rstrip("/")
-    catalog_uri = str(settings.catalog_uri)
+    api_base = str(get_settings().api_base_url).rstrip("/")
+    catalog_uri = str(get_settings().catalog_uri)
     query_service_id = f"{catalog_uri}/service"
 
     node = _build_dataset_node(entry, query_service_id, api_base, owners=owners)

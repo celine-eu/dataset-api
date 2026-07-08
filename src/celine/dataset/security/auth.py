@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 from celine.dataset.security.models import AuthenticatedUser
 
 # Use celine.sdk for JWT validation
@@ -39,7 +39,7 @@ async def _decode_and_validate_token(token: str) -> JwtUser:
         # Use celine.sdk.auth.JwtUser for validation
         user = JwtUser.from_token(
             token,
-            oidc=settings.oidc,
+            oidc=get_settings().oidc,
         )
         return user
 
@@ -79,7 +79,7 @@ def _normalize_user(jwt_user: JwtUser, token: Optional[str]) -> AuthenticatedUse
     # Extract client-specific roles
     client_roles = (
         jwt_user.claims.get("resource_access", {})
-        .get(settings.oidc.client_id, {})
+        .get(get_settings().oidc.client_id, {})
         .get("roles", [])
     )
 

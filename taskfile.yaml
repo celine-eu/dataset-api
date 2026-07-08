@@ -26,10 +26,24 @@ tasks:
       - uv run dataset-cli export openlineage --ns '*' -o ./data/openlineage --expose
   cli:export:governance:
     desc: Export from governance.yaml
+    vars:
+      GOV_OVERRIDES: ../../../demo3.deployment/recs/governance
     cmds:
       - mkdir -p ./data/governance
-      - uv run dataset-cli export governance "../celine-pipelines/**/governance.yaml" -o ./data/governance --verbose
-      - uv run dataset-cli export governance "../../../demo3/pipelines/**/governance.yaml" -o ./data/governance --verbose
+      - |
+        TMPDIR=$(mktemp -d)
+        trap "rm -rf $TMPDIR" EXIT
+
+        for f in $(find ../celine-pipelines/apps ../../../demo3/pipelines/apps -name "governance.yaml" 2>/dev/null); do
+          app=$(basename "$(dirname "$f")")
+          mkdir -p "$TMPDIR/$app"
+          cp "$f" "$TMPDIR/$app/governance.yaml"
+          if [ -f "{{ .GOV_OVERRIDES }}/governance.${app}.yaml" ]; then
+            cp "{{ .GOV_OVERRIDES }}/governance.${app}.yaml" "$TMPDIR/$app/"
+          fi
+        done
+
+        uv run dataset-cli export governance "$TMPDIR/**/governance.yaml" -o ./data/governance --verbose
 
   cli:import:openlineage:
     desc: Import datasets to API catalogue

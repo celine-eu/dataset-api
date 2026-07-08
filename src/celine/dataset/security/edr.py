@@ -23,7 +23,7 @@ from typing import Optional
 import httpx
 from fastapi import HTTPException
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +60,13 @@ async def edr_pep_check(
     Raises ``HTTPException(403)`` if the agreement is not active.
     Raises ``HTTPException(503)`` if ds-connector is not configured or unreachable.
     """
-    if not settings.connector_internal_url:
+    if not get_settings().connector_internal_url:
         raise HTTPException(
             503,
             "EDR PEP is enabled but CONNECTOR_INTERNAL_URL is not configured",
         )
 
-    base = settings.connector_internal_url.rstrip("/")
+    base = get_settings().connector_internal_url.rstrip("/")
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:

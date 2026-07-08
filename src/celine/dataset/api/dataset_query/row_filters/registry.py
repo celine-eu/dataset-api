@@ -3,9 +3,10 @@ from __future__ import annotations
 import importlib
 import logging
 from dataclasses import dataclass
+from importlib.metadata import entry_points
 from typing import Any, Awaitable, Callable, Dict, Optional, Protocol
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.api.dataset_query.row_filters.cache import TTLCache
 from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
@@ -78,7 +79,7 @@ class RowFilterRegistry:
 
         # TTL: token lifetime if available, else default
         ttl = token_ttl_seconds(user)
-        default_ttl = getattr(settings, "row_filters_cache_ttl", 300)
+        default_ttl = get_settings().row_filters_cache_ttl
         if ttl is None:
             ttl = default_ttl
         else:
@@ -92,7 +93,7 @@ _registry: RowFilterRegistry | None = None
 
 
 def _load_modules() -> None:
-    modules = getattr(settings, "row_filters_modules", [])
+    modules = get_settings().row_filters_modules
     if not modules:
         return
     if isinstance(modules, str):
@@ -120,7 +121,7 @@ def get_row_filter_registry() -> RowFilterRegistry:
 
     reg = RowFilterRegistry(
         handlers={},
-        cache=TTLCache(maxsize=getattr(settings, "row_filters_cache_maxsize", 10_000)),
+        cache=TTLCache(maxsize=get_settings().row_filters_cache_maxsize),
     )
     # built-ins
     reg.register(DirectUserMatchHandler())
@@ -128,8 +129,19 @@ def get_row_filter_registry() -> RowFilterRegistry:
     reg.register(TablePointerHandler())
     reg.register(RecRegistryHandler())
 
-    # optional plugin imports
+    # Assign before loading external modules so they can call
+    # get_row_filter_registry() to register their own handlers.
+    _registry = reg
+
     _load_modules()
 
-    _registry = reg
+    # Entry-point discovered handlers (external packages)
+    for ep in entry_points(group="celine.dataset.row_filters"):
+        try:
+            handler_cls = ep.load()
+            reg.register(handler_cls())
+            logger.info("Loaded entry-point row filter: %s", ep.name)
+        except Exception:
+            logger.exception("Failed to load entry-point row filter: %s", ep.name)
+
     return reg

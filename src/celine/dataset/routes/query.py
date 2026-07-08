@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 from celine.dataset.db.engine import get_session, get_datasets_session
 from celine.dataset.schemas.dataset_query import DatasetQueryModel, DatasetQueryResult
 from celine.dataset.security.auth import get_optional_user
@@ -34,7 +34,7 @@ async def query_post(
     edc_bpn: Optional[str] = Header(default=None),
 ):
     edr_context: Optional[EDRRequestContext] = None
-    if settings.edr_enabled and edc_contract_agreement_id:
+    if get_settings().edr_enabled and edc_contract_agreement_id:
         edr_context = EDRRequestContext(
             agreement_id=edc_contract_agreement_id,
             consumer_id=edc_bpn or "",

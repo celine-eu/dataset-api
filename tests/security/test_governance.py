@@ -1,40 +1,53 @@
 import pytest
 from fastapi import HTTPException
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 from celine.dataset.security import governance as gov
 from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 
 
 @pytest.fixture(autouse=True)
 def enable_opa_for_governance_tests():
-    old = settings.policies_check_enabled
-    settings.policies_check_enabled = True
+    s = get_settings()
+    old = s.policies_check_enabled
+    s.policies_check_enabled = True
     yield
-    settings.policies_check_enabled = old
-
-
-# ----------------------------------------------------------------------
-# Helpers
-# ----------------------------------------------------------------------
-
-
-class DummyOPAClient:
-    def __init__(self, result: bool):
-        self._result = result
-
-    async def evaluate(self, dataset, user):
-        return self._result
+    s.policies_check_enabled = old
 
 
 @pytest.fixture(autouse=True)
-def reset_opa_cache():
-    """
-    Ensure OPA singleton cache does not leak between tests.
-    """
-    gov._opa_client = None
+def reset_policy_engine():
+    gov._policy_engine = None
     yield
-    gov._opa_client = None
+    gov._policy_engine = None
+
+
+class DummyPolicyEngine:
+    """Stub that mimics CachedPolicyEngine.evaluate_decision."""
+
+    def __init__(self, *, allowed: bool):
+        self._allowed = allowed
+
+    def evaluate_decision(self, policy_package, policy_input, **kw):
+        from celine.sdk.policies.engine import Decision
+
+        return Decision(
+            allowed=self._allowed,
+            reason="test" if self._allowed else "denied by test",
+            policy="test_policy",
+            cached=False,
+        )
+
+    @property
+    def policy_count(self):
+        return 1
+
+    def get_packages(self):
+        return ["celine.dataset"]
+
+    @property
+    def cache_stats(self):
+        return {}
 
 
 # ----------------------------------------------------------------------
@@ -43,9 +56,6 @@ def reset_opa_cache():
 
 
 def test_disclosure_matrix_is_exhaustive():
-    """
-    Ensure every DisclosureLevel has a policy.
-    """
     for level in AccessLevel:
         assert level in ACCESS_LEVEL_MATRIX
 
@@ -57,12 +67,9 @@ def test_disclosure_matrix_is_exhaustive():
 
 @pytest.mark.asyncio
 async def test_open_allows_anonymous(anon_user):
-    entry = gov_entry = None
     from tests.security.conftest import make_entry
 
     entry = make_entry(disclosure=AccessLevel.OPEN)
-
-    # should not raise
     await gov.enforce_dataset_access(entry=entry, user=anon_user)
 
 
@@ -87,8 +94,8 @@ async def test_internal_requires_opa_allow(monkeypatch, user):
 
     monkeypatch.setattr(
         gov,
-        "_get_opa_client",
-        lambda: DummyOPAClient(result=True),
+        "_get_policy_engine",
+        lambda: DummyPolicyEngine(allowed=True),
     )
 
     await gov.enforce_dataset_access(entry=entry, user=user)
@@ -102,8 +109,8 @@ async def test_internal_denied_by_opa(monkeypatch, user):
 
     monkeypatch.setattr(
         gov,
-        "_get_opa_client",
-        lambda: DummyOPAClient(result=False),
+        "_get_policy_engine",
+        lambda: DummyPolicyEngine(allowed=False),
     )
 
     with pytest.raises(HTTPException) as exc:
@@ -140,8 +147,8 @@ async def test_restricted_requires_opa_allow(monkeypatch, admin_user):
 
     monkeypatch.setattr(
         gov,
-        "_get_opa_client",
-        lambda: DummyOPAClient(result=True),
+        "_get_policy_engine",
+        lambda: DummyPolicyEngine(allowed=True),
     )
 
     await gov.enforce_dataset_access(entry=entry, user=admin_user)
@@ -155,8 +162,8 @@ async def test_restricted_denied_by_opa(monkeypatch, admin_user):
 
     monkeypatch.setattr(
         gov,
-        "_get_opa_client",
-        lambda: DummyOPAClient(result=False),
+        "_get_policy_engine",
+        lambda: DummyPolicyEngine(allowed=False),
     )
 
     with pytest.raises(HTTPException) as exc:

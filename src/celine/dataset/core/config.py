@@ -1,14 +1,18 @@
 # dataset/core/config.py
 from __future__ import annotations
 
-from functools import lru_cache
+import logging
+import os
 from pathlib import Path
 from typing import Literal, Optional
 
+import yaml
 from pydantic import AnyUrl, HttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from celine.sdk.settings.models import OidcSettings
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -33,8 +37,6 @@ class Settings(BaseSettings):
         "postgresql+psycopg://postgres:securepassword123@host.docker.internal:15432/datasets"
     )
 
-    """Connection URL for the datasets DB (tables exposed via the API).
-    Defaults to database_url when not set."""
     catalogue_schema: str = "dataset_api"
 
     marquez_url: Optional[AnyUrl] = None
@@ -132,4 +134,61 @@ class Settings(BaseSettings):
     )
 
 
-settings = Settings()
+# ---------------------------------------------------------------------------
+# Lazy settings management
+# ---------------------------------------------------------------------------
+
+_settings_override: Settings | None = None
+_settings_instance: Settings | None = None
+
+
+def _load_yaml_config() -> dict:
+    config_path = os.environ.get("DATASET_CONFIG")
+    if config_path is not None:
+        path = Path(config_path)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"DATASET_CONFIG points to missing file: {config_path}"
+            )
+    else:
+        path = Path("./config.yaml")
+        if not path.exists():
+            return {}
+
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+
+    if not isinstance(data, dict):
+        raise ValueError(f"Config file must be a YAML mapping, got {type(data).__name__}")
+
+    logger.info("Loaded config from %s", path)
+    return data
+
+
+def get_settings() -> Settings:
+    global _settings_instance
+    if _settings_override is not None:
+        return _settings_override
+    if _settings_instance is not None:
+        return _settings_instance
+    yaml_data = _load_yaml_config()
+    if yaml_data:
+        # env vars take precedence over YAML values
+        filtered = {
+            k: v for k, v in yaml_data.items() if k.upper() not in os.environ
+        }
+        _settings_instance = Settings(**filtered)
+    else:
+        _settings_instance = Settings()
+    return _settings_instance
+
+
+def configure(settings_override: Settings) -> None:
+    global _settings_override
+    _settings_override = settings_override
+
+
+def reset_settings() -> None:
+    global _settings_override, _settings_instance
+    _settings_override = None
+    _settings_instance = None

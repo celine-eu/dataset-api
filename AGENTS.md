@@ -77,3 +77,59 @@ Local PostgreSQL expected at `:15432` (credentials `postgres:securepassword123`)
 | `api/catalogue/dcat_formatter.py` | DCAT-AP 3.0 serialization |
 | `cli/` | CLI commands (export/import) |
 | `routes/` | FastAPI routers (auto-discovered) |
+
+
+## Commands
+
+```bash
+task setup              # uv sync
+task run                # uvicorn on :8001 with reload
+task debug              # same with debugpy on :48001
+task test               # pytest (all tests)
+task test -- -k "name"  # run a single test by name
+task alembic:migrate    # alembic upgrade head
+task alembic:sync-model # autogenerate new revision
+task release            # semantic-release + push tags
+```
+
+CLI (installed as `dataset-cli`):
+```bash
+uv run dataset-cli export governance "path/to/governance.yaml" -o ./data/governance
+uv run dataset-cli import catalogue --input "./data/governance/*.yaml" --api-url http://localhost:8001
+```
+
+## Prerequisites
+
+- Python >= 3.12, `uv` as package manager
+- PostgreSQL at `:15432` with credentials `postgres:securepassword123` (local dev default)
+- PostGIS extension (tests create it via `CREATE EXTENSION IF NOT EXISTS postgis`)
+
+## Test setup
+
+Tests use `pytest-asyncio` with `asyncio_mode = auto` (in `pytest.ini`). The test fixtures in `tests/conftest.py` create a fresh schema per test run via `CREATE SCHEMA` / `DROP SCHEMA CASCADE`, and override the catalogue DB session via `app.dependency_overrides[get_session]`. Tests that need the datasets DB session must also override `get_datasets_session`.
+
+SQL parser tests under `tests/api/dataset_query/sql_parser/` are self-contained (no DB needed) and cover security: injection, fuzzing, jailbreak, resource abuse.
+
+## Key architectural details
+
+**Settings singleton:** `settings = Settings()` in `core/config.py` is instantiated at import time (module-level). Every module imports it directly. There is no `get_settings()` function — the unused `lru_cache` import is vestigial.
+
+**Route auto-discovery:** `routes/__init__.py` globs `*.py` from its own directory and imports modules that expose a `router` variable. External packages cannot contribute routes through this mechanism.
+
+**Row filter plugin loading:** `ROW_FILTERS_MODULES` setting triggers `importlib.import_module()` in `row_filters/registry.py`, but the registry is a local variable at call time — imported modules have no reliable way to access it. This is a known sequencing issue.
+
+**Two-database pattern:** `get_session()` yields the catalogue DB (metadata, `DatasetEntry` records). `get_datasets_session()` yields the datasets DB (actual data tables). Both are in `db/engine.py` as lazy singletons, but the URLs are resolved at import time from the settings singleton.
+
+**Namespace package:** `celine/` has no `__init__.py` (implicit namespace, shared with `celine-sdk`). `celine/dataset/` has an empty `__init__.py` (regular package — a sibling distribution like `celine.dataset.foo` would conflict).
+
+## SQL parser allowlist
+
+When adding support for new SQL constructs, add the `sqlglot.exp.*` type to `ALLOWED_EXPRESSIONS` in `api/dataset_query/parser.py`. For new SQL functions, add the lowercase name to `ALLOWED_FUNCTIONS`.
+
+## Governance YAML structure
+
+Dataset entries follow the format in `data/governance/*.yaml`. Key fields: `backend_type` (validated: `postgres`, `s3`, `fs`), `backend_config.table` (physical table for postgres), `expose` (queryable via API), `access_level` (`open`/`internal`/`restricted`/`secret`), `lineage.facets.governance.rowFilters` (list of `{handler, args}` for row-level filtering).
+
+## OPA policies
+
+Policies in `policies/celine/dataset.rego` are evaluated in-process via `celine.sdk.policies.CachedPolicyEngine` (no external OPA server). The policy evaluates `subject` (user/service/anonymous), `resource.attributes.access_level`, and `action.name` (read/write/admin).

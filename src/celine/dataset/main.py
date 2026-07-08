@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import Settings, configure, get_settings
 from celine.dataset.api.healthcheck import is_healthly
 from celine.dataset.core.logging import setup_logging
 from celine.dataset.routes import register_routes
@@ -23,7 +23,8 @@ async def lifespan(app: FastAPI):
     """
     Lifespan manager.
     """
-    logger.info("Starting %s (%s mode)", settings.app_name, settings.env)
+    s = get_settings()
+    logger.info("Starting %s (%s mode)", s.app_name, s.env)
 
     failed = await is_healthly()
 
@@ -31,14 +32,14 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("System failed health check at startup")
 
     try:
-        app.state.owners = load_owners_yaml(settings.owners_yaml_path)
+        app.state.owners = load_owners_yaml(s.owners_yaml_path)
         logger.info(
-            "Loaded %d owner(s) from %s", len(app.state.owners), settings.owners_yaml_path
+            "Loaded %d owner(s) from %s", len(app.state.owners), s.owners_yaml_path
         )
     except FileNotFoundError:
         logger.warning(
             "owners.yaml not found at %s — publisher enrichment disabled",
-            settings.owners_yaml_path,
+            s.owners_yaml_path,
         )
         app.state.owners = None
     except Exception as exc:
@@ -47,20 +48,30 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    logger.info("Shutting down %s", settings.app_name)
+    logger.info("Shutting down %s", s.app_name)
 
 
-def create_app(use_lifespan: bool = True) -> FastAPI:
+def create_app(
+    *,
+    use_lifespan: bool = True,
+    extra_routers: list | None = None,
+    settings_override: Settings | None = None,
+    lifespan_override=None,
+) -> FastAPI:
+    if settings_override is not None:
+        configure(settings_override)
+
+    active_lifespan = lifespan_override if lifespan_override is not None else lifespan
 
     app = FastAPI(
-        title=settings.app_name,
+        title=get_settings().app_name,
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
-        lifespan=lifespan if use_lifespan else None,
+        lifespan=active_lifespan if use_lifespan else None,
     )
 
-    register_routes(app)
+    register_routes(app, extra_routers=extra_routers)
 
     return app
 

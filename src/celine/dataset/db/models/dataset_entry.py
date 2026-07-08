@@ -6,14 +6,14 @@ from typing import Any, Dict, Optional
 from sqlalchemy import Boolean, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 
 Base = declarative_base()
 
 
 class DatasetEntry(Base):
     __tablename__ = "datasets_entries"
-    __table_args__ = {"schema": settings.catalogue_schema}
+    __table_args__ = {"schema": get_settings().catalogue_schema}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     dataset_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)

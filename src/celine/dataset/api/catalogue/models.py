@@ -6,10 +6,10 @@ from typing import Optional, Dict, Any
 from sqlalchemy import Boolean, Integer, JSON, String, Text, MetaData
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 
 
-Base = declarative_base(metadata=MetaData(schema=settings.catalogue_schema))
+Base = declarative_base(metadata=MetaData(schema=get_settings().catalogue_schema))
 
 
 class DatasetEntry(Base):

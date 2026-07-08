@@ -1,7 +1,7 @@
 # dataset_api/core/utils.py
 from __future__ import annotations
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 
 
 def url_str(url) -> str:
@@ -9,5 +9,5 @@ def url_str(url) -> str:
 
 
 def get_dataset_uri(dataset_id: str) -> str:
-    base = str(settings.dataset_base_uri).rstrip("/")
+    base = str(get_settings().dataset_base_uri).rstrip("/")
     return f"{base}/{dataset_id}"

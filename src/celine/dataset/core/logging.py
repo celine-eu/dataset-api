@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 
 
 def setup_logging() -> None:
@@ -12,7 +12,7 @@ def setup_logging() -> None:
     - noisy libraries reduced
     """
 
-    app_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    app_level = getattr(logging, get_settings().log_level.upper(), logging.INFO)
 
     handler = logging.StreamHandler(sys.stdout)
     formatter = logging.Formatter(

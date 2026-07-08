@@ -13,6 +13,12 @@ class BackendConfig(BaseModel):
     public_url: Optional[str] = None
     size_bytes: Optional[int] = None
 
+    # FIWARE / QuantumLeap fields (used when backend_type is quantumleap or context_broker)
+    base_url: Optional[str] = None
+    fiware_service: Optional[str] = None
+    fiware_service_path: Optional[str] = None
+    entity_type: Optional[str] = None
+
 
 class ContactPoint(BaseModel):
     fn: Optional[str] = None
@@ -80,7 +86,7 @@ class DatasetEntryModel(BaseModel):
 
     @field_validator("backend_type")
     def check_backend_type(cls, v):
-        allowed = {"postgres", "s3", "fs"}
+        allowed = {"postgres", "s3", "fs", "quantumleap", "context_broker"}
         if v not in allowed:
             raise ValueError(f"backend_type must be one of {allowed}, got '{v}'")
         return v

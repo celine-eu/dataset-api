@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.security.models import AuthenticatedUser
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 from celine.sdk.auth.jwt import extract_groups, is_service_account
 
 # Import from celine-sdk (in-process policies)
@@ -48,22 +48,22 @@ def _get_policy_engine() -> Optional[CachedPolicyEngine]:
     """
     global _policy_engine
 
-    if not settings.policies_check_enabled:
+    if not get_settings().policies_check_enabled:
         return None
 
     if _policy_engine is None:
         try:
             # Create base engine
             engine = PolicyEngine(
-                policies_dir=settings.policies_dir,
-                data_dir=settings.policies_data_dir,
+                policies_dir=get_settings().policies_dir,
+                data_dir=get_settings().policies_data_dir,
             )
             engine.load()
 
             # Wrap with cache
             _policy_engine = CachedPolicyEngine(
                 engine=engine,
-                enabled=settings.policies_cache_enabled,
+                enabled=get_settings().policies_cache_enabled,
             )
 
             logger.info(
@@ -158,7 +158,7 @@ async def enforce_dataset_access(
         engine = _get_policy_engine()
 
         # If policies are disabled, log warning and allow
-        if not settings.policies_check_enabled:
+        if not get_settings().policies_check_enabled:
             logger.warning(
                 "Policies disabled, allowing access to dataset %s",
                 entry.dataset_id,
@@ -216,7 +216,7 @@ async def enforce_dataset_access(
         # Evaluate policy
         try:
             decision = engine.evaluate_decision(
-                policy_package=settings.policies_package,
+                policy_package=get_settings().policies_package,
                 policy_input=policy_input,
             )
 
@@ -261,6 +261,8 @@ async def enforce_dataset_access(
                     },
                 )
 
+        except HTTPException:
+            raise
         except PolicyEngineError as e:
             logger.error(
                 "Policy evaluation failed for dataset %s: %s",

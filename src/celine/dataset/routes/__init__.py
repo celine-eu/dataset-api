@@ -1,4 +1,5 @@
 from importlib import import_module
+from importlib.metadata import entry_points
 from pathlib import Path
 
 from fastapi.staticfiles import StaticFiles
@@ -10,7 +11,7 @@ from fastapi import FastAPI
 logger = logging.getLogger(__name__)
 
 
-def register_routes(app: FastAPI):
+def register_routes(app: FastAPI, *, extra_routers: list | None = None):
 
     # register views router before APIs
     static_path = (Path(__file__).resolve().parent.parent / "static").absolute()
@@ -58,3 +59,16 @@ def register_routes(app: FastAPI):
 
     for route in routes:
         app.include_router(route["router"], tags=route["tags"])
+
+    # Entry-point discovered routes (external packages)
+    for ep in entry_points(group="celine.dataset.routes"):
+        try:
+            ep_router = ep.load()
+            app.include_router(ep_router)
+            logger.info("Loaded entry-point route: %s", ep.name)
+        except Exception:
+            logger.exception("Failed to load entry-point route: %s", ep.name)
+
+    if extra_routers:
+        for router in extra_routers:
+            app.include_router(router)

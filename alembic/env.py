@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(env_path)
 
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 from celine.dataset.api.catalogue.models import Base
 
 
@@ -29,7 +29,7 @@ target_metadata = Base.metadata
 # Restrict Alembic to *your* schema only
 # ────────────────────────────────────────────
 def include_object(object, name, type_, reflected, compare_to):
-    schema = settings.catalogue_schema
+    schema = get_settings().catalogue_schema
 
     if type_ == "table":
         model_schema = object.schema or schema
@@ -40,7 +40,7 @@ def include_object(object, name, type_, reflected, compare_to):
 
 
 def include_name(name, type_, parent_names):
-    schema = settings.catalogue_schema
+    schema = get_settings().catalogue_schema
     if type_ == "schema":
         # Tell Alembic to include ONLY your schema and not 'public'
         return name == schema
@@ -53,7 +53,7 @@ def include_name(name, type_, parent_names):
 
 
 def run_migrations_offline() -> None:
-    url = settings.database_url.replace("postgresql+psycopg", "postgresql+asyncpg")
+    url = get_settings().database_url.replace("postgresql+psycopg", "postgresql+asyncpg")
 
     context.configure(
         url=url,
@@ -63,7 +63,7 @@ def run_migrations_offline() -> None:
         include_name=include_name,
         compare_server_default=True,
         compare_type=True,
-        version_table_schema=settings.catalogue_schema,
+        version_table_schema=get_settings().catalogue_schema,
         include_schemas=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -84,7 +84,7 @@ def do_run_migrations(connection):
         compare_server_default=True,
         compare_type=True,
         include_schemas=True,
-        version_table_schema=settings.catalogue_schema,
+        version_table_schema=get_settings().catalogue_schema,
     )
     context.run_migrations()
 
@@ -93,7 +93,7 @@ def do_run_migrations(connection):
 # ONLINE migrations (async)
 # ────────────────────────────────────────────
 async def run_migrations_online() -> None:
-    url = settings.database_url.replace("postgresql+psycopg", "postgresql+asyncpg")
+    url = get_settings().database_url.replace("postgresql+psycopg", "postgresql+asyncpg")
 
     engine = create_async_engine(
         url,
@@ -103,7 +103,7 @@ async def run_migrations_online() -> None:
 
     async with engine.begin() as conn:
         await conn.execute(
-            text(f'CREATE SCHEMA IF NOT EXISTS "{settings.catalogue_schema}"')
+            text(f'CREATE SCHEMA IF NOT EXISTS "{get_settings().catalogue_schema}"')
         )
         await conn.run_sync(do_run_migrations)
 

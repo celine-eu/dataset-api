@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlglot import exp
 
 from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 from celine.dataset.security.models import AuthenticatedUser
 
 from celine.sdk.auth.jwt import is_service_account
@@ -37,7 +37,7 @@ class RecRegistryHandler:
             )
             return RowFilterPlan(table=table, kind="predicate", predicate_template=None)
 
-        base_url = args.get("url") or settings.rec_registry_url
+        base_url = args.get("url") or get_settings().rec_registry_url
         if not isinstance(base_url, str) or not base_url:
             raise ValueError("rec_registry requires a base_url")
 

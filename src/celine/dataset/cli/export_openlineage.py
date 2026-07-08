@@ -10,7 +10,7 @@ import typer
 import yaml
 
 from celine.dataset.cli.utils import resolve_namespaces, setup_cli_logging
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +180,7 @@ def export_openlineage_cmd(
 ):
     setup_cli_logging(verbose)
 
-    base_url = str(marquez_url or settings.marquez_url).rstrip("/")
+    base_url = str(marquez_url or get_settings().marquez_url).rstrip("/")
     if not base_url:
         logger.error("Marquez URL not configured.")
         raise typer.Exit(1)

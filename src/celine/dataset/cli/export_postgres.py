@@ -20,7 +20,7 @@ from sqlalchemy import MetaData, create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
 from celine.dataset.cli.utils import setup_cli_logging, write_yaml_file
-from celine.dataset.core.config import settings
+from celine.dataset.core.config import get_settings
 
 # Suppress SQLAlchemy warnings for unrecognized types (e.g., PostGIS geography/geometry)
 warnings.filterwarnings(
@@ -472,10 +472,10 @@ def export_postgres_cmd(
         help="Namespace prefix for dataset IDs (e.g., 'gold', 'silver', 'raw').",
     ),
     database_url: Optional[str] = typer.Option(
-        settings.database_url,
+        None,
         "--database-url",
         envvar="DATABASE_URL",
-        help="PostgreSQL connection URL. Defaults to settings.database_url.",
+        help="PostgreSQL connection URL. Defaults to configured database_url.",
     ),
     include_views: bool = typer.Option(
         True, "--views/--no-views", help="Include views in export."
@@ -536,7 +536,7 @@ def export_postgres_cmd(
     setup_cli_logging(verbose)
 
     # Resolve database URL
-    db_url = database_url or settings.database_url
+    db_url = database_url or get_settings().database_url
     if not db_url:
         typer.echo("Error: No database URL configured.", err=True)
         raise typer.Exit(code=1)

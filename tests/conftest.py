@@ -4,7 +4,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from celine.dataset.core.config import Settings, settings
+from celine.dataset.core.config import Settings, get_settings
 from celine.dataset.db.engine import get_session
 from celine.dataset.db.models.dataset_entry import Base
 from celine.dataset.main import create_app
@@ -12,23 +12,23 @@ from celine.dataset.main import create_app
 
 @pytest.fixture()
 async def test_engine():
-    url = settings.database_url.replace("postgresql+psycopg", "postgresql+asyncpg")
+    url = get_settings().database_url.replace("postgresql+psycopg", "postgresql+asyncpg")
 
     engine = create_async_engine(url, future=True)
 
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         await conn.execute(
-            text(f"DROP SCHEMA IF EXISTS {settings.catalogue_schema} CASCADE")
+            text(f"DROP SCHEMA IF EXISTS {get_settings().catalogue_schema} CASCADE")
         )
-        await conn.execute(text(f"CREATE SCHEMA {settings.catalogue_schema}"))
+        await conn.execute(text(f"CREATE SCHEMA {get_settings().catalogue_schema}"))
         await conn.run_sync(Base.metadata.create_all)
 
     yield engine
 
     async with engine.begin() as conn:
         await conn.execute(
-            text(f"DROP SCHEMA IF EXISTS {settings.catalogue_schema} CASCADE")
+            text(f"DROP SCHEMA IF EXISTS {get_settings().catalogue_schema} CASCADE")
         )
 
     await engine.dispose()
