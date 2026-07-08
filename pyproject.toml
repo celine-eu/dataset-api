@@ -22,7 +22,7 @@ dependencies = [
     "sqlglot>=28.1.0",
     "sqlmodel>=0.0.27",
     "typer>=0.20.0",
-    "uvicorn[standard]>=0.38.0",
+    "uvicorn[standard]>=0.46.0",
 ]
 
 [tool.uv]  # optional, helps uv handle locking
