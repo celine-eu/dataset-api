@@ -64,7 +64,17 @@ class HttpInListHandler:
         user: AuthenticatedUser,
         args: dict[str, Any],
         request_context: dict[str, Any] | None = None,
+        principals: list[str] | None = None,
     ) -> RowFilterPlan:
+        if principals:
+            # This handler resolves the *caller's* rows and has no notion of
+            # resolving someone else's. Denying is the only safe answer:
+            # ignoring `principals` would silently fall through to the caller's
+            # own filter — and in a delegated request the caller is a service
+            # identity, which is exactly the case that returns everything.
+            raise NotImplementedError(
+                "http_in_list does not support delegated principals"
+            )
         column = args.get("column")
         url = args.get("url")
         if not isinstance(column, str) or not column:

@@ -164,12 +164,26 @@ async def execute_query(
         # EDR path — request came through the EDC data plane
         # ------------------------------------------------------------------
         if edr_context is not None:
-            # EDC already validated the JWT; we enforce agreement + consent.
+            # The filtered column comes from the **same resolution the normal
+            # path uses**. Reading `governance.userFilterColumn` directly — as
+            # this branch used to — finds nothing on a dataset declared the
+            # canonical way (`row_filters`, which is what
+            # `celine-utils/schema/governance.schema.json` defines and what every
+            # governance.yaml in demo3 and celine-dev actually uses). It then
+            # passed `user_filter_column=None` to the PEP, which reads that as
+            # "this dataset needs no row filtering" and answers
+            # `subject_ids=None`, so **no filter was injected and every row was
+            # served**.
+            #
+            # `get_row_filter_specs` understands both spellings and migrates the
+            # legacy one, so the two paths can no longer disagree about whether a
+            # dataset is row-filtered.
             user_filter_col: Optional[str] = None
-            if ds.lineage and ds.lineage.get("facets", {}).get("governance", {}).get(
-                "userFilterColumn"
-            ):
-                user_filter_col = ds.lineage["facets"]["governance"]["userFilterColumn"]
+            for spec in get_row_filter_specs(ds):
+                column = (spec.get("args") or {}).get("column")
+                if isinstance(column, str) and column:
+                    user_filter_col = column
+                    break
 
             auth_result = await edr_pep_check(
                 agreement_id=edr_context.agreement_id,

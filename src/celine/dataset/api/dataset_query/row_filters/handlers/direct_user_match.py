@@ -24,10 +24,26 @@ class DirectUserMatchHandler:
         user: AuthenticatedUser,
         args: dict[str, Any],
         request_context: dict[str, Any] | None = None,
+        principals: list[str] | None = None,
     ) -> RowFilterPlan:
         col = args.get("column")
         if not isinstance(col, str) or not col:
             raise ValueError("direct_user_match requires args.column")
+
+        if principals:
+            # Delegated: the rows belong to these people, not to the caller.
+            # Same column, same comparison — only *whose* value changes, which
+            # is the whole difference between the two modes.
+            predicate = exp.In(
+                this=exp.Column(this=exp.Identifier(this=col, quoted=False)),
+                expressions=[exp.Literal.string(p) for p in principals],
+            )
+            return RowFilterPlan(
+                table=table,
+                kind="predicate",
+                predicate_template=predicate,
+                meta={"items": len(principals)},
+            )
 
         predicate = exp.EQ(
             this=exp.Column(this=exp.Identifier(this=col, quoted=False)),

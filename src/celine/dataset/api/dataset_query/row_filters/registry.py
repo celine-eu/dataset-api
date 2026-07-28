@@ -19,6 +19,17 @@ class RowFilterHandler(Protocol):
     """Handler contract.
 
     A handler resolves a governance spec into a RowFilterPlan for a given physical table.
+
+    **`principals` is who the rows must belong to.** When it is ``None`` the
+    handler resolves the caller's own data, which is the self-service case and
+    what every handler did before delegation existed. When it carries a list,
+    the rows belong to *those* people instead — a dataspace query is authorised
+    for the subjects who consented, never for the caller, and the caller is a
+    service identity that owns none of it.
+
+    The two cases differ only in *whose* data; how a person maps to values in a
+    column is the handler's business either way, which is why this is one
+    protocol and not two.
     """
 
     name: str
@@ -30,6 +41,7 @@ class RowFilterHandler(Protocol):
         user: AuthenticatedUser,
         args: dict[str, Any],
         request_context: dict[str, Any] | None = None,
+        principals: list[str] | None = None,
     ) -> RowFilterPlan: ...
 
 
@@ -56,15 +68,22 @@ class RowFilterRegistry:
         user: AuthenticatedUser,
         args: dict[str, Any],
         request_context: dict[str, Any] | None = None,
+        principals: list[str] | None = None,
+        ttl_override: int | None = None,
     ) -> RowFilterPlan:
         handler = self.get(handler_name)
         if handler is None:
             raise KeyError(handler_name)
 
-        # cache key must include relevant identity + args
+        # The cache key must include **whose** data the plan is for, not just
+        # who asked. In delegation the caller is one service account for every
+        # agreement, so keying on `sub` alone made two different consented
+        # subject sets share a plan — and the second one to ask would have been
+        # served the first one's rows.
         args_key = str(sorted(args.items()))
         sub = user.sub
-        key = f"{handler_name}|{table}|{sub}|{args_key}"
+        principals_key = ",".join(sorted(principals)) if principals else "self"
+        key = f"{handler_name}|{table}|{sub}|{principals_key}|{args_key}"
 
         cached = self.cache.get(key)
         if cached is not None:
@@ -75,15 +94,24 @@ class RowFilterRegistry:
             user=user,
             args=args,
             request_context=request_context,
+            principals=principals,
         )
 
-        # TTL: token lifetime if available, else default
-        ttl = token_ttl_seconds(user)
+        # TTL. In delegation the control plane supplies it and it wins, because
+        # the token cannot: an EDR token carries **no `exp`** (EDC 0.16 mints
+        # `jti/aud/iss/sub/iat` and nothing else), so deriving a lifetime from it
+        # would let a plan outlive the consent that justified it. That window is
+        # how long a revoked agreement keeps yielding rows, so it belongs to
+        # whoever knows about the revocation.
         default_ttl = get_settings().row_filters_cache_ttl
-        if ttl is None:
-            ttl = default_ttl
+        if ttl_override is not None:
+            ttl = max(0, min(ttl_override, default_ttl))
         else:
-            ttl = max(0, min(ttl, default_ttl))
+            ttl = token_ttl_seconds(user)
+            if ttl is None:
+                ttl = default_ttl
+            else:
+                ttl = max(0, min(ttl, default_ttl))
 
         self.cache.set(key, plan, ttl_seconds=int(ttl))
         return plan
