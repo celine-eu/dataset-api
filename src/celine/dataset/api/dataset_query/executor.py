@@ -22,7 +22,11 @@ from celine.dataset.security.governance import (
     enforce_dataset_access,
     resolve_datasets_for_tables,
 )
-from celine.dataset.security.edr import EDRRequestContext, authorize_dataplane
+from celine.dataset.security.edr import (
+    EDRRequestContext,
+    audit_query,
+    authorize_dataplane,
+)
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.api.dataset_query.parser import parse_sql_query
 from celine.dataset.api.dataset_query.row_filters import (
@@ -342,6 +346,18 @@ async def execute_query(
         items.append(row)
 
     logger.debug(f"SQL items={len(items)} total={total} offset={offset} limit={limit}")
+
+    if edr_context is not None:
+        # One record per dataset the query touched, after the rows are known —
+        # the count is part of the evidence.
+        for ds in datasets.values():
+            row_filter = edr_decision.row_filter_for(ds.dataset_id) or {}
+            await audit_query(
+                context=edr_context,
+                dataset_id=ds.dataset_id,
+                row_count=len(items),
+                subject_ids=row_filter.get("principals"),
+            )
 
     return DatasetQueryResult(
         items=items,

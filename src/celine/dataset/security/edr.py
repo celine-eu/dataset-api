@@ -212,3 +212,47 @@ async def _service_headers() -> dict[str, str]:
         client_secret=oidc.client_secret,
     )
     return {"Authorization": f"Bearer {(await provider.get_token()).access_token}"}
+
+
+async def audit_query(
+    *,
+    context: EDRRequestContext,
+    dataset_id: str,
+    row_count: int,
+    subject_ids: Optional[list[str]] = None,
+) -> None:
+    """Record the disclosure with ds, which turns it into a PROV-O event.
+
+    A dataspace hand-over that leaves no trace is the one thing this
+    architecture exists to prevent: the agreement, the consent and the purpose
+    are all recorded, and without this the *actual disclosure* is the only step
+    that is not.
+
+    Best-effort by design. Failing the query because the audit call failed
+    would deny data that is authorised, and the alternative — refusing to serve
+    unrecorded — belongs to a deployment that has decided disclosure without a
+    record is worse than no disclosure. Log loudly instead, so a silent gap is
+    visible in the logs rather than only in the provenance store.
+    """
+    base = _connector_base()
+    payload = {
+        "dataset_id": dataset_id,
+        "consumer_id": context.consumer_id,
+        "agreement_id": context.agreement_id,
+        "transfer_id": context.transfer_id,
+        "row_count": row_count,
+        "authorized_subject_ids": subject_ids,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                f"{base}/internal/audit/query",
+                json=payload,
+                headers=await _service_headers(),
+            )
+        response.raise_for_status()
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        logger.error(
+            "Disclosure of %s (%d rows) was NOT recorded with ds: %s",
+            dataset_id, row_count, exc,
+        )
