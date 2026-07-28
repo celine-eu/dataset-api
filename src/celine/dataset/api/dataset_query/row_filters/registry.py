@@ -81,7 +81,10 @@ class RowFilterRegistry:
         # subject sets share a plan — and the second one to ask would have been
         # served the first one's rows.
         args_key = str(sorted(args.items()))
-        sub = user.sub
+        # A delegated request has **no logged-in user** — the caller is a
+        # service identity and the data belongs to other people entirely — so
+        # the identity half of the key comes from the principals instead.
+        sub = user.sub if user is not None else "delegated"
         principals_key = ",".join(sorted(principals)) if principals else "self"
         key = f"{handler_name}|{table}|{sub}|{principals_key}|{args_key}"
 
@@ -107,7 +110,7 @@ class RowFilterRegistry:
         if ttl_override is not None:
             ttl = max(0, min(ttl_override, default_ttl))
         else:
-            ttl = token_ttl_seconds(user)
+            ttl = token_ttl_seconds(user) if user is not None else None
             if ttl is None:
                 ttl = default_ttl
             else:

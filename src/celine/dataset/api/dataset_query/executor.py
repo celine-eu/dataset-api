@@ -22,7 +22,7 @@ from celine.dataset.security.governance import (
     enforce_dataset_access,
     resolve_datasets_for_tables,
 )
-from celine.dataset.security.edr import EDRRequestContext, edr_pep_check
+from celine.dataset.security.edr import EDRRequestContext, authorize_dataplane
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.api.dataset_query.parser import parse_sql_query
 from celine.dataset.api.dataset_query.row_filters import (
@@ -141,6 +141,20 @@ async def execute_query(
 
     registry = get_row_filter_registry()
 
+    # One decision per request, not per dataset: the datasets are already
+    # resolved, and a join must be judged as a whole — ds answers `deny` if any
+    # of them is refused, so asking per table would let a partial answer through.
+    edr_decision = None
+    if edr_context is not None:
+        edr_decision = await authorize_dataplane(
+            context=edr_context,
+            dataset_ids=[d.dataset_id for d in datasets.values()],
+        )
+        if not edr_decision.allowed:
+            # ds's reason names the gate, never who holds the agreement, so it
+            # is safe to relay.
+            raise HTTPException(403, f"Refused by ds: {edr_decision.reason}")
+
     for ref_table, ds in datasets.items():
         if not ds.expose:
             logger.warning(f"Requested datasets {ds.dataset_id} is not exposed.")
@@ -164,59 +178,32 @@ async def execute_query(
         # EDR path — request came through the EDC data plane
         # ------------------------------------------------------------------
         if edr_context is not None:
-            # The filtered column comes from the **same resolution the normal
-            # path uses**. Reading `governance.userFilterColumn` directly — as
-            # this branch used to — finds nothing on a dataset declared the
-            # canonical way (`row_filters`, which is what
-            # `celine-utils/schema/governance.schema.json` defines and what every
-            # governance.yaml in demo3 and celine-dev actually uses). It then
-            # passed `user_filter_column=None` to the PEP, which reads that as
-            # "this dataset needs no row filtering" and answers
-            # `subject_ids=None`, so **no filter was injected and every row was
-            # served**.
-            #
-            # `get_row_filter_specs` understands both spellings and migrates the
-            # legacy one, so the two paths can no longer disagree about whether a
-            # dataset is row-filtered.
-            user_filter_col: Optional[str] = None
-            for spec in get_row_filter_specs(ds):
-                column = (spec.get("args") or {}).get("column")
-                if isinstance(column, str) and column:
-                    user_filter_col = column
-                    break
+            # ds returns the row filter **as governance declared it** — handler
+            # and args — plus the people the rows must belong to. The handler is
+            # what knows how a person maps to values in that column:
+            # `rec_registry` resolves members to devices, `direct_user_match`
+            # matches the subject directly. A decision reduced to a column would
+            # have forced this branch to assume one of them, which is how the
+            # previous version came to inject nothing at all.
+            row_filter = edr_decision.row_filter_for(ds.dataset_id)
+            if row_filter is None:
+                # Allowed with no filter: the dataset carries no data subject,
+                # and the agreement gated it.
+                continue
 
-            auth_result = await edr_pep_check(
-                agreement_id=edr_context.agreement_id,
-                consumer_id=edr_context.consumer_id,
-                dataset_id=ds.dataset_id,
-                user_filter_column=user_filter_col,
+            plan = await registry.resolve_with_cache(
+                handler_name=row_filter["handler"],
+                table=phy_table_name,
+                user=user,
+                args=row_filter.get("args") or {},
+                request_context={"agreement_id": edr_context.agreement_id},
+                principals=row_filter.get("principals") or [],
+                # The control plane's TTL wins: an EDR token has no `exp`, so a
+                # lifetime derived from it would let a plan outlive the consent
+                # that justified it.
+                ttl_override=edr_decision.cache_ttl,
             )
-
-            if auth_result.subject_ids is not None:
-                if not auth_result.subject_ids:
-                    # Consent required but no grants → deny all rows
-                    row_filter_plans.append(
-                        RowFilterPlan(table=phy_table_name, kind="deny")
-                    )
-                else:
-                    predicate = sqlglot_exp.In(
-                        this=sqlglot_exp.Column(
-                            this=sqlglot_exp.Identifier(
-                                this=user_filter_col, quoted=False
-                            )
-                        ),
-                        expressions=[
-                            sqlglot_exp.Literal.string(s)
-                            for s in auth_result.subject_ids
-                        ],
-                    )
-                    row_filter_plans.append(
-                        RowFilterPlan(
-                            table=phy_table_name,
-                            kind="predicate",
-                            predicate_template=predicate,
-                        )
-                    )
+            row_filter_plans.append(plan)
             continue  # skip normal auth + spec loop for this dataset
 
         # ------------------------------------------------------------------
