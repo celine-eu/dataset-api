@@ -22,7 +22,11 @@ from celine.dataset.security.governance import (
     enforce_dataset_access,
     resolve_datasets_for_tables,
 )
-from celine.dataset.security.edr import EDRRequestContext, authorize_dataplane
+from celine.dataset.security.edr import (
+    EDRRequestContext,
+    audit_query,
+    authorize_dataplane,
+)
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.api.dataset_query.parser import parse_sql_query
 from celine.dataset.api.dataset_query.row_filters import (
@@ -138,6 +142,9 @@ async def execute_query(
 
     tables_map: dict[str, str] = {}
     row_filter_plans = []
+    # EDR-path disclosures to record with ds after the query runs: (dataset_id,
+    # authorized principals). Collected here, emitted once the row count is known.
+    edr_disclosures: list[tuple[str, Optional[list[str]]]] = []
 
     registry = get_row_filter_registry()
 
@@ -188,7 +195,8 @@ async def execute_query(
             row_filter = edr_decision.row_filter_for(ds.dataset_id)
             if row_filter is None:
                 # Allowed with no filter: the dataset carries no data subject,
-                # and the agreement gated it.
+                # and the agreement gated it. Still a disclosure — record it.
+                edr_disclosures.append((ds.dataset_id, None))
                 continue
 
             plan = await registry.resolve_with_cache(
@@ -204,6 +212,7 @@ async def execute_query(
                 ttl_override=edr_decision.cache_ttl,
             )
             row_filter_plans.append(plan)
+            edr_disclosures.append((ds.dataset_id, row_filter.get("principals")))
             continue  # skip normal auth + spec loop for this dataset
 
         # ------------------------------------------------------------------
@@ -342,6 +351,22 @@ async def execute_query(
         items.append(row)
 
     logger.debug(f"SQL items={len(items)} total={total} offset={offset} limit={limit}")
+
+    # Record the disclosure with ds — one QueryExecuted per disclosed dataset.
+    # authorize_dataplane was the decision; this is the accountability record,
+    # and ds emits the provenance event nowhere else. `row_count` is the rows
+    # this response actually returned (the page), best-effort so a provenance
+    # outage never fails a query the control plane already authorised.
+    if edr_context is not None:
+        for disclosed_id, principals in edr_disclosures:
+            await audit_query(
+                dataset_id=disclosed_id,
+                consumer_id=edr_context.consumer_id,
+                agreement_id=edr_context.agreement_id,
+                transfer_id=edr_context.transfer_id,
+                row_count=len(items),
+                authorized_subject_ids=principals,
+            )
 
     return DatasetQueryResult(
         items=items,

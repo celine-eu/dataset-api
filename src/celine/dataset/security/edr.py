@@ -212,3 +212,54 @@ async def _service_headers() -> dict[str, str]:
         client_secret=oidc.client_secret,
     )
     return {"Authorization": f"Bearer {(await provider.get_token()).access_token}"}
+
+
+async def audit_query(
+    *,
+    dataset_id: str,
+    consumer_id: Optional[str],
+    agreement_id: Optional[str],
+    transfer_id: Optional[str],
+    row_count: int,
+    authorized_subject_ids: Optional[list[str]] = None,
+    subject_id: Optional[str] = None,
+) -> None:
+    """Record a `QueryExecuted` disclosure with ds — the accountability half.
+
+    `authorize_dataplane` is the *decision*; this is the *disclosure*. ds only
+    learns a query actually ran, and how many rows it returned, when the PEP says
+    so: the connector emits the `QueryExecuted` provenance event **solely** from
+    this call (`POST /internal/audit/query`). Without it a disclosure leaves no
+    accountability record — who received which rows under which agreement.
+
+    `authorized_subject_ids` are the row filter's `principals` — registry-native
+    identifiers, never DIDs (a DID is derived from an unsalted email hash, so it
+    is re-identifiable by anyone later holding the payload).
+
+    **Best-effort.** A failure here must not fail a query the control plane
+    already authorised and served, but it is logged: a silently dropped
+    disclosure is the worst outcome for an accountability record.
+    """
+    payload = {
+        "dataset_id": dataset_id,
+        "consumer_id": consumer_id,
+        "user_id": subject_id,
+        "subject_id": subject_id,
+        "agreement_id": agreement_id,
+        "transfer_id": transfer_id,
+        "row_count": row_count,
+        "authorized_subject_ids": authorized_subject_ids,
+    }
+    try:
+        base = _connector_base()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                f"{base}/internal/audit/query",
+                json=payload,
+                headers=await _service_headers(),
+            )
+        response.raise_for_status()
+    except (httpx.HTTPError, HTTPException) as exc:
+        logger.warning(
+            "QueryExecuted disclosure not recorded for %s: %s", dataset_id, exc
+        )
