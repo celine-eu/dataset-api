@@ -142,6 +142,9 @@ async def execute_query(
 
     tables_map: dict[str, str] = {}
     row_filter_plans = []
+    # EDR-path disclosures to record with ds after the query runs: (dataset_id,
+    # authorized principals). Collected here, emitted once the row count is known.
+    edr_disclosures: list[tuple[str, Optional[list[str]]]] = []
 
     registry = get_row_filter_registry()
 
@@ -192,7 +195,8 @@ async def execute_query(
             row_filter = edr_decision.row_filter_for(ds.dataset_id)
             if row_filter is None:
                 # Allowed with no filter: the dataset carries no data subject,
-                # and the agreement gated it.
+                # and the agreement gated it. Still a disclosure — record it.
+                edr_disclosures.append((ds.dataset_id, None))
                 continue
 
             plan = await registry.resolve_with_cache(
@@ -208,6 +212,7 @@ async def execute_query(
                 ttl_override=edr_decision.cache_ttl,
             )
             row_filter_plans.append(plan)
+            edr_disclosures.append((ds.dataset_id, row_filter.get("principals")))
             continue  # skip normal auth + spec loop for this dataset
 
         # ------------------------------------------------------------------
@@ -347,16 +352,20 @@ async def execute_query(
 
     logger.debug(f"SQL items={len(items)} total={total} offset={offset} limit={limit}")
 
+    # Record the disclosure with ds — one QueryExecuted per disclosed dataset.
+    # authorize_dataplane was the decision; this is the accountability record,
+    # and ds emits the provenance event nowhere else. `row_count` is the rows
+    # this response actually returned (the page), best-effort so a provenance
+    # outage never fails a query the control plane already authorised.
     if edr_context is not None:
-        # One record per dataset the query touched, after the rows are known —
-        # the count is part of the evidence.
-        for ds in datasets.values():
-            row_filter = edr_decision.row_filter_for(ds.dataset_id) or {}
+        for disclosed_id, principals in edr_disclosures:
             await audit_query(
-                context=edr_context,
-                dataset_id=ds.dataset_id,
+                dataset_id=disclosed_id,
+                consumer_id=edr_context.consumer_id,
+                agreement_id=edr_context.agreement_id,
+                transfer_id=edr_context.transfer_id,
                 row_count=len(items),
-                subject_ids=row_filter.get("principals"),
+                authorized_subject_ids=principals,
             )
 
     return DatasetQueryResult(

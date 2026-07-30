@@ -216,34 +216,42 @@ async def _service_headers() -> dict[str, str]:
 
 async def audit_query(
     *,
-    context: EDRRequestContext,
     dataset_id: str,
+    consumer_id: Optional[str],
+    agreement_id: Optional[str],
+    transfer_id: Optional[str],
     row_count: int,
-    subject_ids: Optional[list[str]] = None,
+    authorized_subject_ids: Optional[list[str]] = None,
+    subject_id: Optional[str] = None,
 ) -> None:
-    """Record the disclosure with ds, which turns it into a PROV-O event.
+    """Record a `QueryExecuted` disclosure with ds — the accountability half.
 
-    A dataspace hand-over that leaves no trace is the one thing this
-    architecture exists to prevent: the agreement, the consent and the purpose
-    are all recorded, and without this the *actual disclosure* is the only step
-    that is not.
+    `authorize_dataplane` is the *decision*; this is the *disclosure*. ds only
+    learns a query actually ran, and how many rows it returned, when the PEP says
+    so: the connector emits the `QueryExecuted` provenance event **solely** from
+    this call (`POST /internal/audit/query`). Without it a disclosure leaves no
+    accountability record — who received which rows under which agreement.
 
-    Best-effort by design. Failing the query because the audit call failed
-    would deny data that is authorised, and the alternative — refusing to serve
-    unrecorded — belongs to a deployment that has decided disclosure without a
-    record is worse than no disclosure. Log loudly instead, so a silent gap is
-    visible in the logs rather than only in the provenance store.
+    `authorized_subject_ids` are the row filter's `principals` — registry-native
+    identifiers, never DIDs (a DID is derived from an unsalted email hash, so it
+    is re-identifiable by anyone later holding the payload).
+
+    **Best-effort.** A failure here must not fail a query the control plane
+    already authorised and served, but it is logged: a silently dropped
+    disclosure is the worst outcome for an accountability record.
     """
-    base = _connector_base()
     payload = {
         "dataset_id": dataset_id,
-        "consumer_id": context.consumer_id,
-        "agreement_id": context.agreement_id,
-        "transfer_id": context.transfer_id,
+        "consumer_id": consumer_id,
+        "user_id": subject_id,
+        "subject_id": subject_id,
+        "agreement_id": agreement_id,
+        "transfer_id": transfer_id,
         "row_count": row_count,
-        "authorized_subject_ids": subject_ids,
+        "authorized_subject_ids": authorized_subject_ids,
     }
     try:
+        base = _connector_base()
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(
                 f"{base}/internal/audit/query",
@@ -251,8 +259,7 @@ async def audit_query(
                 headers=await _service_headers(),
             )
         response.raise_for_status()
-    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-        logger.error(
-            "Disclosure of %s (%d rows) was NOT recorded with ds: %s",
-            dataset_id, row_count, exc,
+    except (httpx.HTTPError, HTTPException) as exc:
+        logger.warning(
+            "QueryExecuted disclosure not recorded for %s: %s", dataset_id, exc
         )
