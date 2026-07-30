@@ -173,7 +173,7 @@ class TestCreateApp:
         from celine.dataset.main import create_app
 
         app = create_app(use_lifespan=False)
-        paths = {r.path for r in app.routes}
+        paths = set(app.openapi()["paths"])
         assert "/query" in paths or any("/query" in p for p in paths)
 
     def test_extra_routers_included(self):
@@ -186,7 +186,7 @@ class TestCreateApp:
             return "pong"
 
         app = create_app(use_lifespan=False, extra_routers=[extra])
-        paths = {r.path for r in app.routes}
+        paths = set(app.openapi()["paths"])
         assert "/ext/ping" in paths
 
     def test_settings_override(self):
@@ -227,7 +227,7 @@ class TestEntryPointRoutes:
         from celine.dataset.main import create_app
 
         app = create_app(use_lifespan=False)
-        paths = {r.path for r in app.routes}
+        paths = set(app.openapi()["paths"])
         assert "/query" in paths or any("/query" in str(p) for p in paths)
 
     def test_entry_point_routes_loaded(self):

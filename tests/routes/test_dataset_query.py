@@ -258,6 +258,7 @@ async def test_query_geospatial_filter(client, test_session):
             backend_type="postgres",
             backend_config={"table": table},
             expose=True,
+            access_level="open",
         )
         test_session.add(ds)
         await test_session.commit()
@@ -322,6 +323,7 @@ async def test_query_temporal_filter(client, test_session):
             backend_type="postgres",
             backend_config={"table": table},
             expose=True,
+            access_level="open",
         )
         test_session.add(ds)
         await test_session.commit()
@@ -380,6 +382,7 @@ async def test_query_complex_filter(client, test_session):
             backend_type="postgres",
             backend_config={"table": table},
             expose=True,
+            access_level="open",
         )
         test_session.add(ds)
         await test_session.commit()

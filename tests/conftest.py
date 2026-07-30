@@ -5,7 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from celine.dataset.core.config import Settings, get_settings
-from celine.dataset.db.engine import get_session
+from celine.dataset.db.engine import get_datasets_session, get_session
 from celine.dataset.db.models.dataset_entry import Base
 from celine.dataset.main import create_app
 
@@ -56,6 +56,10 @@ async def client(test_session):
 
     app = create_app(use_lifespan=False)
     app.dependency_overrides[get_session] = override_get_session
+    # Tests create their data tables inside the catalogue schema via `test_session`,
+    # so the datasets DB must resolve to that same session. Without this the query
+    # path falls through to the real datasets engine and the tables are not found.
+    app.dependency_overrides[get_datasets_session] = override_get_session
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
