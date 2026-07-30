@@ -1,5 +1,11 @@
 version: "3"
 
+includes:
+  local:
+    taskfile: taskfile.local.yaml
+    optional: true
+    flatten: true
+
 tasks:
   setup:
     desc: Setup environment
