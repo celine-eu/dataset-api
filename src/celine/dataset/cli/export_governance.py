@@ -232,11 +232,58 @@ def _merge_dataspace(
     )
 
 
+def _merge_dcat(
+    base: Optional[DcatConfig], override: Optional[DcatConfig]
+) -> Optional[DcatConfig]:
+    """Overlay a dataset's DCAT block onto the file's defaults, field by field.
+
+    Whole-object replacement was the previous behaviour and it loses metadata
+    silently. A dataset saying only
+
+        dcat:
+          conforms_to: http://www.w3.org/ns/sosa/
+
+    meant *"and no themes, no language, no spatial coverage, no periodicity"* —
+    every one of them dropped from the exported entry, with the defaults still
+    sitting in the file looking like they applied. `apps/owm/governance.yaml`
+    restates the full block on all thirteen of its datasets, which reads like
+    style and is the workaround.
+
+    **`exclude_unset`, not truthiness.** This mirrors `ds`
+    `libs/governance/resolver.py::_merge_models`, which is the reference
+    implementation — it already merged `dcat` this way, and copying its rule
+    rather than inventing a second one is the point: three parsers reading one
+    file format is how the `{handler, args, principals}` mismatch happened.
+
+    An `or`-based overlay cannot tell *"silent"* from *"said no"*. A dataset
+    writing `conforms_to: null` means **no model**, which is a different claim
+    from declaring nothing and must override an inherited default; under
+    truthiness it falls through and inherits. The same hole covers every
+    optional defaulting to `None` and every list defaulting to empty — an
+    overlay could turn a value on and never off.
+
+    Pydantic tracks this per instance in `model_fields_set`, populated by
+    `model_validate`, which is how `_parse_rule` builds every one of these, and
+    `model_validate` on the merged dict carries the set forward so a chain of
+    overlays keeps working.
+    """
+    if base is None:
+        return override
+    if override is None:
+        return base
+    return DcatConfig.model_validate(
+        {
+            **base.model_dump(exclude_unset=True),
+            **override.model_dump(exclude_unset=True),
+        }
+    )
+
+
 def _merge_rule(base: GovernanceRule, override: GovernanceRule) -> GovernanceRule:
     """Overlay non-None/non-empty fields from override onto base."""
     data = base.model_dump()
     for field, value in override.model_dump().items():
-        if field == "dataspace":
+        if field in ("dataspace", "dcat"):
             continue  # handled separately below
         if value is None:
             continue
@@ -245,6 +292,7 @@ def _merge_rule(base: GovernanceRule, override: GovernanceRule) -> GovernanceRul
         data[field] = value
     merged = GovernanceRule.model_validate(data)
     merged.dataspace = _merge_dataspace(base.dataspace, override.dataspace)
+    merged.dcat = _merge_dcat(base.dcat, override.dcat)
     return merged
 
 
