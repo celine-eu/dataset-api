@@ -26,7 +26,16 @@ class DatasetEntry(Base):
         JSON, nullable=True
     )
 
+    # What was declared in governance.yaml — a shared spec name, or a path
+    # relative to that file. Kept for provenance: it traces the binding back to
+    # the governance file that made it.
     ontology_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    # The resolved mapping spec itself, materialized at import. A `spec_file`
+    # lives in the pipelines checkout, which the API does not have at request
+    # time — so the content travels with the entry rather than the reference.
+    ontology_mapping: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
     schema_override_path: Mapped[Optional[str]] = mapped_column(
         String(1024), nullable=True
     )

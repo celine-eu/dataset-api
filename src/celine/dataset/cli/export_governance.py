@@ -18,6 +18,7 @@ import typer
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from celine.dataset.cli.ontology_resolver import OntologyResolutionError, resolve_mapping
 from celine.dataset.cli.utils import setup_cli_logging
 from celine.dataset.core.owners import OwnersRegistry, load_owners_yaml
 
@@ -53,6 +54,25 @@ class DcatConfig(BaseModel):
     temporal: Optional[TemporalCoverage] = None
 
 
+class OntologyConfig(BaseModel):
+    """Which mapping spec says what this dataset's columns mean.
+
+    Mirrors ``celine.utils.pipelines.governance.OntologyConfig`` — this repo
+    parses governance files with its own copy of the model, as it already does
+    for ``DcatConfig`` and ``DataspaceConfig``.
+
+    Exactly one of the two, enforced by the governance schema:
+
+    ``spec``       a shared mapping published in celine-ontologies
+    ``spec_file``  a path relative to the governance.yaml that declares it
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    spec: Optional[str] = None
+    spec_file: Optional[str] = None
+
+
 class DataspaceConfig(BaseModel):
     """Dataspace ODRL policy hints.
 
@@ -86,6 +106,7 @@ class GovernanceRule(BaseModel):
     source_system: Optional[str] = None
     row_filters: List[dict] = Field(default_factory=list)
     dcat: Optional[DcatConfig] = None
+    ontology: Optional[OntologyConfig] = None
     dataspace: Optional[DataspaceConfig] = None
 
 
@@ -102,7 +123,7 @@ _KNOWN_KEYS = {
     "title", "description", "license", "attribution", "ownership",
     "access_level", "access_requirements", "classification", "tags",
     "retention_days", "documentation_url", "source_system",
-    "row_filters", "dcat", "dataspace",
+    "row_filters", "dcat", "ontology", "dataspace",
     # v2 keys from dataspaces connector — ignored here
     "policy",
 }
@@ -120,6 +141,7 @@ def _parse_rule(data: dict[str, Any]) -> GovernanceRule:
     ]
 
     dcat_raw = block.get("dcat") or {}
+    ontology_raw = block.get("ontology") or {}
     dataspace_raw = block.get("dataspace") or {}
 
     return GovernanceRule(
@@ -137,6 +159,7 @@ def _parse_rule(data: dict[str, Any]) -> GovernanceRule:
         source_system=block.get("source_system"),
         row_filters=block.get("row_filters") or [],
         dcat=DcatConfig.model_validate(dcat_raw) if dcat_raw else None,
+        ontology=OntologyConfig.model_validate(ontology_raw) if ontology_raw else None,
         dataspace=DataspaceConfig.model_validate(dataspace_raw) if dataspace_raw else None,
     )
 
@@ -272,6 +295,7 @@ def governance_rule_to_entry(
     rule: GovernanceRule,
     backend_type: str,
     owners: OwnersRegistry | None = None,
+    base_dir: Path | None = None,
 ) -> dict[str, Any]:
     physical_table = _derive_physical_table(dataset_name)
     title = rule.title or dataset_name
@@ -372,13 +396,24 @@ def governance_rule_to_entry(
         _owner_uri(rule.ownership[0].name) if rule.ownership else None
     )
 
+    # Resolve the semantic-model binding. `base_dir` is the directory holding the
+    # governance.yaml, because `ontology.spec_file` is relative to it; when the
+    # caller has no file context a local spec cannot be resolved and saying so is
+    # better than resolving it against the process's cwd.
+    ontology_path, ontology_mapping = resolve_mapping(
+        rule.ontology,
+        base_dir if base_dir is not None else Path.cwd(),
+        dataset_name,
+    )
+
     entry: dict[str, Any] = {
         "title": title,
         "description": description,
         "backend_type": backend_type,
         "backend_config": {},
         "expose": effective_expose,
-        "ontology_path": None,
+        "ontology_path": ontology_path,
+        "ontology_mapping": ontology_mapping,
         "schema_override_path": None,
         "tags": tags,
         "lineage": lineage,
@@ -459,6 +494,7 @@ def export_governance_cmd(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     total_datasets = 0
+    ontology_errors: list[str] = []
 
     for gov_path_str in matched:
         gov_path = Path(gov_path_str)
@@ -489,12 +525,22 @@ def export_governance_cmd(
         for dataset_name, _ in config.sources.items():
             rule = resolve_rule(config, dataset_name)
             dataset_id = _normalize_dataset_id(dataset_name)
-            datasets[dataset_id] = governance_rule_to_entry(
-                dataset_name=dataset_name,
-                rule=rule,
-                backend_type=backend_type,
-                owners=file_owners,
-            )
+            try:
+                datasets[dataset_id] = governance_rule_to_entry(
+                    dataset_name=dataset_name,
+                    rule=rule,
+                    backend_type=backend_type,
+                    owners=file_owners,
+                    base_dir=gov_path.parent,
+                )
+            except OntologyResolutionError as exc:
+                # Collected rather than raised, so one run reports every broken
+                # binding instead of the first. Still fatal at the end: a dataset
+                # that declares a mapping and silently exports without one would
+                # serve 404 from /vocabulary, which reads as "no model declared"
+                # — the opposite of what the governance file says.
+                typer.echo(f"  ERROR {gov_path}: {exc}", err=True)
+                ontology_errors.append(f"{gov_path}: {exc}")
 
         # Name output file after the parent directory of the governance.yaml
         # e.g. apps/demo3/governance.yaml -> demo3.yaml
@@ -513,3 +559,11 @@ def export_governance_cmd(
         total_datasets += len(datasets)
 
     typer.echo(f"Done. Exported {total_datasets} datasets across {len(matched)} file(s).")
+
+    if ontology_errors:
+        typer.echo(
+            f"\n{len(ontology_errors)} dataset(s) declared a semantic model that "
+            f"could not be resolved and were omitted from the export.",
+            err=True,
+        )
+        raise typer.Exit(1)

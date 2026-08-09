@@ -214,3 +214,4 @@ skaffold
 
 /owners.*.yaml
 taskfile.local.yaml
+.agents

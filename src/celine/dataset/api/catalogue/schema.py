@@ -69,6 +69,7 @@ class DatasetEntryModel(BaseModel):
 
     expose: bool = False
     ontology_path: Optional[str] = None
+    ontology_mapping: Optional[dict] = None
     schema_override_path: Optional[str] = None
 
     tags: Optional[Tags] = None

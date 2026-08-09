@@ -141,6 +141,7 @@ async def import_catalogue(
             existing.lineage = lineage
             existing.tags = tags
             existing.ontology_path = ds.ontology_path
+            existing.ontology_mapping = ds.ontology_mapping
             existing.schema_override_path = ds.schema_override_path
             existing.expose = ds.expose
             existing.publisher_uri = ds.publisher_uri
@@ -161,6 +162,7 @@ async def import_catalogue(
                 tags=tags,
                 lineage=lineage,
                 ontology_path=ds.ontology_path,
+                ontology_mapping=ds.ontology_mapping,
                 schema_override_path=ds.schema_override_path,
                 expose=ds.expose,
                 publisher_uri=ds.publisher_uri,

@@ -8,6 +8,10 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.17.2",
     "asyncpg>=0.30.0",
+    # 1.6.1: the vocabulary registry ships in the wheel with a complete
+    # prefix->namespace map. Below this, `prefix_map()` is missing entries and a
+    # derived context fails on a prefix it cannot expand.
+    "celine-ontologies>=1.6.1",
     "celine-sdk>=1.13.0",
     "fastapi>=0.139.0",
     "geoalchemy2>=0.19.0",
