@@ -128,15 +128,15 @@ wheels = [
 
 [[package]]
 name = "celine-ontologies"
-version = "1.6.1"
+version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/58/e9/1f0441dfe254f840cdc4c364b9bdaa472f74a7fe46fb2ad021f7fd7d78fe/celine_ontologies-1.6.1.tar.gz", hash = "sha256:b0afe35aee3082b276520afa7940d2ccc0d2aea54bc7173f799b2384c07a70d7", size = 1355295, upload-time = "2026-08-09T05:13:13.572Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/16/f6/8984a6cc650421a6aa7dcec1322338b2f22c6c2e6cb33649d871f51bc8d0/celine_ontologies-1.8.0.tar.gz", hash = "sha256:04888c01b790ae1af3794cdd86491a8d5843dd0f038599bffe107e6bd1b2bc69", size = 1813576, upload-time = "2026-08-10T04:51:28.673Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/69/8ff233fdff45d787d16667ebe5b057a91cc49a4b5ddc6911a95a2b0ea4d5/celine_ontologies-1.6.1-py3-none-any.whl", hash = "sha256:115cf8c9361144d435acb0b15689b9aadcaead7b219c102bed8d453c0684a6bc", size = 41701, upload-time = "2026-08-09T05:13:12.428Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/79/14b2231f137a470db0e53bada0d82329183e1caeaebb3cd8db5b1d2ca311/celine_ontologies-1.8.0-py3-none-any.whl", hash = "sha256:1b502e43f4fb8f197ef297d3dfd8fa6c66424e64477d4ff19111c5f21e08afb4", size = 49216, upload-time = "2026-08-10T04:51:27.054Z" },
 ]
 
 [[package]]
@@ -448,7 +448,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.17.2" },
     { name = "asyncpg", specifier = ">=0.30.0" },
-    { name = "celine-ontologies", specifier = ">=1.6.1" },
+    { name = "celine-ontologies", specifier = ">=1.8.0" },
     { name = "celine-sdk", specifier = ">=1.13.0" },
     { name = "fastapi", specifier = ">=0.139.0" },
     { name = "geoalchemy2", specifier = ">=0.19.0" },
