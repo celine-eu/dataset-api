@@ -8,7 +8,6 @@ Finds governance.yaml files via a glob pattern, resolves governance rules
 """
 from __future__ import annotations
 
-import fnmatch
 import glob as glob_module
 import logging
 from pathlib import Path
@@ -16,176 +15,59 @@ from typing import Any, Dict, List, Optional
 
 import typer
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
 
 from celine.dataset.cli.ontology_resolver import OntologyResolutionError, resolve_mapping
 from celine.dataset.cli.utils import setup_cli_logging
-from celine.dataset.core.owners import OwnersRegistry, load_owners_yaml
 
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Inline governance models (self-contained; mirrors celine-utils GovernanceRule)
+# Governance grammar — parsed by `celine.governance`, not here
 # ---------------------------------------------------------------------------
+#
+# This module used to carry its own copy of the models, the parser, the merge
+# and the resolver — roughly 290 lines mirroring `celine-utils`. That copy
+# existed for a good reason: `celine-utils` required dbt, Meltano, Prefect and
+# Keycloak in order to parse a YAML file, and an API service cannot take an
+# orchestration stack as a dependency.
+#
+# `celine.governance` is that grammar with a core of pydantic + pyyaml +
+# jsonschema, so the copy is no longer buying anything — and the four copies
+# that existed had already drifted apart on how a dataset overlays its file's
+# defaults, which is what a governance file is *for*.
+#
+# The behavioural change that comes with adopting it: overlays now merge by
+# `exclude_unset` rather than truthiness, so a dataset can override an inherited
+# value with `false` or `null`. `dataspace.expose: false` over a file default of
+# `true` previously did nothing at all.
+#
+# `OwnersRegistry` comes from the same place for the same reason. This repo's
+# copy was byte-identical *except* that it lacked `aliases`, so the generic
+# owner labels the open-source pipelines carry — `dso`, `rec` — resolved to
+# nothing and fell through to a synthetic `urn:owner:<alias>` below.
 
-
-class GovernanceOwner(BaseModel):
-    name: str
-    type: str = "OWNER"
-
-
-class TemporalCoverage(BaseModel):
-    start: Optional[str] = None
-    end: Optional[str] = None
-
-
-class DcatConfig(BaseModel):
-    """DCAT-AP metadata for catalogue exposition."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    publisher_uri: Optional[str] = None
-    themes: List[str] = Field(default_factory=list)
-    language_uris: List[str] = Field(default_factory=list)
-    spatial_uris: List[str] = Field(default_factory=list)
-    accrual_periodicity: Optional[str] = None
-    conforms_to: Optional[str] = None
-    temporal: Optional[TemporalCoverage] = None
-
-
-class OntologyConfig(BaseModel):
-    """Which mapping spec says what this dataset's columns mean.
-
-    Mirrors ``celine.utils.pipelines.governance.OntologyConfig`` — this repo
-    parses governance files with its own copy of the model, as it already does
-    for ``DcatConfig`` and ``DataspaceConfig``.
-
-    Exactly one of the two, enforced by the governance schema:
-
-    ``spec``       a shared mapping published in celine-ontologies
-    ``spec_file``  a path relative to the governance.yaml that declares it
-    """
-
-    model_config = ConfigDict(extra="ignore")
-
-    spec: Optional[str] = None
-    spec_file: Optional[str] = None
-
-
-class DataspaceConfig(BaseModel):
-    """Dataspace ODRL policy hints.
-
-    Extra fields (e.g. EDC-specific asset/data_address/contract sub-objects written
-    by the dataspaces connector) are silently ignored so that a single governance.yaml
-    can be shared between dataset-api and the dataspaces connector.
-    """
-
-    model_config = ConfigDict(extra="ignore")
-
-    medallion: Optional[str] = None
-    contract_required: bool = False
-    consent_required: bool = False
-    odrl_action: str = "use"
-    purpose: List[str] = Field(default_factory=list)
-    expose: bool = False                     # catalogue visibility (set per-source)
-
-
-class GovernanceRule(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    license: Optional[str] = None
-    attribution: Optional[str] = None
-    ownership: List[GovernanceOwner] = Field(default_factory=list)
-    access_level: Optional[str] = None
-    access_requirements: Optional[str] = None
-    classification: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)
-    retention_days: Optional[int] = None
-    documentation_url: Optional[str] = None
-    source_system: Optional[str] = None
-    row_filters: List[dict] = Field(default_factory=list)
-    dcat: Optional[DcatConfig] = None
-    ontology: Optional[OntologyConfig] = None
-    dataspace: Optional[DataspaceConfig] = None
-
-
-class GovernanceConfig(BaseModel):
-    defaults: GovernanceRule = Field(default_factory=GovernanceRule)
-    sources: Dict[str, GovernanceRule] = Field(default_factory=dict)
-
-
-# ---------------------------------------------------------------------------
-# Parsing
-# ---------------------------------------------------------------------------
-
-_KNOWN_KEYS = {
-    "title", "description", "license", "attribution", "ownership",
-    "access_level", "access_requirements", "classification", "tags",
-    "retention_days", "documentation_url", "source_system",
-    "row_filters", "dcat", "ontology", "dataspace",
-    # v2 keys from dataspaces connector — ignored here
-    "policy",
-}
-
-
-def _parse_rule(data: dict[str, Any]) -> GovernanceRule:
-    block: dict[str, Any] = (
-        data.get("governance") if "governance" in data else data
-    ) or {}
-
-    owners_raw = block.get("ownership") or []
-    owners = [
-        GovernanceOwner(**o) if isinstance(o, dict) else GovernanceOwner(name=str(o))
-        for o in owners_raw
-    ]
-
-    dcat_raw = block.get("dcat") or {}
-    ontology_raw = block.get("ontology") or {}
-    dataspace_raw = block.get("dataspace") or {}
-
-    return GovernanceRule(
-        title=block.get("title"),
-        description=block.get("description"),
-        license=block.get("license"),
-        attribution=block.get("attribution"),
-        ownership=owners,
-        access_level=block.get("access_level"),
-        access_requirements=block.get("access_requirements"),
-        classification=block.get("classification"),
-        tags=block.get("tags") or [],
-        retention_days=block.get("retention_days"),
-        documentation_url=block.get("documentation_url"),
-        source_system=block.get("source_system"),
-        row_filters=block.get("row_filters") or [],
-        dcat=DcatConfig.model_validate(dcat_raw) if dcat_raw else None,
-        ontology=OntologyConfig.model_validate(ontology_raw) if ontology_raw else None,
-        dataspace=DataspaceConfig.model_validate(dataspace_raw) if dataspace_raw else None,
-    )
+from celine.governance import (  # noqa: E402
+    DataspaceConfig,
+    DcatConfig,
+    GovernanceConfig,
+    GovernanceOwner,
+    GovernanceResolver,
+    GovernanceRule,
+    OntologyConfig,
+    OwnersRegistry,
+    TemporalCoverage,
+    build_facet,
+    load_owners_yaml,
+    merge_configs,
+    merge_rules,
+    parse_rule,
+)
 
 
 def load_governance_yaml(path: Path) -> GovernanceConfig:
-    with path.open(encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
-
-    defaults = _parse_rule(raw.get("defaults") or {})
-    sources: Dict[str, GovernanceRule] = {
-        name: _parse_rule(rule_raw or {})
-        for name, rule_raw in (raw.get("sources") or {}).items()
-    }
-    return GovernanceConfig(defaults=defaults, sources=sources)
-
-
-def _merge_configs(base: GovernanceConfig, override: GovernanceConfig) -> GovernanceConfig:
-    """Merge two GovernanceConfigs (base + deployer override)."""
-    merged_defaults = _merge_rule(base.defaults, override.defaults)
-    merged_sources: Dict[str, GovernanceRule] = {**base.sources}
-    for key, rule in override.sources.items():
-        if key in merged_sources:
-            merged_sources[key] = _merge_rule(merged_sources[key], rule)
-        else:
-            merged_sources[key] = rule
-    return GovernanceConfig(defaults=merged_defaults, sources=merged_sources)
+    """Load one governance file into a config (no deployer overlay)."""
+    return GovernanceResolver.from_file(path).config
 
 
 def load_governance_with_override(
@@ -193,126 +75,20 @@ def load_governance_with_override(
 ) -> GovernanceConfig:
     """Load governance.yaml and merge a deployer override if present.
 
-    Looks for governance.<app_name>.yaml next to the base file.
-    If app_name is not provided, it is inferred from the parent directory name.
+    Looks for ``governance.<app_name>.yaml`` next to the base file; when
+    ``app_name`` is not given it is inferred from the parent directory name,
+    which is this repo's long-standing behaviour and why `infer_from_dir` is
+    passed explicitly.
     """
-    config = load_governance_yaml(base_path)
-    name = app_name or base_path.parent.name
-    if not name:
-        return config
-
-    override_path = base_path.parent / f"governance.{name}.yaml"
-    if override_path.is_file():
-        logger.info("Merging deployer override %s", override_path)
-        override_config = load_governance_yaml(override_path)
-        config = _merge_configs(config, override_config)
-
-    return config
-
-
-# ---------------------------------------------------------------------------
-# Resolution (exact match → fnmatch glob → defaults)
-# ---------------------------------------------------------------------------
-
-
-def _merge_dataspace(
-    base: Optional[DataspaceConfig], override: Optional[DataspaceConfig]
-) -> Optional[DataspaceConfig]:
-    if base is None:
-        return override
-    if override is None:
-        return base
-    return DataspaceConfig(
-        medallion=override.medallion or base.medallion,
-        contract_required=base.contract_required or override.contract_required,
-        consent_required=base.consent_required or override.consent_required,
-        odrl_action=override.odrl_action if override.odrl_action != "use" else base.odrl_action,
-        purpose=sorted(set(base.purpose) | set(override.purpose)),
-        expose=base.expose or override.expose,
-    )
-
-
-def _merge_dcat(
-    base: Optional[DcatConfig], override: Optional[DcatConfig]
-) -> Optional[DcatConfig]:
-    """Overlay a dataset's DCAT block onto the file's defaults, field by field.
-
-    Whole-object replacement was the previous behaviour and it loses metadata
-    silently. A dataset saying only
-
-        dcat:
-          conforms_to: http://www.w3.org/ns/sosa/
-
-    meant *"and no themes, no language, no spatial coverage, no periodicity"* —
-    every one of them dropped from the exported entry, with the defaults still
-    sitting in the file looking like they applied. `apps/owm/governance.yaml`
-    restates the full block on all thirteen of its datasets, which reads like
-    style and is the workaround.
-
-    **`exclude_unset`, not truthiness.** This mirrors `ds`
-    `libs/governance/resolver.py::_merge_models`, which is the reference
-    implementation — it already merged `dcat` this way, and copying its rule
-    rather than inventing a second one is the point: three parsers reading one
-    file format is how the `{handler, args, principals}` mismatch happened.
-
-    An `or`-based overlay cannot tell *"silent"* from *"said no"*. A dataset
-    writing `conforms_to: null` means **no model**, which is a different claim
-    from declaring nothing and must override an inherited default; under
-    truthiness it falls through and inherits. The same hole covers every
-    optional defaulting to `None` and every list defaulting to empty — an
-    overlay could turn a value on and never off.
-
-    Pydantic tracks this per instance in `model_fields_set`, populated by
-    `model_validate`, which is how `_parse_rule` builds every one of these, and
-    `model_validate` on the merged dict carries the set forward so a chain of
-    overlays keeps working.
-    """
-    if base is None:
-        return override
-    if override is None:
-        return base
-    return DcatConfig.model_validate(
-        {
-            **base.model_dump(exclude_unset=True),
-            **override.model_dump(exclude_unset=True),
-        }
-    )
-
-
-def _merge_rule(base: GovernanceRule, override: GovernanceRule) -> GovernanceRule:
-    """Overlay non-None/non-empty fields from override onto base."""
-    data = base.model_dump()
-    for field, value in override.model_dump().items():
-        if field in ("dataspace", "dcat"):
-            continue  # handled separately below
-        if value is None:
-            continue
-        if isinstance(value, list) and len(value) == 0:
-            continue
-        data[field] = value
-    merged = GovernanceRule.model_validate(data)
-    merged.dataspace = _merge_dataspace(base.dataspace, override.dataspace)
-    merged.dcat = _merge_dcat(base.dcat, override.dcat)
-    return merged
+    return GovernanceResolver.from_file_with_override(
+        base_path, app_name, infer_from_dir=True
+    ).config
 
 
 def resolve_rule(config: GovernanceConfig, dataset_name: str) -> GovernanceRule:
-    # 1. exact match
-    if dataset_name in config.sources:
-        return _merge_rule(config.defaults, config.sources[dataset_name])
+    """Resolve a dataset against a config: exact match → longest glob → defaults."""
+    return GovernanceResolver(config).resolve(dataset_name)
 
-    # 2. glob/fnmatch — prefer longest (most-specific) pattern
-    best_key: Optional[str] = None
-    for key in config.sources:
-        if fnmatch.fnmatchcase(dataset_name, key):
-            if best_key is None or len(key) > len(best_key):
-                best_key = key
-
-    if best_key is not None:
-        return _merge_rule(config.defaults, config.sources[best_key])
-
-    # 3. defaults only
-    return config.defaults
 
 
 # ---------------------------------------------------------------------------
@@ -349,51 +125,10 @@ def governance_rule_to_entry(
     title = rule.title or dataset_name
     description = rule.description or physical_table
 
-    # Build governance facet (camelCase, matching GovernanceDatasetFacet)
-    gov_facet: dict[str, Any] = {
-        "_producer": "dataset-cli/export-governance",
-        "_schemaURL": "https://celine-eu.github.io/schema/GovernanceDatasetFacet.schema.json",
-    }
-    if rule.title:
-        gov_facet["title"] = rule.title
-    if rule.description:
-        gov_facet["description"] = rule.description
-    if rule.license:
-        gov_facet["license"] = rule.license
-    if rule.attribution:
-        gov_facet["attribution"] = rule.attribution
-    if rule.ownership:
-        gov_facet["owners"] = [o.name for o in rule.ownership]
-    if rule.access_level:
-        gov_facet["accessLevel"] = rule.access_level
-    if rule.access_requirements:
-        gov_facet["accessRequirements"] = rule.access_requirements
-    if rule.classification:
-        gov_facet["classification"] = rule.classification
-    if rule.tags:
-        gov_facet["tags"] = rule.tags
-    if rule.retention_days is not None:
-        gov_facet["retentionDays"] = rule.retention_days
-    if rule.documentation_url:
-        gov_facet["documentationUrl"] = rule.documentation_url
-    if rule.source_system:
-        gov_facet["sourceSystem"] = rule.source_system
-    if rule.row_filters:
-        gov_facet["rowFilters"] = rule.row_filters
-
-    # Dataspace hints go into the governance facet so the DCAT formatter can read them
-    ds_cfg = rule.dataspace
-    if ds_cfg:
-        if ds_cfg.medallion:
-            gov_facet["medallion"] = ds_cfg.medallion
-        if ds_cfg.contract_required:
-            gov_facet["contractRequired"] = True
-        if ds_cfg.consent_required:
-            gov_facet["consentRequired"] = True
-        if ds_cfg.odrl_action != "use":
-            gov_facet["odrlAction"] = ds_cfg.odrl_action
-        if ds_cfg.purpose:
-            gov_facet["purpose"] = ds_cfg.purpose
+    # One projection of a rule onto the facet, shared with the lineage extractors.
+    # This was a hand-built dict with camelCase keys typed by eye and the schema
+    # URL hardcoded — matching a class in a package this repo did not depend on.
+    gov_facet = build_facet(rule, producer="dataset-cli/export-governance")
 
     lineage: dict[str, Any] = {
         "name": dataset_name,

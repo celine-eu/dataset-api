@@ -8,7 +8,7 @@ from typing import Any, Iterable, Optional
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.core.config import get_settings
 from celine.dataset.core.utils import get_dataset_uri
-from celine.dataset.core.owners import OwnersRegistry
+from celine.governance import OwnersRegistry
 
 logger = logging.getLogger(__name__)
 

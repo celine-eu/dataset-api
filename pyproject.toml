@@ -20,6 +20,14 @@ dependencies = [
     # (celine:SharedEnergy → celine:CollectivelySharedEnergy) is the IRI the
     # pipelines emit.
     "celine-ontologies>=1.8.0",
+    # Thin core: pydantic + pyyaml + jsonschema. `celine.governance` is the one
+    # implementation of the governance.yaml grammar — this repo used to carry its
+    # own copy because celine-utils <2.0 required dbt, Meltano, Prefect and
+    # Keycloak to parse a file, which an API container cannot take. 2.0 moved all
+    # of that behind extras; do NOT add [all] or [pipelines] here, and see the
+    # `governance-thin` job in celine-utils for what keeps the core thin.
+    "celine-utils>=2.0.0",
+
     "celine-sdk>=1.13.0",
     "fastapi>=0.139.0",
     "geoalchemy2>=0.19.0",

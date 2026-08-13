@@ -172,6 +172,20 @@ wheels = [
 ]
 
 [[package]]
+name = "celine-utils"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jsonschema" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8e/1e/71d74a994b0f8bb00a8ba5ab31fe13c5637c4b0afb7d81941108ce466fa3/celine_utils-2.1.0.tar.gz", hash = "sha256:c65ac30b1bf23c42f83b8c5bdcfc8d98890af829f64516c00f974519dc271e58", size = 81412, upload-time = "2026-08-13T05:31:18.891Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/ec/77a372da85fcd5afc98c02c5a9540773bf8942cf2282ed7193ff8137480c/celine_utils-2.1.0-py3-none-any.whl", hash = "sha256:00d6aeb2d24228cad2afbc39f5abbac3cca20067bf22273e3d8a349653c8f44e", size = 89087, upload-time = "2026-08-13T05:31:17.601Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.7.22"
 source = { registry = "https://pypi.org/simple" }
@@ -418,6 +432,7 @@ dependencies = [
     { name = "asyncpg" },
     { name = "celine-ontologies" },
     { name = "celine-sdk" },
+    { name = "celine-utils" },
     { name = "fastapi" },
     { name = "geoalchemy2" },
     { name = "httpx" },
@@ -450,6 +465,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "celine-ontologies", specifier = ">=1.8.0" },
     { name = "celine-sdk", specifier = ">=1.13.0" },
+    { name = "celine-utils", specifier = ">=2.0.0" },
     { name = "fastapi", specifier = ">=0.139.0" },
     { name = "geoalchemy2", specifier = ">=0.19.0" },
     { name = "httpx", specifier = ">=0.28.1" },
