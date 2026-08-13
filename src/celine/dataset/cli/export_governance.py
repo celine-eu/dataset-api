@@ -54,6 +54,9 @@ from celine.governance import (  # noqa: E402
     GovernanceOwner,
     GovernanceResolver,
     GovernanceRule,
+    dataspace_expose,
+    effective_expose,
+    exposure_conflict,
     OntologyConfig,
     OwnersRegistry,
     TemporalCoverage,
@@ -161,7 +164,11 @@ def governance_rule_to_entry(
                 k: v for k, v in dcat.temporal.model_dump().items() if v is not None
             }
 
-    effective_expose = rule.dataspace.expose if rule.dataspace else False
+    # Two gates, resolved by the library so every consumer agrees on what a file
+    # means. `expose` falls back to `dataspace.expose` when unstated, which is
+    # what keeps files written before the split behaving exactly as they did.
+    catalogue_expose = effective_expose(rule)
+    offered_to_dataspace = dataspace_expose(rule)
 
     # Resolve rights_holder and publisher URIs via owners registry when available.
     # Priority: DID > URL > urn:owner:<alias> fallback.
@@ -194,7 +201,8 @@ def governance_rule_to_entry(
         "description": description,
         "backend_type": backend_type,
         "backend_config": {},
-        "expose": effective_expose,
+        "expose": catalogue_expose,
+        "dataspace_expose": offered_to_dataspace,
         "ontology_path": ontology_path,
         "ontology_mapping": ontology_mapping,
         "schema_override_path": None,
@@ -278,6 +286,7 @@ def export_governance_cmd(
 
     total_datasets = 0
     ontology_errors: list[str] = []
+    exposure_errors: list[str] = []
 
     for gov_path_str in matched:
         gov_path = Path(gov_path_str)
@@ -308,6 +317,18 @@ def export_governance_cmd(
         for dataset_name, _ in config.sources.items():
             rule = resolve_rule(config, dataset_name)
             dataset_id = _normalize_dataset_id(dataset_name)
+
+            # The two gates are AND, and only one combination is incoherent:
+            # offered into the dataspace but absent from the catalogue. A
+            # consumer reaches a dataspace asset through the catalogue entry
+            # describing it, so that pairing cannot be honoured — and resolving
+            # it either way in silence is the wrong move in both directions.
+            # Collected like the ontology errors so one run reports every
+            # instance, and fatal at the end for the same reason.
+            if (conflict := exposure_conflict(rule)) is not None:
+                typer.echo(f"  ERROR {gov_path} [{dataset_name}]: {conflict}", err=True)
+                exposure_errors.append(f"{gov_path} [{dataset_name}]: {conflict}")
+                continue
             try:
                 datasets[dataset_id] = governance_rule_to_entry(
                     dataset_name=dataset_name,
@@ -343,10 +364,23 @@ def export_governance_cmd(
 
     typer.echo(f"Done. Exported {total_datasets} datasets across {len(matched)} file(s).")
 
+    if exposure_errors:
+        typer.echo(
+            f"\n{len(exposure_errors)} dataset(s) are offered into the dataspace "
+            f"but not listed in the catalogue, and were omitted from the export.",
+            err=True,
+        )
+
     if ontology_errors:
         typer.echo(
             f"\n{len(ontology_errors)} dataset(s) declared a semantic model that "
             f"could not be resolved and were omitted from the export.",
             err=True,
         )
+
+    # One exit for both. Keeping it inside the ontology branch would have let an
+    # export that dropped datasets for exposure conflicts still return 0, and
+    # this command runs unattended in `task import:dataset-sync` — a zero exit
+    # there means the catalogue was synced, not that some of it was skipped.
+    if exposure_errors or ontology_errors:
         raise typer.Exit(1)

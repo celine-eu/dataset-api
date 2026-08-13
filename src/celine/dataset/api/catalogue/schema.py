@@ -68,6 +68,9 @@ class DatasetEntryModel(BaseModel):
     backend_config: BackendConfig = Field(default_factory=BackendConfig)
 
     expose: bool = False
+    # Absent in an older export, and the default must stay False: an import that
+    # omits the field withholds the dataspace offer rather than granting it.
+    dataspace_expose: bool = False
     ontology_path: Optional[str] = None
     ontology_mapping: Optional[dict] = None
     schema_override_path: Optional[str] = None

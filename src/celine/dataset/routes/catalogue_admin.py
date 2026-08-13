@@ -144,6 +144,7 @@ async def import_catalogue(
             existing.ontology_mapping = ds.ontology_mapping
             existing.schema_override_path = ds.schema_override_path
             existing.expose = ds.expose
+            existing.dataspace_expose = ds.dataspace_expose
             existing.publisher_uri = ds.publisher_uri
             existing.rights_holder_uri = ds.rights_holder_uri
             existing.license_uri = ds.license_uri
@@ -165,6 +166,7 @@ async def import_catalogue(
                 ontology_mapping=ds.ontology_mapping,
                 schema_override_path=ds.schema_override_path,
                 expose=ds.expose,
+                dataspace_expose=ds.dataspace_expose,
                 publisher_uri=ds.publisher_uri,
                 rights_holder_uri=ds.rights_holder_uri,
                 license_uri=ds.license_uri,

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from sqlalchemy import Boolean, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Integer, JSON, String, Text, text
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
 from celine.dataset.core.config import get_settings
@@ -40,7 +40,26 @@ class DatasetEntry(Base):
         String(1024), nullable=True
     )
 
+    # Listed in the catalogue and served by the API: gates /catalogue* and /query.
     expose: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Offered into the dataspace: gates requests arriving with EDR context.
+    #
+    # Separate from `expose` because they answer different questions, and one
+    # boolean used to answer both — the exporter copied `dataspace.expose`
+    # straight onto `expose`, so a dataset that had to appear in the catalogue
+    # was thereby offered to the dataspace, and one withheld from the dataspace
+    # was also unqueryable through the API.
+    #
+    # Defaults to False, including for every row that predates this column. That
+    # is deliberate: the values it would otherwise inherit were written when the
+    # flag only controlled the catalogue, so treating them as dataspace consent
+    # would offer 60 datasets — 13 of them NonCommercial-licensed and 33 with no
+    # declared licence — on the strength of a statement that meant something else.
+    dataspace_expose: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+
     tags: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Optional extra fields for DCAT-AP / provenance

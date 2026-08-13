@@ -173,16 +173,16 @@ wheels = [
 
 [[package]]
 name = "celine-utils"
-version = "2.1.0"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8e/1e/71d74a994b0f8bb00a8ba5ab31fe13c5637c4b0afb7d81941108ce466fa3/celine_utils-2.1.0.tar.gz", hash = "sha256:c65ac30b1bf23c42f83b8c5bdcfc8d98890af829f64516c00f974519dc271e58", size = 81412, upload-time = "2026-08-13T05:31:18.891Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8e/03/a853d1bbcab6cf2ff78386c18f2057a7d64e095ec47807d070fec27e4094/celine_utils-2.2.0.tar.gz", hash = "sha256:1671bcec287e23a9db4135881cc3a08ab4bb3e8cad18984743633794b8899586", size = 84730, upload-time = "2026-08-13T20:15:20.815Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/ec/77a372da85fcd5afc98c02c5a9540773bf8942cf2282ed7193ff8137480c/celine_utils-2.1.0-py3-none-any.whl", hash = "sha256:00d6aeb2d24228cad2afbc39f5abbac3cca20067bf22273e3d8a349653c8f44e", size = 89087, upload-time = "2026-08-13T05:31:17.601Z" },
+    { url = "https://files.pythonhosted.org/packages/85/e9/bdd3a9b6b7659d031a385c5b9cff3b3daebbd05d35bf6273ab57a227aafb/celine_utils-2.2.0-py3-none-any.whl", hash = "sha256:25626a206319269befe165a5abfe01b0a24459c2bce087b1c90af9cc81dd86c9", size = 91430, upload-time = "2026-08-13T20:15:19.591Z" },
 ]
 
 [[package]]

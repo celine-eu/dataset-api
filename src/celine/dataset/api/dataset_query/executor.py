@@ -153,6 +153,30 @@ async def execute_query(
     # of them is refused, so asking per table would let a partial answer through.
     edr_decision = None
     if edr_context is not None:
+        # Is this dataset offered into the dataspace at all? Checked before ds is
+        # asked, because the two answer different questions: ds decides whether
+        # *this consumer* holds a valid agreement, while `dataspace_expose` says
+        # whether the dataset is on offer to anyone. A dataset that was never
+        # offered must be refused even if a contract somehow references it.
+        #
+        # Every dataset in the query, not the first refusal: a join is judged as
+        # a whole, exactly as the ds call below is, so a partial answer cannot
+        # leak through a join with an unoffered table.
+        withheld = sorted(
+            d.dataset_id for d in datasets.values() if not d.dataspace_expose
+        )
+        if withheld:
+            logger.warning(
+                "Dataspace request refused — not offered: %s", ", ".join(withheld)
+            )
+            # Named rather than a bare 403: the catalogue already tells this
+            # consumer the dataset exists, so naming it discloses nothing, and
+            # the alternative is an unactionable error for a legitimate caller.
+            raise HTTPException(
+                403,
+                "Dataset not offered in the dataspace: " + ", ".join(withheld),
+            )
+
         edr_decision = await authorize_dataplane(
             context=edr_context,
             dataset_ids=[d.dataset_id for d in datasets.values()],
