@@ -52,12 +52,16 @@ dependencies = [
 # a hard dependency here — the catalogue serves JSON-LD — so this adds pyshacl
 # and little else.
 #
-# 1.10.0 is the release that packages the ontology profiles. Below it the shapes
-# are simply absent from the installed library: the graph builder resolved them
-# relative to a source checkout, which inside a container is
-# `<site-packages>/specs/current` and does not exist.
+# 1.10.1 is the first release that packages the ontology profiles *and* reached
+# PyPI. Below it the shapes are simply absent from the installed library: the
+# graph builder resolved them relative to a source checkout, which inside a
+# container is `<site-packages>/specs/current` and does not exist.
+#
+# 1.10.1 rather than 1.10.0 because 1.10.0 does not exist on the index — it was
+# tagged and released on GitHub, and its upload failed. `>=1.10.0` would resolve
+# today, but it names a version nobody can install.
 conformance = [
-    "celine-ontologies[mapper]>=1.10.0",
+    "celine-ontologies[mapper]>=1.10.1",
 ]
 
 [tool.uv]  # optional, helps uv handle locking
@@ -75,6 +79,12 @@ sources = {"src" = ""}
 [dependency-groups]
 dev = [
     "aiosqlite>=0.21.0",
+    # The `conformance` extra, so CI exercises the conformance tests rather than
+    # skipping them. They `importorskip` on pyshacl and on the packaged ontology
+    # profiles, which is the right behaviour for a deployment that runs without
+    # the extra — and exactly the wrong behaviour for a test run, where a silent
+    # skip is indistinguishable from a pass.
+    "celine-ontologies[mapper]>=1.10.1",
     "debugpy>=1.8.19",
     "hypothesis>=6.152.3",
     "pytest>=9.0.3",

@@ -54,7 +54,7 @@ if enabled:
         raise RuntimeError(
             "CONFORMANCE_ENABLED=true but the `conformance` extra is not "
             "installed. Install dataset[conformance] "
-            "(celine-ontologies[mapper]>=1.10.0) or turn the setting off."
+            "(celine-ontologies[mapper]>=1.10.1) or turn the setting off."
         ) from exc
 
 #: A catalogue id is a dotted identifier. Checked before it is interpolated into

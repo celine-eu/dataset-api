@@ -20,7 +20,7 @@ pytest.importorskip(
 )
 pytest.importorskip(
     "celine.mapper.profiles",
-    reason="needs celine-ontologies>=1.10.0, which packages the ontology profiles",
+    reason="needs celine-ontologies>=1.10.1, which packages the ontology profiles",
 )
 
 from celine.dataset.core import config  # noqa: E402
