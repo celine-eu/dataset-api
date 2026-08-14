@@ -41,6 +41,14 @@ def register_routes(app: FastAPI, *, extra_routers: list | None = None):
         module_name = f"{__name__}.{file.stem}"
         module = import_module(module_name)
 
+        # Convention: a module may expose `enabled = False` to opt out of
+        # registration, for a feature that is off by default. A route that
+        # exists and answers 404 says something different from one that is not
+        # deployed, and only the second is true when a feature is switched off.
+        if getattr(module, "enabled", True) is False:
+            logger.info("Route %s disabled by configuration, skipping", module_name)
+            continue
+
         route = {}
         # Convention: each route module must expose `router`
         if hasattr(module, "router"):

@@ -44,6 +44,22 @@ dependencies = [
     "uvicorn[standard]>=0.52.1",
 ]
 
+[project.optional-dependencies]
+# SHACL conformance checking of served rows (CONFORMANCE_ENABLED=true).
+#
+# An extra rather than a dependency: `pyshacl` pulls owlrl and its own floors
+# into every container, and the endpoint is off by default. `rdflib` is already
+# a hard dependency here — the catalogue serves JSON-LD — so this adds pyshacl
+# and little else.
+#
+# 1.10.0 is the release that packages the ontology profiles. Below it the shapes
+# are simply absent from the installed library: the graph builder resolved them
+# relative to a source checkout, which inside a container is
+# `<site-packages>/specs/current` and does not exist.
+conformance = [
+    "celine-ontologies[mapper]>=1.10.0",
+]
+
 [tool.uv]  # optional, helps uv handle locking
 package = true
 

@@ -133,6 +133,37 @@ class Settings(BaseSettings):
         ),
     )
 
+    conformance_enabled: bool = Field(
+        default=False,
+        description=(
+            "Expose POST /catalogue/{id}/conformance, which maps a bounded "
+            "sample of a dataset's rows through its declared mapping and "
+            "validates the resulting graph against the SHACL shapes of the "
+            "ontology version that mapping pins. Off by default: it needs the "
+            "`conformance` extra (pyshacl), and mapping plus validating rows is "
+            "far more expensive than serving them. Turning it on without the "
+            "extra installed fails at startup, not at the first request."
+        ),
+    )
+
+    conformance_sample_limit: int = Field(
+        default=100,
+        description=(
+            "Default row sample for a conformance check. A knob, not a "
+            "principle — the caller may ask for fewer, or for more up to "
+            "conformance_max_sample."
+        ),
+    )
+
+    conformance_max_sample: int = Field(
+        default=1000,
+        description=(
+            "Hard ceiling on the row sample. Nothing waits on a conformance "
+            "result, so the answer to a slow check is a smaller sample rather "
+            "than a longer timeout."
+        ),
+    )
+
 
 # ---------------------------------------------------------------------------
 # Lazy settings management
