@@ -5,30 +5,16 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from celine.dataset.api.catalogue.vocabulary import VocabularyError, build_vocabulary
+from celine.dataset.core.datasets import load_catalogue_entry
 from celine.dataset.db.engine import get_session
-from celine.dataset.db.models.dataset_entry import DatasetEntry
 
 router = APIRouter()
 tags = ["catalogue"]
 
 logger = logging.getLogger(__name__)
-
-
-async def _get_entry(dataset_id: str, db: AsyncSession) -> DatasetEntry:
-    stmt = (
-        select(DatasetEntry)
-        .where(DatasetEntry.dataset_id == dataset_id)
-        .where(DatasetEntry.expose.is_(True))
-    )
-    res = await db.execute(stmt)
-    entry = res.scalars().first()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    return entry
 
 
 @router.get("/catalogue/{dataset_id}/vocabulary")
@@ -47,7 +33,7 @@ async def dataset_vocabulary(
     read it as such; the catalogue entry's `dct:conformsTo` is where a declared
     model is stated.
     """
-    entry = await _get_entry(dataset_id, db)
+    entry = await load_catalogue_entry(db=db, dataset_id=dataset_id)
 
     if not entry.ontology_mapping:
         raise HTTPException(

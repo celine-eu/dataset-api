@@ -10,15 +10,18 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from celine.dataset.db.engine import get_session
 from celine.dataset.db.models.dataset_entry import DatasetEntry
-from celine.dataset.core.datasets import load_dataset_entry
+from celine.dataset.core.datasets import list_catalogue_entries
 from celine.dataset.db.reflection import reflect_table_async
 
 # ------------------------------------------------------------------------------
 # Router & templates
+#
+# The HTML rendering lives here; the `/catalogue/{id}` route that may serve it
+# lives in `routes/catalogue.py`, which owns that path and negotiates the
+# representation. Only `/` is a route of this router.
 # ------------------------------------------------------------------------------
 
 logger = logging.getLogger(__name__)
@@ -94,14 +97,6 @@ async def get_dataset_metadata(
     return metadata
 
 
-async def list_dataset_entries(db: AsyncSession) -> List[DatasetEntry]:
-    """
-    List all dataset entries for the catalogue HTML view.
-    """
-    result = await db.execute(select(DatasetEntry).order_by(DatasetEntry.dataset_id))
-    return list(result.scalars().all())
-
-
 # ------------------------------------------------------------------------------
 # Routes
 # ------------------------------------------------------------------------------
@@ -112,7 +107,9 @@ async def catalogue_view(
     request: Request,
     db: AsyncSession = Depends(get_session),
 ):
-    datasets = await list_dataset_entries(db)
+    # The page is unauthenticated, so it lists what the catalogue may show and
+    # nothing else — same rule as `GET /catalogue`, from the same helper.
+    datasets = await list_catalogue_entries(db=db)
 
     grouped: dict[str, list[DatasetEntry]] = defaultdict(list)
 
@@ -129,22 +126,25 @@ async def catalogue_view(
         grouped[dataset_name].append(ds)
 
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "datasets": grouped,
         },
     )
 
 
-@router.get("/catalogue/{dataset_id}", response_class=HTMLResponse)
-async def dataset_view(
-    dataset_id: str,
+async def render_dataset_page(
+    *,
     request: Request,
-    db: AsyncSession = Depends(get_session),
-):
-    dataset = await load_dataset_entry(db=db, dataset_id=dataset_id)
+    dataset: DatasetEntry,
+    db: AsyncSession,
+) -> HTMLResponse:
+    """The dataset page, for a caller that asked for HTML.
 
+    Not a route: `/catalogue/{id}` is declared once, in `routes/catalogue.py`,
+    which has already resolved the entry and checked it may be shown.
+    """
     dataset.title = dataset.title or dataset.dataset_id
 
     if dataset.description == dataset.dataset_id:
@@ -178,9 +178,9 @@ async def dataset_view(
     )
 
     return templates.TemplateResponse(
+        request,
         "dataset.html",
         {
-            "request": request,
             "dataset": dataset,
             "sql_example": sql_example,
             "example_curl": example_curl,

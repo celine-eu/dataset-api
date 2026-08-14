@@ -11,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.api.catalogue.dcat_formatter import build_catalog, build_dataset
+from celine.dataset.core.datasets import catalogue_visible, load_catalogue_entry
+from celine.dataset.core.negotiation import wants_html
 from celine.dataset.db.engine import get_session
+from celine.dataset.routes.views import render_dataset_page
 
 router = APIRouter()
 
@@ -34,8 +37,7 @@ async def list_catalogue(request: Request, db: AsyncSession = Depends(get_sessio
     are silently omitted even when expose=True.
     """
     owners = getattr(request.app.state, "owners", None)
-    stmt = select(DatasetEntry).where(DatasetEntry.expose.is_(True))
-    res = await db.execute(stmt)
+    res = await db.execute(catalogue_visible(select(DatasetEntry)))
     entries = res.scalars().all()
     return JSONResponse(content=build_catalog(entries, owners=owners), media_type=_LD_MEDIA_TYPE)
 
@@ -49,18 +51,19 @@ async def get_catalogue_entry(
     """Return a single dcat:Dataset JSON-LD document.
 
     Only exposed, non-secret entries are accessible here.
+
+    One path, two representations: a browser gets the HTML page rendered by
+    `routes/views.py`, everyone else gets the document. The route is declared
+    here and only here — a second declaration of the same path in another router
+    would be dead code decided by include order, not by what the client asked
+    for.
     """
+    entry = await load_catalogue_entry(db=db, dataset_id=dataset_id)
+
+    if wants_html(request):
+        return await render_dataset_page(request=request, dataset=entry, db=db)
+
     owners = getattr(request.app.state, "owners", None)
-    stmt = select(DatasetEntry).where(
-        DatasetEntry.dataset_id == dataset_id,
-        DatasetEntry.expose.is_(True),
-    )
-    res = await db.execute(stmt)
-    entry = res.scalar_one_or_none()
-    if entry is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
-    if entry.access_level == "secret":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
     return JSONResponse(content=build_dataset(entry, owners=owners), media_type=_LD_MEDIA_TYPE)
 
 
@@ -78,8 +81,7 @@ async def search_catalogue(
     - keywords: at least one keyword must appear in tags.keywords
     """
     owners = getattr(request.app.state, "owners", None)
-    stmt = select(DatasetEntry).where(DatasetEntry.expose.is_(True))
-    res = await db.execute(stmt)
+    res = await db.execute(catalogue_visible(select(DatasetEntry)))
     entries = list(res.scalars().all())
 
     # Post-filter in Python (small catalogue; avoids DB-specific JSON operators)
