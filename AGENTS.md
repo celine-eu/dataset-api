@@ -1,135 +1,82 @@
-# dataset-api
+<!-- harness-standard v4 — issued by the agent harness. Do not edit; replace it with `python -m harness upgrade <target>`. -->
 
-Permissioned dataset interface API. Exposes governed SQL query access to PostgreSQL-backed datasets, a DCAT-AP 3.0 catalogue, and a CLI for governance/lineage import-export workflows.
+# Agent Guide
 
-## Architecture
+This file is the entry point. It is **navigation and constraints**: where things are, and
+what you may not do.
 
-Two-database design:
-- **Catalogue DB** — stores `datasets_entries` table (metadata, access levels, DCAT fields). Managed by Alembic migrations. Schema name controlled by `CATALOGUE_SCHEMA` (default `dataset_api`).
-- **Datasets DB** — holds the actual data tables. No ORM models; tables are reflected at runtime via SQLAlchemy `MetaData.reflect()` with PostGIS geometry support (`db/reflection.py`).
+It says nothing about this repository in particular. **It is standard — byte-identical in
+every repository carrying this harness** — so having read it once you have read it
+everywhere. Nothing repository-specific is ever added here. Content that seems to belong
+in this file belongs in one of the homes below instead, and the rule that decides which is
+in the rulebook.
 
-Entry point: `src/celine/dataset/main.py` → `create_app()` factory. Routers are discovered automatically from `routes/*.py` files exporting a `router` variable.
+## Read in this order
 
-## Query engine
+1. This file.
+2. `.agents/README.md` — the rulebook: where work is recorded, and how. Also standard,
+   also identical everywhere.
+3. `.agents/references.local.md` — gitignored, and it names this repository's
+   **companion**: the parallel directory holding the knowledge, playbooks, plans and work.
+   The companion is the only source of truth for all four.
+4. The companion's `knowledge/` — what is true of this repository and not visible in its
+   code. List the directory; read what the task needs.
+5. `docs/`, on demand. Never speculatively.
 
-`POST /query` accepts `{"sql": "...", "limit": N, "offset": N}`. The pipeline:
+The two standard files are the same wherever they appear. Having read them at one root, do
+not read them again in a repository nested inside it — read that repository's companion
+`knowledge/` instead, because that is the part which differs. **Each repository has its
+own companion**; a nested repository does not share the outer one's.
 
-1. **Parse** (`api/dataset_query/parser.py`) — sqlglot AST validation against an allowlist of expressions and functions. Rejects DML, statement stacking, comments, disallowed functions. The parser uses a Tuple/IN allowlist and depth checks.
-2. **Governance** — resolves referenced tables to `DatasetEntry` records, enforces access level via OPA policies evaluated in-process (`policies/celine/dataset.rego`).
-3. **Row filters** (`api/dataset_query/row_filters/`) — pluggable row-level access control. Handlers registered via `ROW_FILTERS_MODULES` setting. Built-in handlers: `direct_user_match`, `rec_registry`, `http_in_list`, `table_pointer`.
-4. **Execute** (`api/dataset_query/executor.py`) — runs the rewritten SQL with `statement_timeout` guard. Limits clamped to `MAX_LIMIT=10000`.
+**If a copy of a standard file does differ, the divergence is the finding.** Report it;
+do not follow it and do not quietly reconcile it.
 
-SQL parser allowlist: when adding support for new SQL constructs, add the sqlglot `exp.*` type to `ALLOWED_EXPRESSIONS` in `parser.py`. For new SQL functions, add the lowercase name to `ALLOWED_FUNCTIONS`.
+## Where things are
 
-## Security model
-
-Three layers:
-1. **Authentication** — JWT via `celine-sdk` OIDC. Dependencies: `get_current_user()` (required) / `get_optional_user()` (optional).
-2. **Access levels** — per-dataset: `open`, `internal`, `restricted`, `secret`. Stored in `DatasetEntry.access_level`.
-3. **OPA policy** — `policies/celine/dataset.rego` evaluates subject type (user/service/anonymous), roles, groups, scopes against access level. Admin scope (`X.admin`) matches all `X.*` required scopes.
-
-Optional EDC dataspace integration when `EDR_ENABLED=true` — checks `Edc-Contract-Agreement-Id` / `Edc-Bpn` headers.
-
-## CLI
-
-Installed as `dataset-cli` (pyproject.toml `[project.scripts]`).
-
-Key commands (see `taskfile.yaml`):
-- `task cli:export:governance` — extract governance metadata from `governance.yaml` files in pipelines repos into `data/governance/`
-- `task cli:import:governance` — import extracted YAML into the API catalogue
-- `task cli:export:openlineage` / `task cli:import:openlineage` — same for Marquez lineage data
-
-## Development
-
-```bash
-task setup              # uv sync
-task run                # uvicorn on :8001 with reload
-task debug              # same with debugpy on :48001
-task test               # pytest (append -- -k "name" to filter)
-task alembic:migrate    # alembic upgrade head
-```
-
-Requires Python >= 3.12, `uv` as package manager, hatchling for builds.
-
-Local PostgreSQL expected at `:15432` (credentials `postgres:securepassword123`). Settings use Pydantic Settings v2 with `.env` file support; defaults work for local dev. Cross-service refs use `host.docker.internal`.
-
-## Key conventions
-
-- Source layout: `src/celine/dataset/` (namespace package for cross-celine compatibility)
-- Settings: single `Settings()` instance in `core/config.py`, env vars override defaults
-- Tests: `pytest-asyncio` with dependency override fixtures in `tests/conftest.py`. SQL parser has dedicated security test suites (injection, fuzzing, jailbreak) under `tests/api/dataset_query/sql_parser/`
-- DCAT catalogue: `api/catalogue/dcat_formatter.py` produces JSON-LD. Publisher metadata enriched from `owners.yaml`
-- Versioning: `python-semantic-release`, `task release`
-
-## File reference
-
-| Path | Purpose |
+| Looking for | Go to |
 |---|---|
-| `core/config.py` | All settings and env vars |
-| `api/dataset_query/parser.py` | SQL validation allowlist |
-| `api/dataset_query/executor.py` | Query execution, limits, timeout |
-| `api/dataset_query/row_filters/` | Row-level filter framework |
-| `security/governance.py` | Access enforcement entry point |
-| `security/auth.py` | JWT validation |
-| `policies/celine/dataset.rego` | OPA access policy |
-| `db/reflection.py` | Dynamic table introspection |
-| `db/models/dataset_entry.py` | Catalogue ORM model |
-| `api/catalogue/dcat_formatter.py` | DCAT-AP 3.0 serialization |
-| `cli/` | CLI commands (export/import) |
-| `routes/` | FastAPI routers (auto-discovered) |
+| what this repository is and does | its `README.md`, then `docs/` |
+| where the companion is | `.agents/references.local.md` |
+| what is true of the code and not obvious from reading it | companion `knowledge/` |
+| how a repeated procedure is performed | companion `playbooks/` |
+| what is being worked on, and how far it has got | companion `plans/`, `work/` |
+| why a technical choice was made | `docs/decisions/` |
+| what the product must do | the specifications in `docs/` |
+| whether a requirement is verified | `.agents/trace/`, or the tool named in `.agents/harness.toml` |
+| what is broken | the issue tracker. Never a file in this repository |
+| how the parts are composed, built and run | the build and composition files at the root |
 
+This table is fixed because the structure is fixed. What varies between repositories is
+what those directories hold — found by listing them, never by an index maintained here. An
+index here would be a second copy of a fact, and the copy is what goes stale.
 
-## Commands
+## Behavioural settings
 
-```bash
-task setup              # uv sync
-task run                # uvicorn on :8001 with reload
-task debug              # same with debugpy on :48001
-task test               # pytest (all tests)
-task test -- -k "name"  # run a single test by name
-task alembic:migrate    # alembic upgrade head
-task alembic:sync-model # autogenerate new revision
-task release            # semantic-release + push tags
-```
+The switches, not the rules. What each one serves is stated in the rulebook.
 
-CLI (installed as `dataset-cli`):
-```bash
-uv run dataset-cli export governance "path/to/governance.yaml" -o ./data/governance
-uv run dataset-cli import catalogue --input "./data/governance/*.yaml" --api-url http://localhost:8001
-```
+- **Ask rather than decide** when a request needs a requirement that does not exist yet.
+  Ask directly, and do not proceed on an inferred requirement.
+- **Write the plan first** for anything non-trivial, and create its work directory before
+  the first change of any phase.
+- **Establish the baseline before changing anything**, so a pre-existing failure is never
+  attributed to your change.
+- **Report faithfully.** Name what ran, what did not, and what was skipped.
+- **Check whether the change crosses a seam** — an interface another component depends on.
+  A change that crosses one is not local, however local it compiles. Which seams exist
+  here is recorded in the companion `knowledge/`.
+- **Change the component that owns the behaviour**, not the place that consumes it. A
+  workaround written at the consumer is a defect left in the owner.
 
-## Prerequisites
+## Maintaining this file
 
-- Python >= 3.12, `uv` as package manager
-- PostgreSQL at `:15432` with credentials `postgres:securepassword123` (local dev default)
-- PostGIS extension (tests create it via `CREATE EXTENSION IF NOT EXISTS postgis`)
+**Read only.** Do not edit it, and do not edit `.agents/README.md` beside it. Neither is
+this repository's document.
 
-## Test setup
+A change lands by changing the harness that issues it, after which every repository
+receives the same text — `python -m harness upgrade <target>`. Editing one copy creates
+the drift the standard exists to remove, and the next reader cannot tell an improvement
+from an accident. REQ-0012 reports a copy that has been altered.
 
-Tests use `pytest-asyncio` with `asyncio_mode = auto` (in `pytest.ini`). The test fixtures in `tests/conftest.py` create a fresh schema per test run via `CREATE SCHEMA` / `DROP SCHEMA CASCADE`, and override the catalogue DB session via `app.dependency_overrides[get_session]`. Tests that need the datasets DB session must also override `get_datasets_session`.
-
-SQL parser tests under `tests/api/dataset_query/sql_parser/` are self-contained (no DB needed) and cover security: injection, fuzzing, jailbreak, resource abuse.
-
-## Key architectural details
-
-**Settings singleton:** `settings = Settings()` in `core/config.py` is instantiated at import time (module-level). Every module imports it directly. There is no `get_settings()` function — the unused `lru_cache` import is vestigial.
-
-**Route auto-discovery:** `routes/__init__.py` globs `*.py` from its own directory and imports modules that expose a `router` variable. External packages cannot contribute routes through this mechanism.
-
-**Row filter plugin loading:** `ROW_FILTERS_MODULES` setting triggers `importlib.import_module()` in `row_filters/registry.py`, but the registry is a local variable at call time — imported modules have no reliable way to access it. This is a known sequencing issue.
-
-**Two-database pattern:** `get_session()` yields the catalogue DB (metadata, `DatasetEntry` records). `get_datasets_session()` yields the datasets DB (actual data tables). Both are in `db/engine.py` as lazy singletons, but the URLs are resolved at import time from the settings singleton.
-
-**Namespace package:** `celine/` has no `__init__.py` (implicit namespace, shared with `celine-sdk`). `celine/dataset/` has an empty `__init__.py` (regular package — a sibling distribution like `celine.dataset.foo` would conflict).
-
-## SQL parser allowlist
-
-When adding support for new SQL constructs, add the `sqlglot.exp.*` type to `ALLOWED_EXPRESSIONS` in `api/dataset_query/parser.py`. For new SQL functions, add the lowercase name to `ALLOWED_FUNCTIONS`.
-
-## Governance YAML structure
-
-Dataset entries follow the format in `data/governance/*.yaml`. Key fields: `backend_type` (validated: `postgres`, `s3`, `fs`), `backend_config.table` (physical table for postgres), `expose` (queryable via API), `access_level` (`open`/`internal`/`restricted`/`secret`), `lineage.facets.governance.rowFilters` (list of `{handler, args}` for row-level filtering).
-
-## OPA policies
-
-Policies in `policies/celine/dataset.rego` are evaluated in-process via `celine.sdk.policies.CachedPolicyEngine` (no external OPA server). The policy evaluates `subject` (user/service/anonymous), `resource.attributes.access_level`, and `action.name` (read/write/admin).
+Anything you were about to add here has a home: a trap goes to the companion `knowledge/`, a
+procedure to its `playbooks/`, a rationale to `docs/decisions/`, a description of the
+system to `docs/`, and a defect to the issue tracker.
