@@ -215,8 +215,10 @@ skaffold
 /owners.*.yaml
 taskfile.local.yaml
 
-# Execution state: transient, and the plan is what survives
-.agents/work/
-
-# Agent material is not published from this repository.
-.agents/
+# Agent material is not published from this repository. What stays is the
+# checker's own configuration; the knowledge, playbooks, plans and work live in
+# the companion named by AGENTS_COMPANION.
+.agents/*
+!.agents/README.md
+!.agents/harness.toml
+!.agents/references.md

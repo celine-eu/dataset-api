@@ -28,8 +28,8 @@ One file per decision, named `ADR-####-short-slug.md`, with this shape:
 - **A rule with a referent that something already measures.** If a statement could carry
   an identifier and a test that names it, put it where that measurement happens. Deciding
   it here hides it from the report.
-- **A procedure.** That is `.agents/playbooks/`.
-- **A fact about the code.** That is `.agents/knowledge/`.
+- **A procedure.** That is a playbook, and playbooks live in the companion.
+- **A fact about the code.** That is knowledge, and knowledge lives in the companion.
 
 An ADR is immutable once accepted. It is superseded by a later ADR that names it, never
 edited to say something else.
