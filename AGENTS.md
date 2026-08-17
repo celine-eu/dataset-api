@@ -1,4 +1,4 @@
-<!-- harness-standard v8 — issued by the agent harness. Do not edit; replace it with `python -m harness upgrade <target>`. -->
+<!-- harness-standard v9 — issued by the agent harness. Do not edit; replace it with `python -m harness upgrade <target>`. -->
 
 # Agent Guide
 
@@ -12,17 +12,23 @@ The store is a directory outside this repository. Its path is never committed, b
 differs on every machine. Look in this order, beside this checkout, and take the first
 that exists:
 
-| # | Store | A repository sits at |
-|---|---|---|
-| 1 | `$AGENTS_STORE` | `<org>/<repo>/`, or `<repo>/` |
-| 2 | `../<org>.<repo>.agents.store/` | the root |
-| 3 | `../<org>.agents.store/` | `<org>/<repo>/`, or `<repo>/` |
-| 4 | `../agents.store/` | `<org>/<repo>/`, or `<repo>/` |
-| 5 | `./.agents/` | the root |
+1. `$AGENTS_STORE`
+2. `../<org>.<repo>.agents.store/`
+3. `../<org>.agents.store/`
+4. `../agents.store/`
+5. `./.agents/`
+
+**Inside whichever you find, this repository is always at `<org>/<repo>/`.** No
+shorthand, no exception — not even in a store whose own name already says the
+organisation and the repository:
+
+```text
+<store>/<org>/<repo>/{knowledge, playbooks, plans, work, trace, harness.toml, ...}
+```
 
 `<org>` is the directory this checkout sits in; `<repo>` is this repository's directory
-name. The store's name says which store; the path inside is the same shape in every one,
-so a note in one store can address a repository in another.
+name. Only the list above has a priority order; where a repository sits inside a store is
+not a search.
 
 A repository nested inside another — a submodule in a workspace — looks beside the
 **enclosing** checkout, not beside itself, and never uses the enclosing repository's
