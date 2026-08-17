@@ -41,7 +41,7 @@ dependencies = [
     "sqlglot>=30.6.0",
     "sqlmodel>=0.0.27",
     "typer>=0.20.0",
-    "uvicorn[standard]>=0.52.1",
+    "uvicorn[standard]>=0.52.3",
 ]
 
 [project.optional-dependencies]
