@@ -76,6 +76,7 @@ def check_conformance(
     rows: list[dict[str, Any]],
     context: dict[str, Any] | None = None,
     profile_version: str | None = None,
+    entity_base_uri: str | None = None,
 ) -> ConformanceReport:
     """Map ``rows`` through ``mapping`` and validate the result.
 
@@ -90,6 +91,13 @@ def check_conformance(
             question — *would this dataset still conform under version N+1?* —
             which is how an ontology upgrade gets decided rather than
             discovered.
+        entity_base_uri: base IRI for the entities the mapping mints, applied to
+            any ``id_template`` or ``iri_template`` that is relative. Passed in
+            rather than read from settings so this stays a pure function of a
+            mapping and its rows. ``None`` leaves the mapper's own default, which
+            is deliberately an unconfigured ``.localhost`` placeholder — a report
+            produced that way is still valid, because conformance is structural
+            and a shape does not care what host an IRI names.
 
     Raises:
         ConformanceUnavailable: the mapper extra is not installed, the mapping
@@ -132,7 +140,10 @@ def check_conformance(
     pinned = bool(spec.profile and spec.profile.version) and profile_version is None
     checked_at = datetime.now(timezone.utc).isoformat()
 
-    mapper = OutputMapper(spec=spec, context=context or {})
+    mapper_kwargs: dict[str, Any] = {"spec": spec, "context": context or {}}
+    if entity_base_uri:
+        mapper_kwargs["base_uri"] = entity_base_uri
+    mapper = OutputMapper(**mapper_kwargs)
     try:
         nodes = mapper.map_many(rows)
     except MappingError as exc:

@@ -203,3 +203,119 @@ def test_aged_out_pin_is_unavailable_not_a_violation() -> None:
 def test_stored_mapping_that_is_not_a_spec_is_unavailable() -> None:
     with pytest.raises(ConformanceUnavailable):
         check_conformance(dataset_id="ds.gold.obs", mapping={"nonsense": True}, rows=ROWS)
+
+
+# ---------------------------------------------------------------------------
+# entity_base_uri — where the entities a mapping mints actually live
+# ---------------------------------------------------------------------------
+
+#: The same mapping with a **relative** `id_template`. That is the shape the
+#: packaged specs moved to: the deployment decides the namespace, because entities
+#: are named by the service that serves them. An absolute template keeps its own
+#: namespace and the base does not touch it, which one of the tests below pins.
+RELATIVE_MAPPING = {
+    **MAPPING,
+    "id_template": "observation/{observation_id}",
+}
+
+
+def _row():
+    return {
+        "observation_id": "obs-1",
+        "result_time": "2026-09-03T00:00:00+00:00",
+        "value": 1.5,
+        "sensor_iri": "https://example.org/device/dev-1",
+    }
+
+
+def _map_one(mapping, base_uri):
+    """Map one row the way `check_conformance` does, and hand back the node.
+
+    `ConformanceReport` deliberately carries no graph — it reports a verdict, not
+    the data it was reached from. So asserting *which IRIs were minted* has to go
+    through the mapper directly. Worth the indirection: a test that only checked
+    `conforms is True` would pass with the base wired to nothing, which is exactly
+    the hole that let `base_uri` sit as dead code for as long as it did.
+    """
+    from celine.mapper.output_mapper import OutputMapper
+    from celine.mapper.spec import MappingSpecLoader
+
+    spec = MappingSpecLoader().load_from_dict(mapping, source="test")
+    return OutputMapper(spec=spec, base_uri=base_uri).map(_row())
+
+
+def test_entity_base_uri_decides_where_minted_entities_live():
+    """Changing the setting changes the emitted IRIs.
+
+    The production value is deployment configuration. The mapper's own default is a
+    visibly unconfigured `.localhost` placeholder rather than the
+    `https://w3id.org/celine/` it used to be — not a registered namespace, so every
+    instance IRI it ever emitted answered 404.
+    """
+    node = _map_one(RELATIVE_MAPPING, "https://datasets.example.test")
+    assert node["@id"] == "https://datasets.example.test/observation/obs-1"
+
+    other = _map_one(RELATIVE_MAPPING, "https://elsewhere.example.test")
+    assert other["@id"] == "https://elsewhere.example.test/observation/obs-1"
+
+
+def test_an_absolute_template_is_not_rebased():
+    """A spec that names its own namespace keeps it.
+
+    Back-compat that matters: specs live in other repositories — celine-pipelines,
+    and anything a deployment wrote beside its own pipeline — and this setting must
+    not silently move IRIs those specs deliberately made absolute.
+    """
+    node = _map_one(MAPPING, "https://datasets.example.test")
+    assert node["@id"] == "https://example.org/obs/obs-1"
+
+
+def test_check_conformance_forwards_the_base_to_the_mapper(monkeypatch):
+    """The wiring itself, which no verdict-level assertion can reach.
+
+    `check_conformance` imports `OutputMapper` inside the function, so the patch
+    goes on the module it is imported from.
+    """
+    import celine.mapper.output_mapper as om
+
+    seen: dict = {}
+    real = om.OutputMapper
+
+    class Recording(real):  # type: ignore[misc, valid-type]
+        def __init__(self, *args, **kwargs):
+            seen.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(om, "OutputMapper", Recording)
+    check_conformance(
+        dataset_id="ds.test",
+        mapping=RELATIVE_MAPPING,
+        rows=[_row()],
+        entity_base_uri="https://datasets.example.test",
+    )
+    assert seen.get("base_uri") == "https://datasets.example.test"
+
+
+def test_the_base_is_optional_and_its_absence_is_not_an_error():
+    """Omitting it leaves the mapper's default, and the report is still valid.
+
+    Conformance is structural: a shape does not care what host an IRI names. A
+    report produced without a configured base says nothing less about whether the
+    rows satisfy the shapes — which is why this is a default and not a required
+    argument.
+    """
+    report = check_conformance(dataset_id="ds.test", mapping=RELATIVE_MAPPING, rows=[_row()])
+    assert report.conforms is True
+    assert report.sample_size == 1
+
+
+def test_the_setting_is_what_the_route_passes():
+    """Pins the default and that the setting exists under the expected name.
+
+    A rename here fails silently otherwise: `check_conformance` treats a missing
+    base as "use the mapper default", so a typo'd attribute would raise at the
+    route rather than in any test that only exercises the function.
+    """
+    from celine.dataset.core.config import get_settings
+
+    assert str(get_settings().entity_base_uri).startswith("http")

@@ -199,6 +199,10 @@ async def dataset_conformance(
             rows=list(result.items),
             context=body.context,
             profile_version=body.profile_version,
+            # Deployment decides where the entities this mapping mints live.
+            # Reaches only relative templates; an absolute one keeps its own
+            # namespace.
+            entity_base_uri=str(get_settings().entity_base_uri),
         )
     except ConformanceUnavailable as exc:
         # The shapes could not be loaded, or the stored mapping no longer parses.

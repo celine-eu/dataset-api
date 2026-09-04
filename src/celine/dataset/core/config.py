@@ -30,6 +30,35 @@ class Settings(BaseSettings):
     catalog_uri: AnyUrl = HttpUrl("http://api.celine.localhost/datasets/catalog")
     dataset_base_uri: AnyUrl = HttpUrl("http://api.celine.localhost/datasets/dataset")
 
+    # Where the *entities* a mapping mints live — the observations, forecasts,
+    # devices and connection points a dataset's rows become, as distinct from the
+    # datasets themselves (`dataset_base_uri`, above).
+    #
+    # **Points at this service, through the proxy, on purpose.** The Caddyfile in
+    # celine-dev routes `http://api.celine.localhost/datasets*` to dataset-api on
+    # 8001 with `handle_path`, which strips the prefix — so this URL is the external
+    # address of a path this service can answer, and `/entity/...` is where
+    # resolution lands when it is built. That is the point of minting IRIs here at
+    # all: entities are named by the service that serves them, and a name that
+    # cannot be dereferenced is the defect this replaced. The mapper used to
+    # hardcode `https://w3id.org/celine/`, which is not a registered w3id namespace,
+    # so every instance IRI it emitted answered 404.
+    #
+    # It is deployment configuration, not a constant. Production is a real host —
+    # likely `https://datasets.celine.dev.spindoxlabs.it/entity` — and the default
+    # here stays `.localhost` so an unconfigured deployment is visibly unconfigured
+    # rather than quietly claiming a permanent identity.
+    #
+    # Nothing resolves these yet; see the plan for `GET /entity/{type}/{path}`.
+    # Until it exists these are stable, correctly-namespaced identifiers that do not
+    # dereference — which is a smaller lie than one pointing at another org's
+    # namespace, but still a promise this service owes.
+    #
+    # Only reaches templates that are *relative*. The packaged specs became relative
+    # in celine-ontologies with the v0.11 work; a spec whose `id_template` is still
+    # absolute keeps its own namespace and this setting does not touch it.
+    entity_base_uri: AnyUrl = HttpUrl("http://api.celine.localhost/datasets/entity")
+
     database_url: str = (
         "postgresql+psycopg://postgres:securepassword123@host.docker.internal:15432/datasets"
     )
