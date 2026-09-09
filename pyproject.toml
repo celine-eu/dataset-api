@@ -26,7 +26,7 @@ dependencies = [
     # Keycloak to parse a file, which an API container cannot take. 2.0 moved all
     # of that behind extras; do NOT add [all] or [pipelines] here, and see the
     # `governance-thin` job in celine-utils for what keeps the core thin.
-    "celine-utils>=2.0.0",
+    "celine-utils>=2.5.0",
 
     "celine-sdk>=1.13.0",
     "fastapi>=0.139.0",
