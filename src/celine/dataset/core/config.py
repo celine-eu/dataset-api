@@ -146,6 +146,15 @@ class Settings(BaseSettings):
         description="PostgreSQL statement_timeout for dataset queries (milliseconds)",
     )
 
+    db_pool_recycle_seconds: int = Field(
+        default=300,
+        description=(
+            "Retire a pooled connection after this many seconds. Together with "
+            "pool_pre_ping it stops a connection the cluster network has silently "
+            "dropped from failing the first query that picks it up."
+        ),
+    )
+
     edr_enabled: bool = Field(
         default=False,
         description=(

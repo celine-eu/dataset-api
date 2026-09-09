@@ -76,9 +76,25 @@ async def _execute_sql_with_timeout(
         return await db.execute(text(sql), params or {})
 
     except DBAPIError as exc:
+        # The SQL stays at DEBUG (it can be long and can name private tables); the
+        # driver's own reason is logged where the service can be read at INFO, because
+        # without it a day of 400s left no trace anywhere — not here, not in PostgreSQL.
+        original = getattr(exc, "orig", None) or exc
+        logger.warning(
+            "Query failed: %s: %s (connection_invalidated=%s)",
+            type(original).__name__,
+            original,
+            exc.connection_invalidated,
+        )
         logger.debug(f"Query failed sql={sql} exception={exc}")
         if "statement timeout" in str(exc).lower():
             raise HTTPException(400, "Query exceeded time limit") from None
+        if exc.connection_invalidated:
+            # The pooled connection was already dead; SQLAlchemy has discarded it. Not
+            # the caller's query — a retry lands on a fresh connection.
+            raise HTTPException(
+                503, "Database connection lost, retry the query"
+            ) from None
         raise HTTPException(400, "Database query failed") from None
 
 
