@@ -2,6 +2,93 @@
 
 <!-- version list -->
 
+## v1.9.0 (2026-09-09)
+
+### Bug Fixes
+
+- Correct catalogue views and jsonld handling
+  ([`517e81a`](https://github.com/celine-eu/dataset-api/commit/517e81a77fc955a32b277fb0495fa970cff32833))
+
+- Correct dcat merge
+  ([`068c61b`](https://github.com/celine-eu/dataset-api/commit/068c61b184e531602c6f270c8b5bd26c78965e0a))
+
+- Correct failing tests
+  ([`581712a`](https://github.com/celine-eu/dataset-api/commit/581712af12ce5bacd1826e0af3a5dc051aa727ce))
+
+- Pre-ping and recycle pooled connections; log driver errors
+  ([`bfcda44`](https://github.com/celine-eu/dataset-api/commit/bfcda44a0b343afdfe5492327ee6da1a4431c429))
+
+### Chores
+
+- Clean up
+  ([`6f3ddff`](https://github.com/celine-eu/dataset-api/commit/6f3ddffa77f666e0085357a7829215916e9fa44d))
+
+- Correct DCAT tests
+  ([`83c60e8`](https://github.com/celine-eu/dataset-api/commit/83c60e86a75dd350adab44dcecbe4771eb9c3906))
+
+- Rm dump yaml
+  ([`697d3eb`](https://github.com/celine-eu/dataset-api/commit/697d3eb62922eb09ab0bc06a5a994695e14c235d))
+
+- Update deps
+  ([`ed6919a`](https://github.com/celine-eu/dataset-api/commit/ed6919ae4b16723101ccb92e25c3d6985c9bbadd))
+
+- Update harness
+  ([`bd10100`](https://github.com/celine-eu/dataset-api/commit/bd101002199daecc7a8de9bfe10629f19536dedd))
+
+- Update refs
+  ([`b663db1`](https://github.com/celine-eu/dataset-api/commit/b663db1203894db1fe55c7d3b55ca1b517b09d2c))
+
+- Upgrade dependabot packagas
+  ([`e109fe9`](https://github.com/celine-eu/dataset-api/commit/e109fe9ce456591a7b5327affccbd8c52e4c421a))
+
+- Upgrade dependencies
+  ([`5c91423`](https://github.com/celine-eu/dataset-api/commit/5c91423b81c5e14be5ba85420ae41b60a8c41c92))
+
+- Upgrade deps
+  ([`0356553`](https://github.com/celine-eu/dataset-api/commit/035655375a56619b941839700610a09a093ba8b2))
+
+- Uv run on cmd exec
+  ([`e7ff86f`](https://github.com/celine-eu/dataset-api/commit/e7ff86fb7d731c74198da4110a8341b0c894059e))
+
+### Features
+
+- Add EDR gate on dataspace.exposed
+  ([`525ca51`](https://github.com/celine-eu/dataset-api/commit/525ca51cbb9f54c2ffcc04f4243e284ee716bd39))
+
+- Add feedback on data access
+  ([`ccbf441`](https://github.com/celine-eu/dataset-api/commit/ccbf441d6d4bb72e900d976f39888d8bb58b01fa))
+
+- Add local override
+  ([`6e0869b`](https://github.com/celine-eu/dataset-api/commit/6e0869b5dc4babb05bdea5baaf1038a405434213))
+
+- Add vocabulary enspoint
+  ([`093a461`](https://github.com/celine-eu/dataset-api/commit/093a4619ad73c913bf5bf02017220e3368aa60f1))
+
+- Expose SHACL validation endpoint
+  ([`8500a40`](https://github.com/celine-eu/dataset-api/commit/8500a404b2a0ff430f9e8b7f2abd55d85fde6e68))
+
+- Improve conformance checks against ontologies
+  ([`1a82f5f`](https://github.com/celine-eu/dataset-api/commit/1a82f5f9bb77174a1e068472916085d1d444e926))
+
+- Integrate principal lookup to row_filter handling
+  ([`3a65918`](https://github.com/celine-eu/dataset-api/commit/3a659180d4a2a4861ed2a8f3fb284166bd6304ef))
+
+- Review edr integration
+  ([`b15649c`](https://github.com/celine-eu/dataset-api/commit/b15649c84eb4e6f0968e872363490cad23a91fb8))
+
+- Review module system
+  ([`7de61e8`](https://github.com/celine-eu/dataset-api/commit/7de61e81e622cea1e4246188df4f84380bc102b4))
+
+- Revise PEP implementation and integration to ds
+  ([`18bc5d5`](https://github.com/celine-eu/dataset-api/commit/18bc5d55e69615e9d4c1fa9b03dee61f70bf1e08))
+
+- Upgrade ontologies ref
+  ([`f64e3b1`](https://github.com/celine-eu/dataset-api/commit/f64e3b199405ede3016e9268f635c07dc32fd67e))
+
+- Use utils governance library for parsing
+  ([`cf4a0dd`](https://github.com/celine-eu/dataset-api/commit/cf4a0dd5a0936996673b2710b14762da7aef80e8))
+
+
 ## v1.8.0 (2026-07-02)
 
 ### Chores
