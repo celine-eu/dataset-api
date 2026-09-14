@@ -61,7 +61,7 @@ dependencies = [
 # tagged and released on GitHub, and its upload failed. `>=1.10.0` would resolve
 # today, but it names a version nobody can install.
 conformance = [
-    "celine-ontologies[mapper]>=1.10.1",
+    "celine-ontologies[mapper]>=1.11.0",
 ]
 
 [tool.uv]  # optional, helps uv handle locking
@@ -84,12 +84,12 @@ dev = [
     # profiles, which is the right behaviour for a deployment that runs without
     # the extra — and exactly the wrong behaviour for a test run, where a silent
     # skip is indistinguishable from a pass.
-    "celine-ontologies[mapper]>=1.10.1",
+    "celine-ontologies[mapper]>=1.11.0",
     "debugpy>=1.8.19",
-    "hypothesis>=6.152.3",
+    "hypothesis>=6.168.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
-    "python-semantic-release>=10.5.3",
+    "python-semantic-release>=10.6.2",
     "dumpster-cli>=1.3.2",
 ]
 
