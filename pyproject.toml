@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 dependencies = [
-    "alembic>=1.17.2",
+    "alembic>=1.19.2",
     "asyncpg>=0.30.0",
     # 1.6.1: the vocabulary registry ships in the wheel with a complete
     # prefix->namespace map. Below this, `prefix_map()` is missing entries and a
@@ -39,8 +39,8 @@ dependencies = [
     "rdflib>=7.5.0",
     "sqlalchemy>=2.0.44",
     "sqlglot>=30.6.0",
-    "sqlmodel>=0.0.27",
-    "typer>=0.20.0",
+    "sqlmodel>=0.0.42",
+    "typer>=0.27.2",
     "uvicorn[standard]>=0.52.1",
 ]
 
