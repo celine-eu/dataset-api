@@ -5,7 +5,6 @@ import json
 import logging
 
 import httpx
-import sqlglot
 from typing import Optional, Dict, Sequence, List
 from fastapi import HTTPException, Request
 from sqlalchemy import RowMapping, Table, text, select, func
@@ -319,15 +318,16 @@ async def execute_query(
             row_filter_plans.append(plan)
 
     # Logical -> physical substitution
-    complete_sql = parsed.to_sql(tables_map=tables_map)
+    mapped_ast = parsed.to_ast(tables_map=tables_map)
+    complete_sql = mapped_ast.sql(dialect="postgres")
     logger.debug(f"Complete SQL (after table mapping): {complete_sql}")
 
-    # Apply row-level filters
+    # Apply row-level filters to the mapped AST, never to a re-parse of its text
+    # (see ParsedSQL.to_ast), and render once, as postgres.
     if row_filter_plans:
         try:
-            ast = sqlglot.parse_one(complete_sql)
-            ast = apply_row_filter_plans(ast, row_filter_plans)
-            complete_sql = ast.sql()
+            ast = apply_row_filter_plans(mapped_ast, row_filter_plans)
+            complete_sql = ast.sql(dialect="postgres")
         except Exception:
             logger.exception("Failed to apply row filters")
             raise HTTPException(500, "Failed to apply row filters") from None

@@ -28,7 +28,7 @@ dependencies = [
     # `governance-thin` job in celine-utils for what keeps the core thin.
     "celine-utils>=2.0.0",
 
-    "celine-sdk>=1.13.0",
+    "celine-sdk>=1.20.0",
     "fastapi>=0.139.0",
     "geoalchemy2>=0.19.0",
     "httpx>=0.28.1",

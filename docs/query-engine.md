@@ -64,6 +64,32 @@ A typical paginated response:
 - only allow safe scalar functions
 - block functions that can access filesystem, network, or server internals
 
+Safe means pure and read-only: the construct reaches nothing beyond the rows the
+query already reads, and costs no more than an aggregate, which the statement
+timeout bounds. On that basis the parser admits:
+
+- the functions in `ALLOWED_FUNCTIONS` (`parser.py`), whether sqlglot parses them
+  as a typed node (`COALESCE`, `FLOOR`, `EXTRACT`, …) or as an anonymous call. Any
+  of a function's SQL names counts, so `IFNULL` is `COALESCE`
+- `GREATEST`, `LEAST`, `NULLIF`
+- `CASE` expressions
+- window functions (`… OVER (…)`) and the ranking functions `ROW_NUMBER`, `RANK`,
+  `DENSE_RANK`. The function inside a window is still checked on its own
+- `PERCENTILE_CONT` / `PERCENTILE_DISC` with `WITHIN GROUP`, and `BOOL_OR` /
+  `BOOL_AND`
+- a `VALUES` list, typically as a CTE of constant rows
+
+Hash and crypto functions (`MD5`, `SHA256`, …) and string concatenation (`||`)
+are not admitted. No read path needs them, so derive such values in the caller.
+
+### Row filters
+A dataset's governance can declare row filters (`rowFilters`). They are applied to
+the validated AST after physical table names are substituted, and the query is then
+rendered once, as PostgreSQL. The SQL is never re-parsed from text in between: a
+text round trip changes the dialect (`INTERVAL '30 minutes'` becomes
+`INTERVAL '30' MINUTES`) and splits `schema.table`, so a filter keyed on the
+physical table would stop matching and be dropped.
+
 ### Projection safety
 - avoid `SELECT *` if you want strict contracts (optional)
 - optionally enforce explicit column selection for restricted datasets

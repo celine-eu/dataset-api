@@ -12,11 +12,18 @@ logger = logging.getLogger(__name__)
 
 
 def _table_name(table: exp.Table) -> str:
-    # table.this is Identifier; may contain dots if set that way
+    """The table's full name, as a plan's `table` spells it.
+
+    The executor substitutes the physical name as one dotted identifier, but a
+    parsed `schema.table` carries the schema in `db`. Both must give the same
+    answer: returning only the last part made every plan on a schema-qualified
+    table miss, and a plan that misses filters nothing.
+    """
     ident = table.args.get("this")
-    if isinstance(ident, exp.Identifier):
-        return ident.this
-    return table.sql()
+    if not isinstance(ident, exp.Identifier):
+        return table.sql()
+    parts = [p.name for p in (table.args.get("catalog"), table.args.get("db")) if p]
+    return ".".join([*parts, ident.this])
 
 
 def _qualify_columns(expr: exp.Expression, alias: str) -> exp.Expression:

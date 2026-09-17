@@ -75,6 +75,18 @@ ALLOWED_EXPRESSIONS = (
     exp.Having,
     exp.ArrayAgg,
     exp.Filter,
+    # Ordered-set aggregates (PERCENTILE_CONT(...) WITHIN GROUP (ORDER BY ...)).
+    # The aggregate itself is still checked against ALLOWED_FUNCTIONS.
+    exp.WithinGroup,
+    # Window functions. OVER adds partitioning and ordering, not reach: the
+    # windowed function is still checked on its own.
+    exp.Window,
+    exp.WindowSpec,
+    # --- Conditional expressions ---
+    exp.Case,
+    exp.If,
+    # --- Constant rows (a VALUES list in a CTE); reads nothing ---
+    exp.Values,
     # --- Subqueries (allowed for now) ---
     exp.Subquery,
     # --- Arithmetic ---
@@ -128,6 +140,10 @@ FORBIDDEN_EXPRESSIONS = (
     exp.Comment,
 )
 
+# Matched against a function's SQL names whether sqlglot parses it as a typed
+# node (`exp.Coalesce`) or as `exp.Anonymous`. Hash and crypto functions are
+# deliberately absent: no read path needs them, and they are the building block
+# for fingerprinting values.
 ALLOWED_FUNCTIONS = {
     # PostGIS
     "st_intersects",
@@ -160,6 +176,17 @@ ALLOWED_FUNCTIONS = {
     # comparison
     "coalesce",
     "nullif",
+    "greatest",
+    "least",
+    # aggregates
+    "bool_or",
+    "bool_and",
+    "percentile_cont",
+    "percentile_disc",
+    # window ranking
+    "row_number",
+    "rank",
+    "dense_rank",
     # date
     "current_date",
     "current_timestamp",
@@ -195,11 +222,22 @@ class ParsedSQL:
 
         table_map: {logical_name -> physical_table}
         """
-        if not tables_map:
-            return self.ast.sql(dialect="postgres")
+        return self.to_ast(tables_map).sql(dialect="postgres")
 
+    def to_ast(self, tables_map: Optional[Dict[str, str]] = None) -> exp.Expression:
+        """
+        A copy of the AST with physical table names substituted.
+
+        Row filters are applied to this rather than to a re-parse of `to_sql`.
+        A round trip through text changes the dialect (`INTERVAL '30 minutes'`
+        comes back as `INTERVAL '30' MINUTES`, which PostgreSQL refuses) and the
+        table shape (`schema.table` splits into db and name, so a plan keyed on
+        the physical name stops matching and its predicate is silently dropped).
+        """
         # Work on a copy to keep ParsedSQL immutable
         ast = self.ast.copy()
+        if not tables_map:
+            return ast
 
         for table in ast.find_all(exp.Table):
             logical = _table_identifier(table)
@@ -221,7 +259,7 @@ class ParsedSQL:
             table.set("db", None)
             table.set("catalog", None)
 
-        return ast.sql(dialect="postgres")
+        return ast
 
 
 # -----------------------------------------------------------------------------
@@ -302,6 +340,15 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
             continue
 
         if isinstance(node, ALLOWED_EXPRESSIONS):
+            continue
+
+        # sqlglot parses every function it knows into a typed node, so the
+        # allowlist has to be consulted here too, or it never applies to the
+        # functions it names. Any of the class's SQL names counts: `IFNULL` is
+        # parsed as `exp.Coalesce`.
+        if isinstance(node, exp.Func):
+            if ALLOWED_FUNCTIONS.isdisjoint(n.lower() for n in type(node).sql_names()):
+                raise _bad_request(f"SQL function not allowed: {node.sql_name()}")
             continue
 
         if isinstance(node, FORBIDDEN_EXPRESSIONS):
