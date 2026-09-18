@@ -442,6 +442,8 @@ async def execute_query(
                 transfer_id=edr_context.transfer_id,
                 row_count=len(items),
                 authorized_subject_ids=principals,
+                # The connector that decided is the connector that is told.
+                provider_id=edr_context.provider_id,
             )
 
     return DatasetQueryResult(

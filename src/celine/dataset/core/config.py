@@ -170,6 +170,25 @@ class Settings(BaseSettings):
             "(e.g. http://ds-connector:30001). Required when edr_enabled=True."
         ),
     )
+    connector_internal_urls: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Participant id -> ds-connector internal base URL, for one instance "
+            "acting as the data plane of more than one participant. The key is "
+            "what EDC puts in the EDR token's `iss` claim: the provider's own "
+            "participant id, a DID in a DCP deployment. "
+            "Empty by default, which leaves connector_internal_url the only "
+            "connector and this service behaving exactly as it did before. "
+            "**Once it is non-empty it is authoritative**: a participant it does "
+            "not name is refused rather than sent to connector_internal_url, "
+            "because asking a control plane that knows nothing of the agreement "
+            "yields a denial that reads as a consent problem. So listing any "
+            "connector means listing them all, including the one already named "
+            "by connector_internal_url. "
+            'In the environment it is JSON: CONNECTOR_INTERNAL_URLS=\'{"did:web:'
+            'a.example.org": "http://connector-a:30001"}\'.'
+        ),
+    )
 
     conformance_enabled: bool = Field(
         default=False,

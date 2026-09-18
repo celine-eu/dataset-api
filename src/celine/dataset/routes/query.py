@@ -6,12 +6,15 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from celine.dataset.core.config import get_settings
 from celine.dataset.db.engine import get_session, get_datasets_session
 from celine.dataset.schemas.dataset_query import DatasetQueryModel, DatasetQueryResult
 from celine.dataset.security.auth import get_optional_user
 from celine.dataset.api.dataset_query.executor import execute_query
-from celine.dataset.security.edr import EDRRequestContext, verify_edr_consumer
+from celine.dataset.security.edr import (
+    EDRRequestContext,
+    dataspace_mode,
+    verify_edr_token,
+)
 from celine.dataset.security.models import AuthenticatedUser
 
 
@@ -39,16 +42,24 @@ async def query_post(
     # `Edc-Contract-Agreement-Id` selects dataspace mode. Its absence is the
     # ordinary path — user auth and policies — which this change leaves alone.
     #
+    # The same predicate decides it in `get_optional_user`, which is why `user`
+    # is `None` here: an EDR token is not a Keycloak token, and validating it
+    # against Keycloak refused this path before the route body ran.
+    #
     # Dataspace mode never falls back to that path on failure: a fallback
     # between two authorization regimes is a bypass with extra steps.
     edr_context: Optional[EDRRequestContext] = None
-    if get_settings().edr_enabled and edc_contract_agreement_id:
+    if dataspace_mode(edc_contract_agreement_id):
+        # Both identities come from the **verified** token, never from a header:
+        # the consumer (`aud`) is what ds checks the agreement against, so
+        # `Edc-Bpn` would let a caller name someone else's contract; the provider
+        # (`iss`) chooses which ds is asked, so a header would let a caller pick
+        # the control plane that answers for them.
+        verified = await verify_edr_token(authorization)
         edr_context = EDRRequestContext(
             agreement_id=edc_contract_agreement_id,
-            # From the **verified** token, never from `Edc-Bpn`: the consumer's
-            # identity is what ds checks the agreement against, so a header
-            # would let a caller name someone else's contract.
-            consumer_id=await verify_edr_consumer(authorization),
+            consumer_id=verified.consumer_id,
+            provider_id=verified.provider_id,
             transfer_id=edc_transfer_process_id,
             purpose=[p.strip() for p in (edc_purpose or "").split(",") if p.strip()],
         )

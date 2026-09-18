@@ -43,13 +43,37 @@ CONNECTOR_INTERNAL_URL=http://ds-connector:30001
 
 EDR query flow:
 
-1. Detects `Edc-Contract-Agreement-Id` and `Edc-Bpn` headers
-2. Calls `ds-connector GET /internal/agreements/{id}/status` — checks the agreement is active
-3. If the dataset has a `user_filter_column`, calls `ds-connector GET /internal/consent/check` — retrieves the list of subject IDs the consumer has consent for
-4. Injects an SQL `IN (subject_ids)` predicate or a deny plan into the row filter pipeline
-5. Skips the Keycloak/OPA path entirely — the EDC data plane already validated the EDR JWT
+1. `Edc-Contract-Agreement-Id` selects dataspace mode; the ordinary path is never a fallback for it
+2. The `Authorization` header is **not** validated against Keycloak: an EDR token is signed with the provider EDC's vault key, which Keycloak's key set can never contain. The request reaches the route with no user identity — the state an unauthenticated request already reaches, so asserting the header costs a caller its identity and grants it nothing
+3. Verifies the EDR token's signature against the key set ds publishes at `GET /internal/edr-jwks`. **This service is the EDR endpoint** — upstream EDC removed the data-plane proxy, so nothing validated the token before it arrived
+4. Takes the consumer from the verified `aud` and the provider from the verified `iss`; neither comes from a header
+5. Calls `ds-connector POST /internal/dataplane/authorize` once for the whole query — agreement validity, the agreement↔consumer binding, purpose and the consented subjects are all ds's to answer, and it returns the verdict *and* the row-filter spec
+6. Applies that spec through the row-filter handlers, then records the disclosure with `POST /internal/audit/query`
+7. Skips the Keycloak/OPA path entirely for datasets covered by the decision
 
-This path requires no JWT re-validation by dataset-api since the EDC data plane validates the bearer token before proxying.
+#### One instance, several connectors
+
+The connector is resolved **per request**, from the provider in the EDR token, so
+one instance can be the data plane of more than one participant:
+
+```env
+EDR_ENABLED=true
+CONNECTOR_INTERNAL_URL=http://connector-a:30001
+CONNECTOR_INTERNAL_URLS={"did:web:a.example.org":"http://connector-a:30001","did:web:b.example.org":"http://connector-b:30001"}
+```
+
+Leave `CONNECTOR_INTERNAL_URLS` unset for a single-connector deployment; nothing
+changes. Once it is set it is authoritative — a provider it does not name is
+refused rather than sent to `CONNECTOR_INTERNAL_URL`, because asking a control
+plane that has never heard of the agreement produces a denial that reads as a
+consent problem. **Listing any connector means listing them all**, including the
+one already at `CONNECTOR_INTERNAL_URL`.
+
+This is a convenience for testing and validation, **not** a replacement for one
+instance per participant: the warehouse is still one engine per process
+(`DATASETS_DATABASE_URL`), and a catalogue entry names a table and never a
+connection — so a participant whose data lives in its own database still needs
+its own instance.
 
 ### DPS data plane ("EDC mode", prototype)
 

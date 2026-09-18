@@ -31,7 +31,11 @@ from celine.dataset.core.config import get_settings
 from celine.dataset.core.datasets import load_catalogue_entry
 from celine.dataset.db.engine import get_datasets_session, get_session
 from celine.dataset.security.auth import get_optional_user
-from celine.dataset.security.edr import EDRRequestContext, verify_edr_consumer
+from celine.dataset.security.edr import (
+    EDRRequestContext,
+    dataspace_mode,
+    verify_edr_token,
+)
 from celine.dataset.security.models import AuthenticatedUser
 
 logger = logging.getLogger(__name__)
@@ -169,14 +173,18 @@ async def dataset_conformance(
     limit = body.limit or settings.conformance_sample_limit
     limit = max(0, min(limit, settings.conformance_max_sample))
 
-    # Mirrors /query exactly: dataspace mode is selected by the agreement
-    # header, and never falls back to the user-auth path on failure — a fallback
-    # between two authorization regimes is a bypass with extra steps.
+    # Mirrors /query exactly, through the same predicate: dataspace mode is
+    # selected by the agreement header, `get_optional_user` reads it too and so
+    # `user` is `None` here, and the path never falls back to user auth on
+    # failure — a fallback between two authorization regimes is a bypass with
+    # extra steps.
     edr_context: Optional[EDRRequestContext] = None
-    if settings.edr_enabled and edc_contract_agreement_id:
+    if dataspace_mode(edc_contract_agreement_id):
+        verified = await verify_edr_token(authorization)
         edr_context = EDRRequestContext(
             agreement_id=edc_contract_agreement_id,
-            consumer_id=await verify_edr_consumer(authorization),
+            consumer_id=verified.consumer_id,
+            provider_id=verified.provider_id,
             transfer_id=edc_transfer_process_id,
             purpose=[p.strip() for p in (edc_purpose or "").split(",") if p.strip()],
         )

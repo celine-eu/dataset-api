@@ -243,6 +243,11 @@ async def pull_query(
     context = EDRRequestContext(
         agreement_id=flow.agreement_id,
         consumer_id=consumer,
+        # Which control plane this pull belongs to. Better than the EDR path's
+        # `iss`: the flow is this data plane's own record of a transfer it was
+        # signalled, and `resolve_pull` has already refused a token whose `iss`
+        # disagrees with it.
+        provider_id=flow.participant_id,
         # Client-asserted, as on the legacy path: ds checks it against the
         # agreement. The flow id is the *provider's* transfer id, which ds's
         # transfer check does not look up.

@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from celine.dataset.core.config import get_settings
+from celine.dataset.security.edr import dataspace_mode
 from celine.dataset.security.models import AuthenticatedUser
 
 # Use celine.sdk for JWT validation
@@ -113,19 +114,45 @@ def _normalize_user(jwt_user: JwtUser, token: Optional[str]) -> AuthenticatedUse
 
 async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    edc_contract_agreement_id: Optional[str] = Header(default=None),
 ) -> Optional[AuthenticatedUser]:
     """
     FastAPI dependency that returns authenticated user if token is present.
 
-    Returns None if no token provided (for public endpoints).
+    Returns None if no token provided (for public endpoints), **and for a
+    request in dataspace mode**, whose bearer token is not a Keycloak one.
+
+    An EDR token is signed with the provider EDC's vault key, so Keycloak can
+    never hold its `kid`. Validating it here refused every EDC transfer with
+    `401 Token validation failed` before the route body ran — the dataspace path
+    was unreachable at every instance, which is what this branch fixes. The
+    token is not ignored: `security/edr.py::verify_edr_token` verifies it in the
+    route, against the provider connector's published key set, and dataspace
+    mode never falls back to the user path when that fails.
+
+    **What a caller gains by asserting `Edc-Contract-Agreement-Id` is nothing**,
+    and what it loses is its identity. `None` is not a privileged state — it is
+    the one every caller already reaches by sending no `Authorization` header at
+    all, and the floor it stands on is anonymous authority:
+    `enforce_dataset_access` refuses a dataset whose access level requires auth,
+    the policy engine evaluates `Subject.anonymous()`, and a dataset carrying
+    row-filter specs raises 401 rather than serving unfiltered rows. So the
+    branch can only cost a caller authority, never grant it — which is what
+    makes it safe on every endpoint sharing this dependency, including one added
+    by an extension through `celine.dataset.ext`.
 
     Args:
         credentials: Optional HTTP Bearer credentials
+        edc_contract_agreement_id: the EDC agreement header, which selects
+            dataspace mode when `edr_enabled` is on
 
     Returns:
         AuthenticatedUser if token is valid, None otherwise
     """
     if credentials is None:
+        return None
+
+    if dataspace_mode(edc_contract_agreement_id):
         return None
 
     jwt_user = await _decode_and_validate_token(credentials.credentials)

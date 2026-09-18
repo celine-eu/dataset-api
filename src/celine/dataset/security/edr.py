@@ -15,6 +15,19 @@ shape everything below:
 ds decides; this module carries the question and enforces the answer. It
 resolves no consent, no agreement state and no purpose vocabulary of its own —
 one round trip returns the verdict *and* the row-filter spec to apply.
+
+**Which control plane is asked is resolved per request, not per process.** EDC
+puts the provider in the same token it puts the consumer in — `iss` is the
+provider's participant id, `aud` the consumer's — so one instance can be the data
+plane of several participants at once. `connector_internal_urls` maps the first
+to a connector; `connector_internal_url` remains the single-connector default,
+and an empty map leaves this module behaving exactly as it did when it had one.
+
+This is a *practicality*, not a new topology: a second participant whose data
+lives in its own warehouse still needs a second instance, because
+`DatasetEntry.backend_config` names a table and never a connection. What it buys
+is a test or a validation pass that exercises two participants without standing
+up two data planes.
 """
 from __future__ import annotations
 
@@ -31,23 +44,50 @@ from celine.dataset.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_jwks_cache: dict[str, Any] = {}
+#: EDR verification keys, **keyed by the connector base URL that published
+#: them**. One instance may face several connectors, and a single unkeyed cache
+#: is how the first provider's key set came to be tried against every other
+#: provider's token — a `401 EDR token is not valid` that no rotation fixes.
+_jwks_cache: dict[str, list[Any]] = {}
+
+
+@dataclass(frozen=True)
+class VerifiedEDRToken:
+    """The two identities an EDR token proves, both from the verified claims.
+
+    `consumer_id` is `aud` — who is asking. `provider_id` is `iss` — whose
+    control plane minted the authorisation, and therefore which connector this
+    request's decision and disclosure belong to. `None` means the token named no
+    issuer, which is only reachable on a single-connector deployment (a mapped
+    deployment refuses before verification, because it cannot choose a key set).
+    """
+
+    consumer_id: str
+    provider_id: Optional[str] = None
 
 
 @dataclass
 class EDRRequestContext:
     """A dataspace request, after its token has been verified.
 
-    `consumer_id` comes from the verified `aud`. `agreement_id`, `transfer_id`
-    and `purpose` are client-asserted headers — safe only because ds refuses an
-    agreement that does not belong to `consumer_id`, and a purpose the agreement
-    does not permit. A caller can lie only within what it already holds.
+    `consumer_id` comes from the verified `aud`, `provider_id` from the verified
+    `iss` — or, on the DPS path, from the signalled flow's `participant_id`,
+    which is this data plane's own record and better than a claim.
+    `agreement_id`, `transfer_id` and `purpose` are client-asserted headers —
+    safe only because ds refuses an agreement that does not belong to
+    `consumer_id`, and a purpose the agreement does not permit. A caller can lie
+    only within what it already holds.
+
+    `provider_id` is what selects the connector for `authorize_dataplane` and
+    `audit_query`. `None` means "the default connector", which is what every
+    single-connector deployment resolves to.
     """
 
     agreement_id: str
     consumer_id: str
     transfer_id: Optional[str] = None
     purpose: list[str] = field(default_factory=list)
+    provider_id: Optional[str] = None
 
 
 class DataplaneRowFilter(BaseModel):
@@ -134,20 +174,52 @@ class DataPlaneDecision:
         return self.reason
 
 
-async def verify_edr_consumer(authorization: Optional[str]) -> str:
-    """The consumer DID this request proves, from the EDR token's `aud`.
+def dataspace_mode(edc_contract_agreement_id: Optional[str]) -> bool:
+    """Does this request take the dataspace path rather than the user path?
+
+    **The one definition**, because three places need the same answer and a
+    disagreement between them would be invisible in all three: both routes, and
+    `security/auth.py::get_optional_user`, which has to know *before* the route
+    body runs that the `Authorization` header holds an EDR token rather than a
+    Keycloak one.
+
+    Drift is the hazard it exists to prevent. A dependency gating on less than a
+    route leaves the route in dataspace mode behind a Keycloak refusal — the
+    defect that made the EDR path unreachable at every instance. A dependency
+    gating on more strips identity from requests that then take the ordinary
+    path as anonymous.
+
+    `edr_enabled` off makes the header inert, so an instance that is not in the
+    dataspace is never put into dataspace mode by a client-asserted header.
+    """
+    return bool(get_settings().edr_enabled and edc_contract_agreement_id)
+
+
+async def verify_edr_token(authorization: Optional[str]) -> VerifiedEDRToken:
+    """The consumer and the provider this request proves, from the EDR token.
 
     Every key in the published set is tried rather than the one matching `kid`:
     EDC stamps its **vault alias** into the header while the JWK may carry its
     own name. The set is one or two keys, so trying them all costs nothing and
     survives a rotation that renames either.
+
+    **Which set** is chosen by `iss`, read from the *unverified* token. That is
+    the only way round a cycle — selecting the key set needs the issuer, and
+    verifying the issuer needs the key set — and it is safe because the claim is
+    used for nothing else: a forged `iss` selects a key set that will not verify
+    the token, so the request is refused one step later than it would have been.
+    `aud` is still taken from the verified claims, which is this module's
+    standing invariant.
     """
     token = (authorization or "").removeprefix("Bearer ").strip()
     if not token:
         raise HTTPException(401, "Dataspace mode requires the EDR token")
 
+    provider = _unverified_issuer(token)
+    base = _connector_base(provider)
+
     claims = None
-    for key in await _verification_keys():
+    for key in await _verification_keys(base):
         try:
             claims = jwt.decode(
                 token,
@@ -167,24 +239,52 @@ async def verify_edr_consumer(authorization: Optional[str]) -> str:
         audience = audience[0] if audience else None
     if not audience:
         raise HTTPException(401, "EDR token names no audience")
-    return str(audience)
+
+    # From the verified claims now, not from the unverified read above: the
+    # provider decides which control plane is asked for the decision and told of
+    # the disclosure, so it must be the one the signature vouches for.
+    issuer = claims.get("iss")
+    return VerifiedEDRToken(
+        consumer_id=str(audience),
+        provider_id=str(issuer) if issuer else None,
+    )
 
 
-async def _verification_keys() -> list[Any]:
-    """The provider's EDR signing keys, published by ds.
+def _unverified_issuer(token: str) -> Optional[str]:
+    """`iss` from the unverified token — enough to choose a key set, no more.
+
+    Best-effort: a token that is not a JWT at all yields `None`, which resolves
+    the default connector and then fails verification there, exactly as it did
+    before this function existed.
+    """
+    try:
+        claims = jwt.decode(token, options={"verify_signature": False})
+    except Exception:  # noqa: BLE001 — not a JWT; the verification below refuses it
+        return None
+    issuer = claims.get("iss")
+    return str(issuer) if issuer else None
+
+
+async def _verification_keys(connector_base: str) -> list[Any]:
+    """The provider's EDR signing keys, published by ds at `connector_base`.
 
     ds serves the public half of the vault key EDC signs with, so this service
     never needs the EDC vault or its management credential.
+
+    Cached per connector. A cache shared across connectors would hand one
+    provider's keys to another provider's token, and since every key in the set
+    is tried the failure is a flat `401` with nothing to say which connector was
+    asked.
     """
     from jwt import PyJWK
 
-    if _jwks_cache.get("keys"):
-        return _jwks_cache["keys"]
+    cached = _jwks_cache.get(connector_base)
+    if cached:
+        return cached
 
-    base = _connector_base()
     async with httpx.AsyncClient(timeout=5.0) as client:
         response = await client.get(
-            f"{base}/internal/edr-jwks", headers=await _service_headers()
+            f"{connector_base}/internal/edr-jwks", headers=await _service_headers()
         )
     response.raise_for_status()
 
@@ -196,8 +296,13 @@ async def _verification_keys() -> list[Any]:
             logger.warning("Unusable JWK in the EDR key set: %s", entry.get("kid"))
     if not keys:
         raise HTTPException(503, "ds published no usable EDR verification key")
-    _jwks_cache["keys"] = keys
+    _jwks_cache[connector_base] = keys
     return keys
+
+
+def clear_jwks_cache() -> None:
+    """Forget every connector's key set. For tests and for a key rotation."""
+    _jwks_cache.clear()
 
 
 async def authorize_dataplane(
@@ -213,8 +318,12 @@ async def authorize_dataplane(
 
     **ds unreachable is a denial, never an allow.** The control plane failing to
     respond is precisely when a data plane must not improvise.
+
+    The connector asked is the one that speaks for `context.provider_id` — the
+    token's issuer. Asking any other would be asking about an agreement it does
+    not hold.
     """
-    base = _connector_base()
+    base = _connector_base(context.provider_id)
     payload = {
         "consumer_did": context.consumer_id,
         "agreement_id": context.agreement_id,
@@ -246,8 +355,39 @@ async def authorize_dataplane(
     )
 
 
-def _connector_base() -> str:
-    base = get_settings().connector_internal_url
+def _connector_base(participant_id: Optional[str] = None) -> str:
+    """The connector that speaks for `participant_id`.
+
+    Three rules, and the third is the one worth stating:
+
+    - **No map configured** — `connector_internal_url`, whoever is asking. A
+      single-connector deployment needs no new configuration and behaves exactly
+      as before.
+    - **Mapped** — that participant's connector.
+    - **Mapped, but not this participant** — refused. The tempting alternative,
+      falling back to `connector_internal_url`, reinstates the quiet failure this
+      resolution exists to remove: the authorisation call reaches a control plane
+      that has never heard of the agreement, and its denial reads as a consent
+      problem rather than as a missing map entry. So **listing any connector
+      means listing them all**, including the default one.
+    """
+    settings = get_settings()
+    mapped = settings.connector_internal_urls or {}
+
+    if mapped and participant_id is not None:
+        base = mapped.get(participant_id)
+        if base:
+            return base.rstrip("/")
+        logger.warning(
+            "No connector is configured for provider %s; %d are",
+            participant_id,
+            len(mapped),
+        )
+        raise HTTPException(
+            401, "This data plane does not serve the provider that issued the token"
+        )
+
+    base = settings.connector_internal_url
     if not base:
         raise HTTPException(
             503, "Dataspace mode is enabled but CONNECTOR_INTERNAL_URL is not configured"
@@ -286,6 +426,7 @@ async def audit_query(
     row_count: int,
     authorized_subject_ids: Optional[list[str]] = None,
     subject_id: Optional[str] = None,
+    provider_id: Optional[str] = None,
 ) -> None:
     """Record a `QueryExecuted` disclosure with ds — the accountability half.
 
@@ -302,6 +443,11 @@ async def audit_query(
     **Best-effort.** A failure here must not fail a query the control plane
     already authorised and served, but it is logged: a silently dropped
     disclosure is the worst outcome for an accountability record.
+
+    `provider_id` names the connector that gets the record — the same one that
+    gave the decision. A disclosure filed with the wrong control plane is not a
+    disclosure: the provenance event would be emitted by a participant who
+    disclosed nothing, and the one who did would have no record of it.
     """
     payload = {
         "dataset_id": dataset_id,
@@ -314,7 +460,7 @@ async def audit_query(
         "authorized_subject_ids": authorized_subject_ids,
     }
     try:
-        base = _connector_base()
+        base = _connector_base(provider_id)
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(
                 f"{base}/internal/audit/query",
