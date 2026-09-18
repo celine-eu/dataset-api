@@ -225,12 +225,15 @@ async def execute_query(
         # ------------------------------------------------------------------
         if edr_context is not None:
             # ds returns the row filter **as governance declared it** — handler
-            # and args — plus the people the rows must belong to. The handler is
-            # what knows how a person maps to values in that column:
+            # and args — plus the consenting subjects, named twice: as
+            # `principals` (identifiers native to this system) and as `keys`
+            # (typed data keys, the values this holder already stores their rows
+            # under). The handler is what knows which naming its column speaks:
             # `rec_registry` resolves members to devices, `direct_user_match`
-            # matches the subject directly. A decision reduced to a column would
-            # have forced this branch to assume one of them, which is how the
-            # previous version came to inject nothing at all.
+            # matches the principal directly, `subject_key_match` matches the
+            # keys. A decision reduced to a column would have forced this branch
+            # to assume one of them, which is how the previous version came to
+            # inject nothing at all.
             row_filter = edr_decision.row_filter_for(ds.dataset_id)
             if row_filter is None:
                 # Allowed with no filter: the dataset carries no data subject,
@@ -238,20 +241,42 @@ async def execute_query(
                 edr_disclosures.append((ds.dataset_id, None))
                 continue
 
-            plan = await registry.resolve_with_cache(
-                handler_name=row_filter["handler"],
-                table=phy_table_name,
-                user=user,
-                args=row_filter.get("args") or {},
-                request_context={"agreement_id": edr_context.agreement_id},
-                principals=row_filter.get("principals") or [],
-                # The control plane's TTL wins: an EDR token has no `exp`, so a
-                # lifetime derived from it would let a plan outlive the consent
-                # that justified it.
-                ttl_override=edr_decision.cache_ttl,
-            )
+            try:
+                plan = await registry.resolve_with_cache(
+                    handler_name=row_filter.handler,
+                    table=phy_table_name,
+                    user=user,
+                    args=row_filter.args,
+                    request_context={"agreement_id": edr_context.agreement_id},
+                    principals=row_filter.principals,
+                    keys=row_filter.keys,
+                    # The control plane's TTL wins: an EDR token has no `exp`, so
+                    # a lifetime derived from it would let a plan outlive the
+                    # consent that justified it.
+                    ttl_override=edr_decision.cache_ttl,
+                )
+            except (KeyError, NotImplementedError) as exc:
+                # An *allow* carrying a filter says "these rows". A data plane
+                # that cannot apply the filter has not been permitted to serve
+                # unfiltered ones — it has been handed an instruction it does
+                # not understand, and the only answer is to serve nothing.
+                logger.error(
+                    "Cannot enforce row filter handler %r for %s: %s",
+                    row_filter.handler,
+                    ds.dataset_id,
+                    exc,
+                )
+                raise HTTPException(
+                    403,
+                    f"Cannot enforce row filter handler '{row_filter.handler}' "
+                    f"for {ds.dataset_id}: this data plane implements no such "
+                    "handler, so no rows may be served",
+                ) from exc
             row_filter_plans.append(plan)
-            edr_disclosures.append((ds.dataset_id, row_filter.get("principals")))
+            # The principals only. The keys are personal data the collector
+            # registered with the consent, and an audit record is exactly the
+            # place ds says they must not reach.
+            edr_disclosures.append((ds.dataset_id, row_filter.principals))
             continue  # skip normal auth + spec loop for this dataset
 
         # ------------------------------------------------------------------
@@ -331,7 +356,18 @@ async def execute_query(
         except Exception:
             logger.exception("Failed to apply row filters")
             raise HTTPException(500, "Failed to apply row filters") from None
-        logger.debug(f"Complete SQL (after row filters): {complete_sql}")
+        if edr_context is not None:
+            # Not the SQL. A delegated predicate is a literal list of the
+            # consenting subjects — usernames, or the data keys a collector
+            # registered with the consent — and those are personal data that ds
+            # says must not reach a log. The query before filtering is already
+            # logged above, which is what a reader of this line was after.
+            logger.debug(
+                "Complete SQL (after row filters): withheld — the predicate "
+                "names the consenting subjects"
+            )
+        else:
+            logger.debug(f"Complete SQL (after row filters): {complete_sql}")
 
     # Pagination & caps
     limit = _clamp_limit(limit)

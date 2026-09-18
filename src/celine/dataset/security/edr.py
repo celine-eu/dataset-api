@@ -25,6 +25,7 @@ from typing import Any, Optional
 import httpx
 import jwt
 from fastapi import HTTPException
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from celine.dataset.core.config import get_settings
 
@@ -49,6 +50,39 @@ class EDRRequestContext:
     purpose: list[str] = field(default_factory=list)
 
 
+class DataplaneRowFilter(BaseModel):
+    """The row filter as ds puts it on the wire.
+
+    It travels **whole** — handler, args and both allow-lists — never reduced to
+    a column and a list of ids. The handler is what knows how a person maps to
+    values in the column, and a decision stripped of it forces this end to guess
+    which one it was.
+
+    **An unknown field is refused, not ignored.** These fields are narrowings.
+    The dangerous direction of drift is one-way: a control plane that adds one
+    an older data plane skips over serves rows it was told to withhold, and
+    nothing on either side notices. Refusing means an upgrade on ds's side ahead
+    of this one stops the data plane rather than widening it, which is the side
+    of that trade worth being on. ds makes the same choice in
+    `ds.governance.dataplane` (`extra="forbid"`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    handler: str
+    #: Governance's own `args`, verbatim and uninterpreted by ds: `{"column": …}`
+    #: for every handler in use, plus whatever else a handler defines.
+    args: dict[str, Any] = Field(default_factory=dict)
+    #: Identifiers native to *this* system — usernames a handler can resolve.
+    #: Never subject DIDs.
+    principals: list[str] = Field(default_factory=list)
+    #: Typed data keys, `"<type>:<value>"` — the values this holder already
+    #: stores those same subjects' rows under, registered with the consent by
+    #: the organisation that collected it. Personal data: they may reach a
+    #: predicate and nothing else.
+    keys: list[str] = Field(default_factory=list)
+
+
 @dataclass
 class DataPlaneDecision:
     """ds's answer: whether rows may flow, and which."""
@@ -58,10 +92,39 @@ class DataPlaneDecision:
     datasets: list[dict[str, Any]] = field(default_factory=list)
     cache_ttl: Optional[int] = None
 
-    def row_filter_for(self, dataset_id: str) -> Optional[dict[str, Any]]:
+    def row_filter_for(self, dataset_id: str) -> Optional[DataplaneRowFilter]:
+        """This dataset's filter, parsed — or `None` if it carries none.
+
+        `None` means *no filter applies*: the agreement gated the dataset and
+        every row may leave. It never means "a filter was intended and could not
+        be built", which is a denial, because the two are indistinguishable once
+        the predicate is gone.
+
+        Parsed here rather than at the response, so a filter for a dataset this
+        query never touches cannot refuse a query that is otherwise fine.
+        """
         for entry in self.datasets:
-            if entry.get("dataset_id") == dataset_id:
-                return entry.get("row_filter")
+            if entry.get("dataset_id") != dataset_id:
+                continue
+            raw = entry.get("row_filter")
+            if raw is None:
+                return None
+            try:
+                return DataplaneRowFilter.model_validate(raw)
+            except ValidationError as exc:
+                # A narrowing this service cannot read is not an allow. 502
+                # rather than 403: the consumer did nothing wrong and can do
+                # nothing about it — the two ends of the contract disagree.
+                logger.error(
+                    "ds sent a row filter this data plane cannot read for %s: %s",
+                    dataset_id,
+                    exc,
+                )
+                raise HTTPException(
+                    502,
+                    "ds-connector sent a row filter this data plane cannot apply "
+                    f"for {dataset_id}",
+                ) from exc
         return None
 
     def reason_for(self, dataset_id: str) -> Optional[str]:

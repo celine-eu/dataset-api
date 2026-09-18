@@ -36,17 +36,17 @@ def registry() -> OwnersRegistry:
     return OwnersRegistry(
         [
             OwnerEntry(
-                id="greenland",
+                id="example-rec",
                 type="schema:NGO",
-                name="Greenland Soc. Coop.",
-                url="https://www.greenland.it",
+                name="Example REC Soc. Coop.",
+                url="https://www.rec.example.org",
                 aliases=["rec"],
             ),
             OwnerEntry(
-                id="set-distribuzione",
+                id="example-dso",
                 type="schema:Corporation",
-                name="SET Distribuzione S.p.A.",
-                url="https://www.setdistribuzione.it",
+                name="Example DSO S.p.A.",
+                url="https://www.dso.example.org",
                 did="did:web:set.dataspaces.localhost",
                 aliases=["dso"],
             ),
@@ -84,8 +84,8 @@ def _entry(owner: str | None, owners: OwnersRegistry | None) -> dict:
 def test_alias_exports_the_deployments_canonical_uri(registry: OwnersRegistry) -> None:
     """`rec` is not an owner; it is a label the deployment resolves."""
     entry = _entry("rec", registry)
-    assert entry["publisher_uri"] == "https://www.greenland.it"
-    assert entry["rights_holder_uri"] == "https://www.greenland.it"
+    assert entry["publisher_uri"] == "https://www.rec.example.org"
+    assert entry["rights_holder_uri"] == "https://www.rec.example.org"
 
 
 def test_did_outranks_url_when_the_owner_has_both(registry: OwnersRegistry) -> None:
@@ -95,7 +95,7 @@ def test_did_outranks_url_when_the_owner_has_both(registry: OwnersRegistry) -> N
 
 
 def test_an_owner_id_resolves_as_well_as_an_alias(registry: OwnersRegistry) -> None:
-    assert _entry("greenland", registry)["publisher_uri"] == "https://www.greenland.it"
+    assert _entry("example-rec", registry)["publisher_uri"] == "https://www.rec.example.org"
 
 
 def test_explicit_dcat_publisher_overrides_the_owner(registry: OwnersRegistry) -> None:
@@ -108,7 +108,7 @@ def test_explicit_dcat_publisher_overrides_the_owner(registry: OwnersRegistry) -
     )
     assert entry["publisher_uri"] == "https://example.gov/agency"
     # rights_holder still follows ownership — they are different claims
-    assert entry["rights_holder_uri"] == "https://www.greenland.it"
+    assert entry["rights_holder_uri"] == "https://www.rec.example.org"
 
 
 # ---------------------------------------------------------------------------
@@ -155,18 +155,18 @@ def test_a_resolvable_publisher_is_inlined_as_a_named_agent(
     registry: OwnersRegistry,
 ) -> None:
     """The point of resolving the alias: a publisher a consumer can identify."""
-    node = _dataset_node("https://www.greenland.it", registry)["dct:publisher"]
-    assert node["@id"] == "https://www.greenland.it"
-    assert node["foaf:name"] == "Greenland Soc. Coop."
-    assert node["foaf:homepage"] == {"@id": "https://www.greenland.it"}
+    node = _dataset_node("https://www.rec.example.org", registry)["dct:publisher"]
+    assert node["@id"] == "https://www.rec.example.org"
+    assert node["foaf:name"] == "Example REC Soc. Coop."
+    assert node["foaf:homepage"] == {"@id": "https://www.rec.example.org"}
     # DCAT-AP requires foaf:Organization; the Schema.org subtype rides alongside
     assert node["@type"] == ["foaf:Organization", "schema:NGO"]
 
 
 def test_a_did_publisher_is_inlined_too(registry: OwnersRegistry) -> None:
     node = _dataset_node("did:web:set.dataspaces.localhost", registry)["dct:publisher"]
-    assert node["foaf:name"] == "SET Distribuzione S.p.A."
-    assert node["foaf:homepage"] == {"@id": "https://www.setdistribuzione.it"}
+    assert node["foaf:name"] == "Example DSO S.p.A."
+    assert node["foaf:homepage"] == {"@id": "https://www.dso.example.org"}
 
 
 def test_a_urn_publisher_stays_bare(registry: OwnersRegistry) -> None:
@@ -183,5 +183,5 @@ def test_a_urn_publisher_stays_bare(registry: OwnersRegistry) -> None:
 
 def test_no_registry_serves_a_bare_node(registry: OwnersRegistry) -> None:
     """`owners.yaml` is optional at startup; the catalogue still serves."""
-    node = _dataset_node("https://www.greenland.it", None)["dct:publisher"]
-    assert node == {"@id": "https://www.greenland.it"}
+    node = _dataset_node("https://www.rec.example.org", None)["dct:publisher"]
+    assert node == {"@id": "https://www.rec.example.org"}

@@ -16,13 +16,15 @@ load_dotenv(env_path)
 
 from celine.dataset.core.config import get_settings
 from celine.dataset.api.catalogue.models import Base
+from celine.dataset.dps.store import metadata as dps_metadata
 
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
+# The DPS data plane keeps its tables in its own MetaData, in the same schema.
+target_metadata = [Base.metadata, dps_metadata]
 
 
 # ────────────────────────────────────────────

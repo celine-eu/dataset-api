@@ -30,15 +30,18 @@ class TablePointerHandler:
         args: dict[str, Any],
         request_context: dict[str, Any] | None = None,
         principals: list[str] | None = None,
+        keys: list[str] | None = None,
     ) -> RowFilterPlan:
-        if principals:
+        if principals is not None or keys:
             # This handler resolves the *caller's* rows and has no notion of
-            # resolving someone else's. Denying is the only safe answer:
-            # ignoring `principals` would silently fall through to the caller's
-            # own filter — and in a delegated request the caller is a service
-            # identity, which is exactly the case that returns everything.
+            # resolving someone else's. Refusing is the only safe answer:
+            # ignoring the allow-list would silently fall through to the
+            # caller's own filter — and in a delegated request the caller is a
+            # service identity, which is exactly the case that returns
+            # everything. `is not None`, because an empty list is a delegated
+            # request too.
             raise NotImplementedError(
-                "table_pointer does not support delegated principals"
+                "table_pointer does not support a delegated allow-list"
             )
         column = args.get("column")
         pointer_table = args.get("pointer_table")

@@ -28,6 +28,7 @@ class RecRegistryHandler:
         args: dict[str, Any],
         request_context: dict[str, Any] | None = None,
         principals: list[str] | None = None,
+        keys: list[str] | None = None,
     ) -> RowFilterPlan:
 
         # Delegation: the rows belong to **these** members, not to the caller.
@@ -37,7 +38,15 @@ class RecRegistryHandler:
         # bypass below would otherwise fire on every delegated request and serve
         # the whole table — the failure that looks most like success, because
         # the bypass is correct in the case it was written for.
-        if principals:
+        #
+        # `is not None`, not truthiness. An **empty** principal list is still a
+        # delegated request, and reading it as self-service dropped it straight
+        # into that same bypass — every row of the table, for a decision that
+        # named nobody. The control plane can now send one, because a decision
+        # may name its subjects by typed keys instead, so the empty case is no
+        # longer hypothetical. This handler resolves members, not keys: with no
+        # member named there is nothing to resolve, and the answer is no rows.
+        if principals is not None:
             return await self._resolve_for_members(
                 table=table, args=args, user_ids=principals
             )
@@ -120,6 +129,13 @@ class RecRegistryHandler:
         column = args.get("column")
         if not isinstance(column, str) or not column:
             raise ValueError("rec_registry requires args.column")
+
+        if not user_ids:
+            # An allow-list naming nobody. Deny without asking the registry: the
+            # lookup would answer "no assets", which is the same deny one round
+            # trip later, and an outage on that trip would turn it into a 500.
+            logger.info("rec_registry: no member named for %s — no rows", table)
+            return RowFilterPlan(table=table, kind="deny")
 
         # `RecRegistryAdminClient`, not the user client: the latter is
         # user-scoped (`/user/*`, "what is mine") and this is an admin lookup on

@@ -51,6 +51,17 @@ EDR query flow:
 
 This path requires no JWT re-validation by dataset-api since the EDC data plane validates the bearer token before proxying.
 
+### DPS data plane ("EDC mode", prototype)
+
+With `DPS_ENABLED=true`, dataset-api is also a [Data Plane Signaling](https://github.com/eclipse-dataplane-signaling/dataplane-signaling) data plane, which is where EDC moved EDR handling.
+
+- An admitted control plane signals pull transfers at `/dps/v1/dataflows/*`.
+- The `/start` answer carries a data address with a pull token issued by this service.
+- `POST /dps/public/query` serves rows for that token only while the data flow is `STARTED`.
+- Past the token, a pull takes the same path as an EDR query: ds's decision, row filters and the audit.
+
+Flows are stored in the catalogue database, so any worker can serve a pull and flows survive a restart. The legacy path above and `POST /query` are unchanged; the two query endpoints are separate on purpose. Specification and configuration: [docs/dps-data-plane.md](docs/dps-data-plane.md).
+
 ### Governance and disclosure model
 
 Access levels:
@@ -59,13 +70,16 @@ Access levels:
 - `restricted` — JWT + contract required; `ds:contractRequired eq "true"` in ODRL
 - `secret` — not exposed in catalogue or EDC
 
-Row-level filtering via the pluggable governance handler registry. Four built-in handlers are supported:
+Row-level filtering via the pluggable governance handler registry. Five built-in handlers are supported:
 - `direct_user_match` — filter by user column
 - `rec_registry` — lookup via REC registry
+- `subject_key_match` — filter by the typed data keys (`pod:…`) the consent carried, for a holder whose rows are keyed by something only the organisation that collected the consent can name
 - `http_in_list` — HTTP-based allow list
 - `table_pointer` — table-based lookup
 
-Users in the `admins` group bypass row filters entirely. Service accounts bypass the `rec_registry` filter.
+Users in the `admins` group bypass row filters entirely. Service accounts bypass the `rec_registry` filter when they query on their own behalf — never when a dataspace decision delegates the query to them.
+
+On a dataspace request the filter arrives from ds whole, naming the consenting subjects as `principals` and as `keys`; a filter this service cannot apply serves no rows. Specification: [docs/dataspace-row-filters.md](docs/dataspace-row-filters.md).
 
 Governance overrides are supported via `governance.<app_name>.yaml` files merged with the base `governance.yaml`.
 
@@ -90,6 +104,8 @@ Governance overrides are supported via `governance.<app_name>.yaml` files merged
 - `POST /catalogue/search` — filtered search
 - `POST /query` — governed SQL query; EDR-gated when `EDR_ENABLED=true`
 - `POST /admin/catalogue` — catalogue import
+- `/dps/v1/dataflows/*`, `/dps/v1/controlplanes`, `GET /dps/registration` — DPS signalling, when `DPS_ENABLED=true`
+- `POST /dps/public/query` — governed SQL query for a DPS pull token, when `DPS_ENABLED=true`
 - `GET /health`
 
 ---
@@ -142,6 +158,7 @@ Dataset-api reads governance rules resolved by `celine-utils` `GovernanceResolve
 - [Architecture overview](https://celine-eu.github.io/projects/dataset-api/docs/architecture)
 - [Catalogue Management](https://celine-eu.github.io/projects/dataset-api/docs/catalogue-management)
 - [CLI operations](https://celine-eu.github.io/projects/dataset-api/docs/cli-operations)
+- [Dataspace row filters](https://celine-eu.github.io/projects/dataset-api/docs/dataspace-row-filters)
 - [Governance and security](https://celine-eu.github.io/projects/dataset-api/docs/governance-security)
 - [Query engine](https://celine-eu.github.io/projects/dataset-api/docs/query-engine)
 

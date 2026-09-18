@@ -21,6 +21,10 @@ from celine.dataset.api.dataset_query.row_filters.registry import (
     get_row_filter_registry,
 )
 from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
+from celine.dataset.api.dataset_query.row_filters.keys import (
+    split_key,
+    values_of_type,
+)
 
 from celine.dataset.schemas.dataset_query import DatasetQueryModel, DatasetQueryResult
 
@@ -44,6 +48,8 @@ __all__ = [
     "RowFilterPlan",
     "RowFilterRegistry",
     "get_row_filter_registry",
+    "split_key",
+    "values_of_type",
     "DatasetQueryModel",
     "DatasetQueryResult",
     "get_session",

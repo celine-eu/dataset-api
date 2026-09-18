@@ -143,7 +143,20 @@ Log (at least):
 - validation errors (sanitized)
 - execution time and rows returned
 
-Do not log raw SQL without sanitization if it may contain sensitive literals.
+Do not log raw SQL without sanitization if it may contain sensitive literals. On a
+dataspace request the completed SQL is withheld from the debug log for exactly this
+reason: its predicate is a literal list of the consenting subjects (RF-08).
+
+---
+
+## Row-level filtering
+
+A dataset may declare `row_filters` in governance, and a handler turns each one into
+a predicate. On a request arriving through the dataspace the filter is not read from
+governance here — it arrives inside ds's decision, with the consenting subjects named
+in it, and this service applies it or serves nothing. That path has its own
+specification, with clauses and tests:
+[dataspace-row-filters.md](dataspace-row-filters.md).
 
 ---
 

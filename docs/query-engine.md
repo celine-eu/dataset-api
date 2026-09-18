@@ -90,6 +90,10 @@ text round trip changes the dialect (`INTERVAL '30 minutes'` becomes
 `INTERVAL '30' MINUTES`) and splits `schema.table`, so a filter keyed on the
 physical table would stop matching and be dropped.
 
+On a request arriving through the dataspace the filter comes from ds's decision
+rather than from governance here, and carries the consenting subjects with it —
+see [dataspace-row-filters.md](dataspace-row-filters.md).
+
 ### Projection safety
 - avoid `SELECT *` if you want strict contracts (optional)
 - optionally enforce explicit column selection for restricted datasets
