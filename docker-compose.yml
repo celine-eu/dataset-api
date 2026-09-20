@@ -37,8 +37,22 @@ services:
     env_file:
       - path: .env
         required: false
-    entrypoint: ["/bin/sh"]
-    command: alembic upgrade head
+    # **`-euc`, and the command as one string.** `entrypoint: ["/bin/sh"]` with
+    # `command: alembic upgrade head` runs `/bin/sh alembic upgrade head`, which
+    # `sh` reads as "execute the script file named `alembic`" — and `/app/alembic`
+    # is the migrations *directory*, so the shell exits without running anything
+    # and the container reports success.
+    #
+    # That is worse than a missing migration job: `dataset-api` below starts on
+    # `service_completed_successfully`, so every consumer of this file comes up
+    # against a schema nothing migrated. `/health` answers 200 throughout and the
+    # failure surfaces much later, from the first route that touches a table —
+    # `relation "dataset_api.datasets_entries" does not exist`.
+    #
+    # `dataset-api-import` below already carries this form; this service was the
+    # one that did not.
+    entrypoint: ["/bin/sh", "-euc"]
+    command: ["alembic upgrade head"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
       - "keycloak.celine.localhost:host-gateway"
