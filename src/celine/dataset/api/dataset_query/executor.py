@@ -158,7 +158,8 @@ async def execute_query(
     tables_map: dict[str, str] = {}
     row_filter_plans = []
     # EDR-path disclosures to record with ds after the query runs: (dataset_id,
-    # authorized principals). Collected here, emitted once the row count is known.
+    # the consenting subjects' DIDs). Collected here, emitted once the row count
+    # is known. **DIDs, never the principals** — see the append below.
     edr_disclosures: list[tuple[str, Optional[list[str]]]] = []
 
     registry = get_row_filter_registry()
@@ -273,10 +274,20 @@ async def execute_query(
                     "handler, so no rows may be served",
                 ) from exc
             row_filter_plans.append(plan)
-            # The principals only. The keys are personal data the collector
-            # registered with the consent, and an audit record is exactly the
-            # place ds says they must not reach.
-            edr_disclosures.append((ds.dataset_id, row_filter.principals))
+            # **The subject DIDs, and neither allow-list.** Both of the others
+            # are personal data that may reach a predicate and nothing else: the
+            # keys the collector registered with the consent, and the principals
+            # — which in a realm where the Keycloak username is the person's
+            # email are their addresses. This line sent the principals until
+            # 2026-09-20 and so wrote 22 of them into one run's `QueryExecuted`
+            # provenance. ds drops every non-DID it is sent, which is a backstop;
+            # sending the DIDs is the fix, and they are the only identifiers here
+            # a provenance record admits.
+            #
+            # Empty when the decision came from a ds that predates the field.
+            # That is the same thin-but-true record ds's own filtering already
+            # produces, and it is why a query is not refused over it.
+            edr_disclosures.append((ds.dataset_id, row_filter.subject_dids))
             continue  # skip normal auth + spec loop for this dataset
 
         # ------------------------------------------------------------------
@@ -434,14 +445,14 @@ async def execute_query(
     # this response actually returned (the page), best-effort so a provenance
     # outage never fails a query the control plane already authorised.
     if edr_context is not None:
-        for disclosed_id, principals in edr_disclosures:
+        for disclosed_id, subject_dids in edr_disclosures:
             await audit_query(
                 dataset_id=disclosed_id,
                 consumer_id=edr_context.consumer_id,
                 agreement_id=edr_context.agreement_id,
                 transfer_id=edr_context.transfer_id,
                 row_count=len(items),
-                authorized_subject_ids=principals,
+                authorized_subject_ids=subject_dids,
                 # The connector that decided is the connector that is told.
                 provider_id=edr_context.provider_id,
             )

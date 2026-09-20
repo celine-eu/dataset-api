@@ -122,8 +122,46 @@ async def test_a_started_flow_serves_rows_under_its_own_agreement(http, readings
     assert ds["audits"][0]["consumer_id"] == CONSUMER
 
 
+#: The consenting people as ds names them for the record. `member-a` is what the
+#: `owner` column holds; this is what a `QueryExecuted` event may say.
+SUBJECT_A = "did:web:rec.example.org:users:ex-00001"
+SUBJECT_C = "did:web:rec.example.org:users:ex-00003"
+
+
 async def test_the_ds_row_filter_narrows_the_pull(http, readings, ds) -> None:
     token = await _start(http, "tp-pull-2")
+    ds["decision"] = DataPlaneDecision(
+        allowed=True,
+        datasets=[{
+            "dataset_id": "dps_readings",
+            "decision": "allow",
+            "row_filter": {"handler": "direct_user_match", "args": {"column": "owner"},
+                           "principals": ["member-a", "member-c"],
+                           "subject_dids": [SUBJECT_A, SUBJECT_C]},
+        }],
+        cache_ttl=0,
+    )
+    r = await _pull(http, f"Bearer {token}")
+    assert r.status_code == 200, r.text
+    assert [row["owner"] for row in r.json()["items"]] == ["member-a", "member-c"]
+    # **The DIDs, not the principals.** The principals are what the column is
+    # matched on; a disclosure record admits codes, pseudonymous DIDs and hashes
+    # only. This assertion read `["member-a", "member-c"]` until 2026-09-20 —
+    # which in a deployed realm is two people's email addresses.
+    assert ds["audits"][0]["authorized_subject_ids"] == [SUBJECT_A, SUBJECT_C]
+
+
+async def test_a_ds_that_sends_no_subject_dids_still_serves_the_pull(
+    http, readings, ds
+) -> None:
+    """**The skew test**, end to end through the executor.
+
+    The running deployment's connector predates `subject_dids`. A data plane
+    rebuilt ahead of it — which is the safe order, and the only one — meets
+    exactly this decision, and must narrow the rows as before and record an
+    empty subject list rather than refusing the query.
+    """
+    token = await _start(http, "tp-pull-skew")
     ds["decision"] = DataPlaneDecision(
         allowed=True,
         datasets=[{
@@ -135,9 +173,10 @@ async def test_the_ds_row_filter_narrows_the_pull(http, readings, ds) -> None:
         cache_ttl=0,
     )
     r = await _pull(http, f"Bearer {token}")
+
     assert r.status_code == 200, r.text
     assert [row["owner"] for row in r.json()["items"]] == ["member-a", "member-c"]
-    assert ds["audits"][0]["authorized_subject_ids"] == ["member-a", "member-c"]
+    assert ds["audits"][0]["authorized_subject_ids"] == []
 
 
 async def test_a_ds_denial_is_a_403(http, readings, ds) -> None:

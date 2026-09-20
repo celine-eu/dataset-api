@@ -98,13 +98,19 @@ class DataplaneRowFilter(BaseModel):
     values in the column, and a decision stripped of it forces this end to guess
     which one it was.
 
-    **An unknown field is refused, not ignored.** These fields are narrowings.
-    The dangerous direction of drift is one-way: a control plane that adds one
-    an older data plane skips over serves rows it was told to withhold, and
-    nothing on either side notices. Refusing means an upgrade on ds's side ahead
-    of this one stops the data plane rather than widening it, which is the side
-    of that trade worth being on. ds makes the same choice in
-    `ds.governance.dataplane` (`extra="forbid"`).
+    **An unknown field is refused, not ignored.** A field this service has never
+    heard of may be a narrowing, and the dangerous direction of drift is one-way:
+    a control plane that adds one an older data plane skips over serves rows it
+    was told to withhold, and nothing on either side notices. Refusing means an
+    upgrade on ds's side ahead of this one stops the data plane rather than
+    widening it, which is the side of that trade worth being on. ds makes the
+    same choice in `ds.governance.dataplane` (`extra="forbid"`).
+
+    **Which is why every field here has a default.** `forbid` governs what this
+    model has not heard of; whether a field it *has* heard of is required is a
+    separate choice, and requiring one would refuse an older ds as well. One
+    impossible direction is a deployment order (**data plane first, connector
+    second**); two are a deadlock.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -114,8 +120,35 @@ class DataplaneRowFilter(BaseModel):
     #: for every handler in use, plus whatever else a handler defines.
     args: dict[str, Any] = Field(default_factory=dict)
     #: Identifiers native to *this* system — usernames a handler can resolve.
-    #: Never subject DIDs.
+    #: Never subject DIDs, because a DID matches no column here.
+    #:
+    #: **Personal data.** In a realm where the Keycloak username is the person's
+    #: email — the common case — this list *is* a list of addresses. It may
+    #: reach a predicate and nothing else, and it must never be reported back to
+    #: ds: `subject_dids` is what an audit call carries.
     principals: list[str] = Field(default_factory=list)
+    #: The same consenting people as **subject DIDs** — the pseudonyms the
+    #: dataspace already circulates (registry, credentials, trust anchor).
+    #:
+    #: It narrows nothing; it is what this PEP is permitted to *report*.
+    #: `QueryExecuted.authorized_subject_ids` admits codes, pseudonymous DIDs
+    #: and hashes only, and until ds added this field the only list this service
+    #: held was `principals` — which `audit_query` duly echoed, putting 22 raw
+    #: addresses into one run's provenance (measured 2026-09-20). ds now drops
+    #: every non-DID at `POST /internal/audit/query`, which made the record
+    #: empty rather than wrong; this is what makes it right.
+    #:
+    #: **Optional, unlike a narrowing.** `extra="forbid"` above exists so that a
+    #: *narrowing* this service does not understand is a refusal — a field it
+    #: cannot apply may be the difference between rows that may leave and rows
+    #: that may not. This field decides no rows, so a decision that omits it is
+    #: served with a thinner audit record rather than a 502. That is deliberate,
+    #: and it is what makes a staged rollout possible: this service accepts the
+    #: field before ds sends it, so **the data plane is rebuilt first and the
+    #: connector second**. Required here, the two would deadlock — an older ds
+    #: would break a newer data plane and a newer ds an older one, leaving no
+    #: order that keeps the deployment serving.
+    subject_dids: list[str] = Field(default_factory=list)
     #: Typed data keys, `"<type>:<value>"` — the values this holder already
     #: stores those same subjects' rows under, registered with the consent by
     #: the organisation that collected it. Personal data: they may reach a
@@ -436,9 +469,21 @@ async def audit_query(
     this call (`POST /internal/audit/query`). Without it a disclosure leaves no
     accountability record — who received which rows under which agreement.
 
-    `authorized_subject_ids` are the row filter's `principals` — registry-native
-    identifiers, never DIDs (a DID is derived from an unsalted email hash, so it
-    is re-identifiable by anyone later holding the payload).
+    `authorized_subject_ids` are the row filter's **`subject_dids`** — never its
+    `principals`. ds records codes, pseudonymous DIDs and hashes and nothing
+    else, and it drops whatever else arrives here; the principals are
+    registry-native, which in a realm where the username is the email means this
+    call carried people's addresses into provenance until 2026-09-20 (22 of them
+    in one measured run).
+
+    The docstring said the reverse until that date, justified by *"a DID is
+    derived from an unsalted email hash, so it is re-identifiable by anyone later
+    holding the payload"*. The derivation is an HMAC keyed by the identity
+    registry, so the claim is false as written, and it argued for sending the
+    address rather than a pseudonym of it. What a subject DID may reveal is a
+    real question and an open one — ds files it as
+    `is-a-subject-did-a-safe-pseudonym` — but it is not answered by sending
+    something strictly more identifying.
 
     **Best-effort.** A failure here must not fail a query the control plane
     already authorised and served, but it is logged: a silently dropped

@@ -15,6 +15,7 @@ column speaks is the handler's business:
 | `args` | that handler's own arguments, uninterpreted by ds | the handler |
 | `principals` | identifiers **native to this system** — usernames. Never subject DIDs | `direct_user_match`, `rec_registry` |
 | `keys` | **typed data keys**, `"<type>:<value>"` — the values this holder already stores those subjects' rows under | `subject_key_match` |
+| `subject_dids` | the same people as **subject DIDs**. Narrows nothing | nothing — it is what the audit disclosure reports (RF-10) |
 
 `keys` exist because the organisation holding people's data is not always the
 organisation those people belong to. A grid operator holds meter readings keyed
@@ -47,10 +48,10 @@ file, which the connector reads and this service must recognise.
 
 ### RF-01 — The filter travels whole
 
-A verdict's `row_filter` carries `handler`, `args`, `principals` and `keys`,
-never a column and a list of ids. A decision reduced to a column would force
-this service to assume a handler, and assuming the wrong one injects a predicate
-that matches by coincidence or not at all.
+A verdict's `row_filter` carries `handler`, `args`, `principals`, `keys` and
+`subject_dids`, never a column and a list of ids. A decision reduced to a column
+would force this service to assume a handler, and assuming the wrong one injects
+a predicate that matches by coincidence or not at all.
 
 A verdict with no `row_filter` is an allow with no filter: the dataset carries no
 data subject and every row may leave. That is never how a filter that could not
@@ -66,7 +67,11 @@ the control plane said to withhold — silently, on both sides. The refusal is a
 of the contract disagree.
 
 The cost is accepted and symmetric with ds's own choice: upgrading the connector
-ahead of this service stops the data plane rather than widening it.
+ahead of this service stops the data plane rather than widening it. **So every
+field in the filter has a default**, here and in ds: `forbid` governs what a
+reader has never heard of, and making a known field *required* would refuse an
+older connector too. One impossible direction is a deployment order; two are a
+deadlock. See RF-10.
 
 Only the filter of a dataset the query actually touches is parsed, so a filter
 for another dataset cannot refuse a query that is otherwise fine. The envelope
@@ -140,7 +145,7 @@ Tests: `tests/api/dataset_query/test_delegated_allow_lists.py`.
 
 They are personal data the collecting organisation registered with the consent.
 They must not reach the audit disclosure sent to ds (which names subjects by
-principal), a plan's `meta` (which carries a count and the type), an error detail,
+DID — RF-10), a plan's `meta` (which carries a count and the type), an error detail,
 or the logs — including the debug line that renders the completed SQL, which is
 withheld on a dataspace request because the predicate is a literal list of the
 consenting subjects.
@@ -158,6 +163,32 @@ elsewhere. `keys` is passed only to a `resolve` that declares it (or accepts
 `**kwargs`), so an older handler is not broken by an argument it was never going
 to read — the lists name the same people, and a handler reads the one it knows.
 Tests: `tests/api/dataset_query/test_delegated_allow_lists.py`.
+
+### RF-10 — The disclosure names the subjects by DID
+
+`authorized_subject_ids` on `POST /internal/audit/query` is the accountability
+record of a disclosure, and ds records codes, pseudonymous DIDs and hashes and
+nothing else — it drops whatever else arrives. `subject_dids` is the list this
+service reports; neither allow-list is. The principals are registry-native, and
+in a realm where the Keycloak username is the person's email they *are* the
+person's email: sending them put 22 addresses into one run's `QueryExecuted`
+provenance (measured 2026-09-20, in ds).
+
+**`subject_dids` narrows nothing**, and is the one field in the filter whose
+absence is not a hazard. It never reaches a predicate — no handler matches a
+column against a DID — so a decision that omits it can only thin the audit
+record, which is precisely what ds's own filtering already does. It therefore
+defaults to `[]` rather than being required, and that is what makes a staged
+rollout possible:
+
+> **Rebuild this service first, the ds connector second.** This service accepts
+> the field before ds sends it. The reverse order is a `502` on every filtered
+> dataspace query for as long as the two are out of step (RF-02).
+
+An allow with no `row_filter` at all reports `None`, not `[]`: it names no
+subjects, and an empty list would read as *authorised for nobody*.
+Tests: `tests/security/test_dataplane_row_filter_contract.py`,
+`tests/dps/test_pull.py`, `tests/api/test_edr_subject_key_filter.py`.
 
 ## Configuring a dataset for it
 

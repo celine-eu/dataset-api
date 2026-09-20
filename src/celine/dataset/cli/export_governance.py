@@ -276,7 +276,10 @@ def export_governance_cmd(
         except Exception as exc:
             typer.echo(f"WARNING: could not load owners registry at {owners_path}: {exc}", err=True)
 
-    matched = sorted(glob_module.glob(glob_pattern, recursive=True))
+    # Sorted for a stable report and stable output names; de-duplicated because a
+    # pattern such as `a/**/**/governance.yaml` matches the same path more than
+    # once, and processing a file twice used to make it collide with itself.
+    matched = sorted(dict.fromkeys(glob_module.glob(glob_pattern, recursive=True)))
     if not matched:
         typer.echo(f"No files matched pattern: {glob_pattern}", err=True)
         raise typer.Exit(1)
@@ -287,6 +290,8 @@ def export_governance_cmd(
     total_datasets = 0
     ontology_errors: list[str] = []
     exposure_errors: list[str] = []
+    #: Output stems this run has already written — see the naming block below.
+    written_stems: set[str] = set()
 
     for gov_path_str in matched:
         gov_path = Path(gov_path_str)
@@ -351,10 +356,24 @@ def export_governance_cmd(
         stem = gov_path.parent.name or gov_path.stem
         out_file = out_dir / f"{stem}.yaml"
 
-        # If file already exists (two apps share a parent dir name), append suffix
-        if out_file.exists():
+        # **Collide against this run, not against the directory.**
+        #
+        # The suffix disambiguates two apps whose directories share a name, and
+        # that is the only thing it should do. Keyed on `out_file.exists()` it
+        # also fired on the output of a *previous* run — so a re-export never
+        # replaced its own file, it wrote a second one beside it. Where the
+        # caller stages the sources in `mktemp -d`, the grandparent is a new
+        # `tmp.XXXXXXXX` each time, so every run minted a fresh generation of
+        # names and the directory grew without bound. One deployment reached 100
+        # files for 21 apps that way, and the importer then merged all five
+        # generations into one catalogue.
+        #
+        # Re-exporting the same app must overwrite: the file is derived output,
+        # and the new content is the current answer.
+        if stem in written_stems:
             stem = f"{gov_path.parent.parent.name}__{stem}"
             out_file = out_dir / f"{stem}.yaml"
+        written_stems.add(stem)
 
         with out_file.open("w", encoding="utf-8") as f:
             yaml.safe_dump({"datasets": datasets}, f, sort_keys=False, allow_unicode=True)

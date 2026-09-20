@@ -90,15 +90,36 @@ def validate_catalogue_payload(
 
 
 def expand_inputs(patterns: List[Path]) -> List[Path]:
+    """Expand the `--input` patterns into a **stable** list of paths.
+
+    `glob.glob` returns `readdir` order. That is not sorted, it is not the same
+    on two machines, and it changes when a directory is rewritten — so an import
+    that merges several files was, until this was sorted, letting the filesystem
+    decide which of two declarations of one `dataset_id` reached the catalogue.
+
+    Sorting does not make the *winner* right; `import_catalogue` refuses a
+    disagreement rather than picking one. What sorting buys is that two runs over
+    the same inputs read them in the same sequence, so the refusal, the messages
+    and the `--allow-conflicts` fallback are all reproducible.
+
+    Overlapping patterns are de-duplicated: the same path is read once.
+    """
     out: List[Path] = []
+    seen: set[str] = set()
     for p in patterns:
         s = str(p)
-        if any(c in s for c in "*?[]"):
-            matches = [Path(m) for m in glob.glob(s)]
-            out.extend(matches)
-        else:
-            out.append(Path(p))
+        matches = sorted(glob.glob(s)) if any(c in s for c in "*?[]") else [s]
+        for m in matches:
+            if m in seen:
+                continue
+            seen.add(m)
+            out.append(Path(m))
     return out
+
+
+def _differing_fields(first: Dict[str, Any], second: Dict[str, Any]) -> List[str]:
+    """The keys on which two declarations of one dataset disagree."""
+    return sorted(k for k in set(first) | set(second) if first.get(k) != second.get(k))
 
 
 def extract_dataset_namespace(entry: Dict[str, Any]) -> str:
@@ -139,6 +160,14 @@ def import_catalogue(
         "--dry-run",
         help="Print selected dataset IDs and exit without importing.",
     ),
+    allow_conflicts: bool = typer.Option(
+        False,
+        "--allow-conflicts",
+        help=(
+            "Do not refuse a dataset_id declared differently in two inputs; "
+            "keep the declaration from the last file in sorted order."
+        ),
+    ),
 ):
     setup_cli_logging(verbose)
 
@@ -149,7 +178,26 @@ def import_catalogue(
 
     typer.echo(f"Found {len(files)} YAML file(s).")
 
+    # **A repeated `dataset_id` is a disagreement, and it is refused.**
+    #
+    # The inputs are independent exports merged into one flat catalogue, so a
+    # `dataset_id` can only carry one description. Until this check existed the
+    # loop kept the last file's body and printed `Overwriting.` — with the
+    # filesystem choosing which body that was. Sorting the inputs makes the
+    # outcome reproducible but not *correct*: alphabetical order has nothing to
+    # do with which of two contradictory descriptions of a dataset is true, so
+    # an ordered last-writer-wins would only have turned an unnoticed defect
+    # into a stable one.
+    #
+    # The refusal is narrowed to a real disagreement. Re-declaring the same
+    # dataset with an identical body is ordinary — an app naming an upstream it
+    # consumes — and carries no information to lose, so it passes silently.
+    # `--allow-conflicts` exists for the caller who knows the inputs disagree
+    # and wants the import anyway; it is then a *deterministic* last-writer-wins,
+    # because the file list is sorted.
     collected: Dict[str, Dict[str, Any]] = {}
+    origin: Dict[str, Path] = {}
+    conflicts: List[str] = []
 
     for f in files:
         try:
@@ -165,11 +213,32 @@ def import_catalogue(
 
         for ds_id, entry in ds_block.items():
             if ds_id in collected:
+                if entry == collected[ds_id]:
+                    logger.debug(
+                        "dataset_id '%s' re-declared identically in %s", ds_id, f
+                    )
+                    continue
+                fields = _differing_fields(collected[ds_id], entry)
+                conflicts.append(ds_id)
                 typer.echo(
-                    f"Warning: duplicate dataset_id '{ds_id}' from {f}. Overwriting.",
+                    f"Conflict: dataset_id '{ds_id}' is declared differently in "
+                    f"{origin[ds_id]} and {f} — they disagree on "
+                    f"{', '.join(fields)}.",
                     err=True,
                 )
             collected[ds_id] = entry
+            origin[ds_id] = f
+
+    if conflicts and not allow_conflicts:
+        typer.echo(
+            f"Refusing to import: {len(conflicts)} dataset_id(s) are declared "
+            "differently by two inputs, and no ordering of the files can say "
+            "which declaration is the right one. Resolve the disagreement at "
+            "the source, drop the stale export, or pass --allow-conflicts to "
+            "keep the last declaration in sorted-filename order.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
     if not collected:
         typer.echo("Combined input contains NO datasets.", err=True)

@@ -245,18 +245,25 @@ async def test_a_filter_this_data_plane_cannot_read_serves_no_rows(
 # ---------------------------------------------------------------------------
 
 
-async def test_the_audit_disclosure_carries_no_key(
+#: How ds names a consenting person for the record. Nobody on this path has a
+#: username this holder would recognise — the whole point of the keys — so
+#: before `subject_dids` the disclosure could not name them at all.
+SUBJECT_DID = "did:web:rec.example.org:users:ex-00001"
+
+
+async def test_the_audit_disclosure_names_the_subjects_by_did_and_no_key(
     test_session, readings, ds, fresh_registry
 ):
     """ds records who received which rows. Keys are not how it names them."""
     ds["row_filter"] = _keys_filter(f"pod:{MINE}")
+    ds["row_filter"]["subject_dids"] = [SUBJECT_DID]
 
     await _pull(test_session)
 
     assert len(ds["audits"]) == 1
     recorded = repr(ds["audits"][0])
     assert "EX000E" not in recorded
-    assert ds["audits"][0]["authorized_subject_ids"] == []
+    assert ds["audits"][0]["authorized_subject_ids"] == [SUBJECT_DID]
     assert ds["audits"][0]["row_count"] == 1
 
 
