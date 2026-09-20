@@ -29,8 +29,9 @@ Then, over real HTTP:
    convention.
 3. Both tokens to AB serve rows, each reaching its own connector.
 
-Preconditions: PostgreSQL on the URL in `DATABASE_URL` (the testing playbook's
-`:15432`), `uv`, and three free localhost ports. No EDC and no ds: this proves
+Preconditions: PostgreSQL on the server `DATABASE_URL` names (the suite creates
+its own `*_test` databases there, `tests/testdb.py`), `uv`, and three free
+localhost ports. No EDC and no ds: this proves
 *this repository's* seam, and the connector behind it is a stub. An e2e over a
 real EDC transfer belongs in the deployment, not here — it needs two connectors,
 two EDC runtimes and a negotiated agreement.
@@ -66,8 +67,10 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from celine.dataset.core.config import get_settings
 from celine.dataset.dps.tokens import TokenIssuer
+
+from ..conftest import PROTECTED_DATABASE_URLS
+from ..testdb import assert_disposable
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -83,7 +86,8 @@ SEGMENT = {PARTICIPANT_A: "a", PARTICIPANT_B: "b"}
 #: every one after it), so the setting moves the ORM's view of the table and not
 #: the table. Two databases is also the truer shape — it is the warehouse, the
 #: half this work deliberately left process-global.
-DATABASE = {PARTICIPANT_A: "e2e_dataset_api_a", PARTICIPANT_B: "e2e_dataset_api_b"}
+#: Named `*_test` so the suite's guard (`tests/testdb.py`) admits dropping them.
+DATABASE = {PARTICIPANT_A: "e2e_dataset_api_a_test", PARTICIPANT_B: "e2e_dataset_api_b_test"}
 DATASET = {PARTICIPANT_A: "ds_a_readings", PARTICIPANT_B: "ds_b_readings"}
 
 
@@ -122,8 +126,9 @@ def _run(cmd: list[str], env: dict[str, str]) -> subprocess.Popen:
 
 
 @pytest.fixture(scope="module")
-def database_url() -> str:
-    return get_settings().database_url
+def database_url(test_database_url) -> str:
+    """The suite's own database: only the server is used, to create the two below."""
+    return test_database_url
 
 
 @pytest.fixture(scope="module")
@@ -167,6 +172,8 @@ def catalogues(database_url) -> dict[str, str]:
 
     admin = sqlalchemy.create_engine(database_url, isolation_level="AUTOCOMMIT")
     urls = {did: _database_url(database_url, name) for did, name in DATABASE.items()}
+    for url in urls.values():
+        assert_disposable(url, protected=PROTECTED_DATABASE_URLS)
     try:
         for did, name in DATABASE.items():
             with admin.connect() as conn:

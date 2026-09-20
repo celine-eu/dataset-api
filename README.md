@@ -196,6 +196,27 @@ Dataset-api reads governance rules resolved by `celine-utils` `GovernanceResolve
 - FastAPI + httpx
 - sqlglot-based SQL validation
 
+### Running the tests
+
+```bash
+uv sync
+uv run pytest          # or: task test
+```
+
+The API, governance and DPS tests need a real PostgreSQL with PostGIS. **They never use
+the database `DATABASE_URL` names**, because their fixtures drop and recreate the
+catalogue schema on every test:
+
+- by default they use `DATABASE_URL` with `_test` appended to the database name, on the
+  same server (`.../datasets` → `.../datasets_test`), and create it on first run;
+- `TEST_DATABASE_URL` overrides that, and must name a database ending in `_test`.
+
+The suite refuses to run destructive setup against any database whose name does not end
+in `_test`, or which is the one `DATABASE_URL` or `DATASETS_DATABASE_URL` points at
+(`tests/testdb.py`). The SQL parser tests need no database. The process e2e in
+`tests/e2e` runs with `DATASET_API_E2E=1` and creates, then drops, two more `*_test`
+databases on the same server.
+
 Before opening a PR:
 - validate all YAML definitions
 - add tests for new API behaviour
