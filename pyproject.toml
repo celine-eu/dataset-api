@@ -28,7 +28,12 @@ dependencies = [
     # `governance-thin` job in celine-utils for what keeps the core thin.
     "celine-utils>=2.0.0",
 
-    "celine-sdk>=1.20.0",
+    # 1.21.0 carries RecRegistryApiError from get_my_assets (celine-sdk
+    # REQ-0132/0133), which RF-12 reads; 1.20.0 raises UnexpectedStatus there and
+    # the non-member deny becomes a 500. Until 1.21.0 is on PyPI `uv lock` cannot
+    # meet this floor and uv.lock still pins 1.20.0: do not ship an image built
+    # from that lock (tests/test_sdk_dependency_floor.py).
+    "celine-sdk>=1.21.0",
     "fastapi>=0.139.0",
     "geoalchemy2>=0.19.0",
     "httpx>=0.28.1",

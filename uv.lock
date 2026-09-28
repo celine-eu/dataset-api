@@ -157,7 +157,7 @@ wheels = [
 
 [[package]]
 name = "celine-sdk"
-version = "1.20.0"
+version = "1.21.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiomqtt" },
@@ -172,9 +172,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e4/5e/40d2f34e478de8c6cd968a2c83e32324317fe782e1e8875c285ca07aff4a/celine_sdk-1.20.0.tar.gz", hash = "sha256:2fd5fe763d89ffdff48fafbec69d497499288675ef060852a0a074d6eb3f2b79", size = 328256, upload-time = "2026-09-14T16:27:35.492Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/8b/0bfe938d37c840f4597b5113efca5052e2f894741383b41ca70193e3daff/celine_sdk-1.21.0.tar.gz", hash = "sha256:b8c9a2a8a9919c158c380e0f37136231067cc8e05842acc3e4bfc56d45887c50", size = 367548, upload-time = "2026-09-28T12:23:57.958Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/f6/677075becf6b5309dfd0e0deabf6f5bc49d539cd233f40f6eba3003dc3c5/celine_sdk-1.20.0-py3-none-any.whl", hash = "sha256:074204aea026ecaf30fa06711b9a5f7cd7841764f7bac4f7dc880e8432badcf3", size = 750070, upload-time = "2026-09-14T16:27:33.553Z" },
+    { url = "https://files.pythonhosted.org/packages/df/24/3b14523a2064633a0104a61c1bbee38b79cde9d2eb682986e06a500fc955/celine_sdk-1.21.0-py3-none-any.whl", hash = "sha256:111515c92a5ffb1e4cafa2e1cc185352b39c1beaa591a73d2dcadc81200e7486", size = 800250, upload-time = "2026-09-28T12:23:56.171Z" },
 ]
 
 [[package]]
@@ -548,7 +548,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "celine-ontologies", specifier = ">=1.8.0" },
     { name = "celine-ontologies", extras = ["mapper"], marker = "extra == 'conformance'", specifier = ">=1.10.1" },
-    { name = "celine-sdk", specifier = ">=1.20.0" },
+    { name = "celine-sdk", specifier = ">=1.21.0" },
     { name = "celine-utils", specifier = ">=2.0.0" },
     { name = "fastapi", specifier = ">=0.139.0" },
     { name = "geoalchemy2", specifier = ">=0.19.0" },

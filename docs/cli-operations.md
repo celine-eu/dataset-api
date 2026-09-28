@@ -108,7 +108,8 @@ Keep configuration environment-driven and documented.
 
 ### “SQL rejected”
 - non-SELECT statement
-- unknown function
+- unknown function — not in the allowlist; see
+  [query-engine.md](query-engine.md#function-and-expression-allowlist) before adding one
 - references non-catalogued table
 - multiple statements detected
 

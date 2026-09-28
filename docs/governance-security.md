@@ -113,7 +113,8 @@ All SQL is validated using an AST parser and an allowlist.
 - DDL: `CREATE`, `ALTER`, `DROP`, …
 - DML: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, …
 - multiple statements / statement chaining
-- functions not on allowlist
+- functions not on allowlist ([query-engine.md](query-engine.md#function-and-expression-allowlist)
+  says what is admitted and on what basis)
 - referencing raw physical table names to bypass catalogue
 - unbounded scans (policy + query guards)
 
@@ -143,9 +144,11 @@ Log (at least):
 - validation errors (sanitized)
 - execution time and rows returned
 
-Do not log raw SQL without sanitization if it may contain sensitive literals. On a
-dataspace request the completed SQL is withheld from the debug log for exactly this
-reason: its predicate is a literal list of the consenting subjects (RF-08).
+The query engine never logs a statement's literals: wherever it logs SQL it logs the
+statement's shape, every literal replaced by `?` (QE-03 in
+[query-engine.md](query-engine.md#logging)). On a dataspace request the completed SQL is
+withheld from the log entirely: its predicate is a literal list of the consenting subjects
+(RF-08).
 
 ---
 
@@ -157,6 +160,12 @@ governance here — it arrives inside ds's decision, with the consenting subject
 in it, and this service applies it or serves nothing. That path has its own
 specification, with clauses and tests:
 [dataspace-row-filters.md](dataspace-row-filters.md).
+
+**A service account is not narrowed by `rec_registry`** on the normal API path: it
+is not a registry member, and once the policy has admitted it the whole table is
+served. A service that relays such rows to a person narrows them itself or forwards
+the person's token. The order the handler decides in is in
+[dataspace-row-filters.md](dataspace-row-filters.md#rec_registry-on-the-normal-api-path).
 
 ---
 

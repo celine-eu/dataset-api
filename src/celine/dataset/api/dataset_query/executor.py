@@ -28,6 +28,10 @@ from celine.dataset.security.edr import (
 )
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.api.dataset_query.parser import parse_sql_query
+from celine.dataset.api.dataset_query.log_safety import sql_shape
+from celine.dataset.api.dataset_query.pagination import (
+    paginated_sql as build_paginated_sql,
+)
 from celine.dataset.api.dataset_query.row_filters import (
     apply_row_filter_plans,
     get_row_filter_registry,
@@ -85,7 +89,9 @@ async def _execute_sql_with_timeout(
             original,
             exc.connection_invalidated,
         )
-        logger.debug(f"Query failed sql={sql} exception={exc}")
+        # The shape, not the text, and not `exc`: SQLAlchemy's message repeats the
+        # statement and its parameters, literals and all (QE-03).
+        logger.debug("Query failed sql=%s", sql_shape(sql))
         if "statement timeout" in str(exc).lower():
             raise HTTPException(400, "Query exceeded time limit") from None
         if exc.connection_invalidated:
@@ -132,20 +138,22 @@ async def execute_query(
     Guarantees:
     - dataset access enforced (OPA / disclosure)
     - SQL validated (SELECT-only, table allowlist)
-    - LIMIT/OFFSET enforced server-side
+    - LIMIT/OFFSET enforced server-side, after the statement's ORDER BY (QE-04)
     - hard row cap applied
     - row-level filters applied (pluggable governance handlers)
     """
     if raw_sql is None or raw_sql.strip() == "":
         raise HTTPException(400, "sql query not provided")
 
-    logger.debug(f"Parsing raw SQL: {raw_sql}")
+    # QE-03: a statement's literals are the caller's data (a boundary lookup's
+    # point is a supply address's coordinates); only its shape is logged.
+    logger.debug("Parsing raw SQL: %s", sql_shape(raw_sql))
     try:
         parsed = parse_sql_query(raw_sql)
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("SQL validation failed")
+        logger.error("SQL validation failed: %s", type(exc).__name__)  # QE-03
         raise HTTPException(400, str(exc)) from exc
 
     if not parsed.tables:
@@ -356,16 +364,20 @@ async def execute_query(
     # Logical -> physical substitution
     mapped_ast = parsed.to_ast(tables_map=tables_map)
     complete_sql = mapped_ast.sql(dialect="postgres")
-    logger.debug(f"Complete SQL (after table mapping): {complete_sql}")
+    logger.debug("Complete SQL (after table mapping): %s", sql_shape(mapped_ast))
 
     # Apply row-level filters to the mapped AST, never to a re-parse of its text
     # (see ParsedSQL.to_ast), and render once, as postgres.
+    final_ast = mapped_ast
     if row_filter_plans:
         try:
             ast = apply_row_filter_plans(mapped_ast, row_filter_plans)
             complete_sql = ast.sql(dialect="postgres")
-        except Exception:
-            logger.exception("Failed to apply row filters")
+            final_ast = ast
+        except Exception as exc:
+            # The type only (QE-03): a filter's error text can quote its predicate,
+            # which lists the caller's sensor ids.
+            logger.error("Failed to apply row filters: %s", type(exc).__name__)
             raise HTTPException(500, "Failed to apply row filters") from None
         if edr_context is not None:
             # Not the SQL. A delegated predicate is a literal list of the
@@ -378,19 +390,16 @@ async def execute_query(
                 "names the consenting subjects"
             )
         else:
-            logger.debug(f"Complete SQL (after row filters): {complete_sql}")
+            # The shape: a self-service predicate lists the caller's sensor ids.
+            logger.debug("Complete SQL (after row filters): %s", sql_shape(ast))
 
     # Pagination & caps
     limit = _clamp_limit(limit)
     offset = max(offset, 0)
 
-    paginated_sql = f"""
-        SELECT *
-        FROM (
-            {complete_sql}
-        ) AS q
-        LIMIT :limit OFFSET :offset
-    """
+    # QE-04: the statement's top-level ORDER BY is carried onto the outer query,
+    # naming q's columns, so the page is cut from rows in the caller's order.
+    paginated_sql = build_paginated_sql(complete_sql, final_ast)
 
     count_sql = f"""
         SELECT COUNT(*) FROM (
@@ -405,8 +414,15 @@ async def execute_query(
             total = await execute_scalar_with_timeout(datasets_db, count_sql)
         except HTTPException:
             raise
-        except Exception:
-            logger.exception("Count query failed")
+        except Exception as exc:
+            # Not `logger.exception`: a non-driver SQLAlchemy error (StatementError)
+            # escapes the DBAPIError handler, and its text and traceback repeat the
+            # statement and its parameters, literals and all (QE-03).
+            logger.error(
+                "Count query failed: %s sql=%s",
+                type(exc).__name__,
+                sql_shape(count_sql),
+            )
             raise HTTPException(500, "Query failed") from None
 
     # Execute data query
@@ -418,8 +434,13 @@ async def execute_query(
         )
     except HTTPException:
         raise
-    except Exception:
-        logger.exception("Query execution failed")
+    except Exception as exc:
+        # As for the count: the error's type and the statement's shape only (QE-03).
+        logger.error(
+            "Query execution failed: %s sql=%s",
+            type(exc).__name__,
+            sql_shape(paginated_sql),
+        )
         raise HTTPException(500, "Query execution failed") from None
 
     # Post-process rows (geometry → GeoJSON)

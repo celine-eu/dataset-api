@@ -24,9 +24,10 @@ SQL `SELECT` queries over exposed datasets with strict validation, server-side p
 
 - `POST /query` — accepts `{"sql": "SELECT ...", "limit": 50, "offset": 0, "skip_count": false}`
 - Validates SQL (SELECT-only, table allowlist, function allowlist)
-- Supports spatial PostGIS functions: `ST_Intersects`, `ST_Within`, `ST_Contains`, `ST_Transform`, `ST_Distance`, `ST_SetSRID`, `ST_GeomFromGeoJSON`, `ST_Point`, `ST_XMin/YMin/XMax/YMax`, `ST_Extent`
+- Supports spatial PostGIS functions: `ST_Intersects`, `ST_Within`, `ST_Contains`, `ST_Transform`, `ST_Distance`, `ST_SetSRID`, `ST_GeomFromGeoJSON`, `ST_Point`, `ST_XMin/YMin/XMax/YMax`, `ST_Extent`, and `ST_AsGeoJSON`/`ST_Simplify` for a shape at a bounded size (QE-01)
+- Admits a unary minus on a numeric literal only, so `ST_Point(-0.05, 45.1)` parses (QE-02)
 - Supports `IN` clauses with tuples, string/numeric/date functions, aggregates
-- Enforces `LIMIT`/`OFFSET` server-side
+- Enforces `LIMIT`/`OFFSET` server-side, after the statement's top-level `ORDER BY` (carried onto the page query where its keys name selected columns; see QE-04 in the query engine docs)
 - Configurable query timeout via `QUERY_STATEMENT_TIMEOUT_MS` (default 5000ms)
 - `skip_count: true` skips the `COUNT(*)` query to avoid full table scans
 - Applies row-level filter plans from governance handlers (`direct_user_match`, `rec_registry`, `http_in_list`, `table_pointer`)
@@ -203,6 +204,10 @@ uv sync
 uv run pytest          # or: task test
 ```
 
+`pyproject.toml` requires `celine-sdk>=1.21.0`, the first release whose registry
+self-service calls raise `RecRegistryApiError` with the registry's `code` (RF-12 in
+[docs/dataspace-row-filters.md](docs/dataspace-row-filters.md)); `uv.lock` pins it.
+
 The API, governance and DPS tests need a real PostgreSQL with PostGIS. **They never use
 the database `DATABASE_URL` names**, because their fixtures drop and recreate the
 catalogue schema on every test:
@@ -216,6 +221,12 @@ in `_test`, or which is the one `DATABASE_URL` or `DATASETS_DATABASE_URL` points
 (`tests/testdb.py`). The SQL parser tests need no database. The process e2e in
 `tests/e2e` runs with `DATASET_API_E2E=1` and creates, then drops, two more `*_test`
 databases on the same server.
+
+**One test database per server, so run one suite at a time.** Every run on a server uses
+the same `*_test` database and its fixtures drop and recreate the catalogue schema on every
+test, so two runs at once (two checkouts, or a run beside an agent's) fail each other's
+tests at random. Give a concurrent run its own `TEST_DATABASE_URL` (a name ending in
+`_test`, such as `.../datasets_b_test`; it is created on first use).
 
 Before opening a PR:
 - validate all YAML definitions

@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
+from celine.sdk.auth import OidcClientCredentialsProvider
+from celine.sdk.auth.jwt import is_service_account
+from celine.sdk.rec_registry import (
+    RecRegistryAdminClient,
+    RecRegistryApiError,
+    RecRegistryUserClient,
+)
 from fastapi import HTTPException
 from sqlglot import exp
 
@@ -10,11 +18,55 @@ from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
 from celine.dataset.core.config import get_settings
 from celine.dataset.security.models import AuthenticatedUser
 
-from celine.sdk.auth.jwt import is_service_account
-from celine.sdk.auth import OidcClientCredentialsProvider
-from celine.sdk.rec_registry import RecRegistryAdminClient, RecRegistryUserClient
-
 logger = logging.getLogger(__name__)
+
+# The registry's answer on `GET /user/assets` for a caller who is no member of
+# any community (rec-registry `api/user.py`): `403 {"detail": …, "code":
+# "not_a_member"}`. It is the only 403 that route gives: its middleware answers a
+# missing or invalid token with 401. A registry older than the error codes sends
+# the detail alone.
+_NOT_A_MEMBER_STATUS = 403
+_NOT_A_MEMBER_CODE = "not_a_member"
+_NOT_A_MEMBER_DETAIL = "You are not a member of any community"
+
+
+def _is_not_a_member(exc: BaseException) -> bool:
+    """RF-12: the registry said this caller is no member — and nothing else did.
+
+    Read from the SDK's own error (`RecRegistryUserClient.get_my_assets` raises
+    `RecRegistryApiError` on anything but `200`, with the status and the
+    registry's `code` and `detail` read from the top level of a JSON object
+    body; both `None` for a body that is not one). The status must be 403. A
+    refusal carrying a `code` is judged by that code alone: `not_a_member`
+    matches whatever the detail says, any other code does not match even beside
+    the old detail. One with no `code` (a registry that predates the codes)
+    matches only on the exact detail. A bare 403 could come from anything in
+    front of the registry (a gateway, a proxy) and would then be read as "owns
+    nothing"; an answer neither rule recognises stays an error, which is loud,
+    rather than a silent deny.
+    """
+    if not isinstance(exc, RecRegistryApiError):
+        return False
+    if exc.status_code != _NOT_A_MEMBER_STATUS:
+        return False
+    if exc.code is not None:
+        return exc.code == _NOT_A_MEMBER_CODE
+    return _names_no_code(exc.body) and exc.detail == _NOT_A_MEMBER_DETAIL
+
+
+def _names_no_code(body: object) -> bool:
+    """The raw refusal body has no `code` at all (absent or `null`).
+
+    The SDK reads `code` only when it is a string, so a body whose `code` is
+    something else (a list, a number) reaches here with `exc.code` `None`. That
+    body did name a code — not ours — and must not fall back to the detail
+    match meant for a registry older than the codes.
+    """
+    try:
+        parsed = json.loads(body) if isinstance(body, (bytes, str)) and body else None
+    except ValueError:
+        return False
+    return isinstance(parsed, dict) and parsed.get("code") is None
 
 
 class RecRegistryHandler:
@@ -77,10 +129,32 @@ class RecRegistryHandler:
         try:
             assets = await client.get_my_assets(token=user_token)
         except Exception as e:
-            logger.error(f"REC Registry request failed: {e}")
+            if _is_not_a_member(e):
+                # RF-12: a person with no membership owns no asset, so no row is
+                # theirs — the same deny as RF-11's member without a meter. Only
+                # this answer; every other failure stays an error (RF-05).
+                logger.info(
+                    "rec_registry: caller is no registry member for %s — no rows",
+                    table,
+                )
+                return RowFilterPlan(table=table, kind="deny")
+            # Status and code only: the error's message carries the registry's
+            # sentence, which is not this service's to log (QE-03).
+            logger.error(
+                "rec_registry: registry request failed for %s: %s status=%s code=%s",
+                table,
+                type(e).__name__,
+                getattr(e, "status_code", None),
+                getattr(e, "code", None),
+            )
             raise
 
-        if not assets:
+        # `None` means no parsed answer at all (the SDK raises on anything but
+        # a readable `200`, so this is a guard, not an expected path). That is an error, never "owns nothing" (RF-05's
+        # distinction): read as an empty list it would silently deny a member
+        # data they are entitled to. `is None`, not truthiness — an empty page
+        # is a valid answer and must reach the deny below, not this 500.
+        if assets is None:
             raise HTTPException(500, "Failed to enumerate user assets")
 
         user_device_ids: list[str] = []
@@ -88,7 +162,22 @@ class RecRegistryHandler:
             if asset.sensor_id:
                 user_device_ids.append(asset.sensor_id)
 
-        logger.debug(f"User {user.sub} assets {user_device_ids}")
+        if not user_device_ids:
+            # RF-11 (celine-eu/dataset-api#74): no metered asset — no meter
+            # attached yet, or only a PV plant or a battery — is an ordinary
+            # member between approval and a manager attaching their meter. Deny,
+            # the shape the delegated path uses, rather than emit `column IN ()`:
+            # PostgreSQL rejects an empty IN as a syntax error, so the query
+            # failed where it should have answered empty.
+            logger.info(
+                "rec_registry: caller resolved to no devices for %s — no rows", table
+            )
+            return RowFilterPlan(table=table, kind="deny")
+
+        logger.debug(
+            "rec_registry: caller %s resolved to %d device(s) for %s",
+            user.sub, len(user_device_ids), table,
+        )
 
         literals: list[exp.Expression] = []
         for v in user_device_ids:

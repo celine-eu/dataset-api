@@ -10,6 +10,8 @@ import sqlglot
 from sqlglot import ParseError, exp
 import sqlglot.errors
 
+from celine.dataset.api.dataset_query.log_safety import sql_shape
+
 logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
@@ -159,6 +161,11 @@ ALLOWED_FUNCTIONS = {
     "st_xmax",
     "st_ymax",
     "st_extent",
+    # QE-01 (docs/query-engine.md): a selected shape as GeoJSON, simplified in
+    # the statement so a detailed boundary polygon leaves the database at a
+    # bounded size. Both read only the row's own geometry.
+    "st_asgeojson",
+    "st_simplify",
     # string
     "lower",
     "upper",
@@ -267,9 +274,22 @@ class ParsedSQL:
 # -----------------------------------------------------------------------------
 
 
-def _bad_request(message: str) -> HTTPException:
-    logger.warning("SQL validation error: %s", message)
+def _bad_request(message: str, *, log_message: str | None = None) -> HTTPException:
+    """A 400 for the caller. `log_message` replaces `message` in the log when the
+    detail quotes the caller's SQL: the caller may read their own literals back,
+    a log may not (QE-03)."""
+    logger.warning("SQL validation error: %s", log_message or message)
     return HTTPException(status_code=400, detail=message)
+
+
+def _parse_error_position(exc: ParseError) -> str:
+    """Where sqlglot stopped, without the context it quotes from the statement."""
+    parts = []
+    for err in getattr(exc, "errors", None) or []:
+        parts.append(
+            f"{err.get('description')} (line {err.get('line')}, col {err.get('col')})"
+        )
+    return "; ".join(parts) or type(exc).__name__
 
 
 def _parse_sql_query_impl(sql: str) -> ParsedSQL:
@@ -296,8 +316,12 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
     try:
         ast = sqlglot.parse_one(sql)
     except sqlglot.errors.ParseError as exc:
-        logger.error(f"SQL parse error: {exc}")
-        raise _bad_request(f"Invalid SQL syntax: {exc}") from exc
+        # sqlglot's message quotes the statement around the error, literals and
+        # all: the caller gets it back, the log gets the position only (QE-03).
+        raise _bad_request(
+            f"Invalid SQL syntax: {exc}",
+            log_message=f"Invalid SQL syntax: {_parse_error_position(exc)}",
+        ) from exc
 
     select = ast.find(exp.Select)
     if not select or not select.expressions:
@@ -319,13 +343,13 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
                 while ancestor is not None:
                     if isinstance(ancestor, exp.Or):
                         raise _bad_request(
-                            f"Tautological predicate in OR context is not allowed: {left_sql} = {right_sql}"
+                            f"Tautological predicate in OR context is not allowed: {left_sql} = {right_sql}",
+                            log_message="Tautological predicate in OR context is not "
+                            f"allowed: {sql_shape(node)}",
                         )
                     ancestor = ancestor.parent
                 logger.warning(
-                    "Tautological predicate detected in query: %s = %s",
-                    left_sql,
-                    right_sql,
+                    "Tautological predicate detected in query: %s", sql_shape(node)
                 )
 
         # --- Allowlisted functions ---
@@ -341,6 +365,16 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
 
         if isinstance(node, ALLOWED_EXPRESSIONS):
             continue
+
+        # QE-02 (docs/query-engine.md): a unary minus is admitted on a numeric
+        # literal and on nothing else, so `ST_Point(-0.5, 1)` parses. `-col`,
+        # `-(…)`, `- -1`, `-'1'` and `-1::int` (a minus over a cast) stay refused:
+        # no reader needs them, and none of them is a constant number.
+        if isinstance(node, exp.Neg):
+            operand = node.this
+            if isinstance(operand, exp.Literal) and not operand.is_string:
+                continue
+            raise _bad_request("Unary minus is allowed only on a numeric literal")
 
         # sqlglot parses every function it knows into a typed node, so the
         # allowlist has to be consulted here too, or it never applies to the
@@ -379,15 +413,17 @@ def parse_sql_query(sql: str) -> ParsedSQL:
         raise
 
     except ParseError as exc:
-        logger.warning("Invalid SQL syntax: %s", exc)
+        logger.warning("Invalid SQL syntax: %s", _parse_error_position(exc))
         raise HTTPException(
             status_code=400,
             detail="Invalid SQL syntax",
         ) from None
 
     except Exception as exc:
-        # absolute safety net
-        logger.exception("Unexpected SQL parser error")
+        # absolute safety net. The type only, no message and no traceback (QE-03):
+        # sqlglot's TokenError (an unterminated literal, say) is no ParseError and
+        # its text quotes the statement, literals and all.
+        logger.error("Unexpected SQL parser error: %s", type(exc).__name__)
         raise HTTPException(
             status_code=400,
             detail="Invalid SQL query",
