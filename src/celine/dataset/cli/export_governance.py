@@ -18,6 +18,7 @@ import yaml
 
 from celine.dataset.cli.ontology_resolver import OntologyResolutionError, resolve_mapping
 from celine.dataset.cli.utils import setup_cli_logging
+from celine.dataset.core.datasets import derive_physical_table
 
 logger = logging.getLogger(__name__)
 
@@ -99,20 +100,6 @@ def resolve_rule(config: GovernanceConfig, dataset_name: str) -> GovernanceRule:
 # ---------------------------------------------------------------------------
 
 
-def _derive_physical_table(dataset_name: str) -> str:
-    """
-    Derive the physical schema.table reference from an OpenLineage-style name.
-
-    "datasets.ds_dev_gold.foo"  -> "ds_dev_gold.foo"
-    "singer.tap-test.foo"       -> "tap-test.foo"
-    "schema.table"              -> "schema.table"  (already 2-part, kept as-is)
-    """
-    parts = dataset_name.split(".")
-    if len(parts) >= 3:
-        return ".".join(parts[1:])
-    return dataset_name
-
-
 def _normalize_dataset_id(dataset_name: str) -> str:
     return dataset_name.lower().replace("-", "_").replace(" ", "_")
 
@@ -124,7 +111,7 @@ def governance_rule_to_entry(
     owners: OwnersRegistry | None = None,
     base_dir: Path | None = None,
 ) -> dict[str, Any]:
-    physical_table = _derive_physical_table(dataset_name)
+    physical_table = derive_physical_table(dataset_name)
     title = rule.title or dataset_name
     description = rule.description or physical_table
 

@@ -8,8 +8,7 @@ turn the non-member deny into a 500. The suite itself cannot see that: its
 `.venv` may hold an editable SDK checkout whose version string still reads the
 last release. So the floor in `pyproject.toml` is pinned here: it must exclude
 every celine-sdk without REQ-0132, i.e. require 1.21.0 or later (the release
-that carries it). Until 1.21.0 is on PyPI, `uv lock` cannot satisfy the floor,
-which is the intended loud failure rather than a lock that quietly keeps 1.20.0.
+that carries it).
 """
 from __future__ import annotations
 

@@ -12,6 +12,8 @@ The Dataset API is a **governed, read-only data access layer** that:
 - exposes a **restricted SQL query interface** over *catalogued* datasets
 - provides **schema and metadata introspection** for clients and UIs
 - integrates with **OpenLineage** to keep provenance and trust up to date
+- acts as the **data plane** of a dataspace connector, serving contracted consumers
+  through an EDR or a DPS pull token
 
 The API is not an ingestion tool. Pipelines produce data; the Dataset API governs and serves it.
 
@@ -21,16 +23,24 @@ The API is not an ingestion tool. Pipelines produce data; the Dataset API govern
 
 ### Actors
 
-- **Producers (pipelines)**: create/refresh physical tables and emit lineage (OpenLineage)
-- **Operators**: manage catalogue definitions via CLI and ensure OPA/policy config is correct
+- **Producers (pipelines)**: create/refresh physical tables, declare `governance.yaml`, and emit lineage (OpenLineage)
+- **Operators**: manage catalogue definitions via CLI and keep the Rego policies correct
 - **Consumers (apps/DTs/BI)**: discover datasets, fetch schemas, run governed queries
+- **Dataspace consumers**: query under a contract agreement, via an EDR token on
+  `/query` or a DPS pull token on `/dps/public/query`
 
 ### External Dependencies
 
-- **Physical storage**: PostgreSQL (tables, views)
-- **Authorization**: OPA (policy decision point)
-- **Lineage backend**: Marquez (OpenLineage ingestion/query)
-- **Identity provider**: issues JWTs (users + service accounts)
+- **Physical storage**: PostgreSQL — a catalogue database (`DATABASE_URL`, schema
+  `dataset_api`) and the warehouse the datasets live in (`DATASETS_DATABASE_URL`)
+- **Authorization**: Rego policies in `POLICIES_DIR`, evaluated in-process
+  (celine-sdk policy engine)
+- **Identity provider**: OIDC, issues JWTs (users + service accounts)
+- **Lineage backend**: Marquez, read by the CLI (`export openlineage`)
+- **ds-connector(s)**: decide dataspace requests (`/internal/dataplane/authorize`),
+  publish the EDR key set, and record disclosures
+- **EDC control plane**: signals DPS data flows at `/dps/v1/*` (optional)
+- **REC registry**: resolves a member's meters for the `rec_registry` row filter
 
 ---
 
@@ -41,22 +51,23 @@ The API is not an ingestion tool. Pipelines produce data; the Dataset API govern
             | Pipelines (ETL/dbt/..) |
             +-----------+------------+
                         |
-                        | OpenLineage events
+            governance.yaml / OpenLineage
                         v
                   +-----------+
-                  | Marquez   |
+                  | dataset-  |  export + import catalogue
+                  | cli       |
                   +-----+-----+
                         |
-                        | export lineage + metadata
                         v
 +---------+     +---------------------+      +--------------------+
-| Clients | --> |     Dataset API     | <--> | OPA (Policy)       |
-| (apps)  |     |                     |      | allow/deny         |
+| Clients | --> |     Dataset API     | <--> | ds-connector(s)    |
+| (apps)  |     |                     |      | authorize / audit  |
 +---------+     | - Catalogue         |      +--------------------+
                 | - Query Engine      |
-                | - Schema API        |
-                | - Metadata API      |
-                +----------+----------+
++---------+     | - Row filters       |      +--------------------+
+| Dataspace| -->| - Policy (Rego)     | <--> | EDC control plane  |
+| consumer |    | - DPS data plane    |      | (DPS signalling)   |
++---------+     +----------+----------+      +--------------------+
                            |
                            v
                    +---------------+
@@ -64,6 +75,18 @@ The API is not an ingestion tool. Pipelines produce data; the Dataset API govern
                    | tables/views  |
                    +---------------+
 ```
+
+Subsystems:
+- **Catalogue**: `/catalogue` (JSON-LD, and HTML for browsers),
+  `/catalogue/{id}/schema`, `/catalogue/{id}/vocabulary`, optional
+  `/catalogue/{id}/conformance`
+- **Query engine**: `POST /query` ([query-engine.md](query-engine.md))
+- **Row-filter registry**: pluggable handlers
+  ([dataspace-row-filters.md](dataspace-row-filters.md))
+- **DPS data plane**: optional ([dps-data-plane.md](dps-data-plane.md))
+
+One instance can serve as the data plane of several connectors: the connector is
+resolved per request from the token's issuer (`CONNECTOR_INTERNAL_URLS`).
 
 ---
 
@@ -77,9 +100,12 @@ A **dataset** is a governed contract over a physical data asset.
 - `dataset_id` (stable string; often namespace-qualified)
 
 **Dataset governance**
-- `access_level`: `open` | `internal` | `restricted`
+- `access_level`: `open` | `internal` | `restricted` | `secret`
+- `expose` (listed in the catalogue, queryable) and `dataspace_expose` (offered to
+  dataspace consumers)
 - ownership / stewardship fields
 - classification, tags, retention hints
+- row filters (`lineage.facets.governance.rowFilters`)
 
 **Dataset physical mapping**
 - resolved storage reference (e.g., Postgres table/view)
@@ -87,15 +113,11 @@ A **dataset** is a governed contract over a physical data asset.
 
 ### Namespace
 
-Namespaces are a first-class taxonomy for lifecycle and intent:
-- `raw`: ingestion/staging
-- `silver`: enriched internal
-- `gold`: curated/exposed
-
-Namespaces drive:
-- catalogue selection filters
-- policy rules (e.g., only `gold` exposed externally)
-- operational grouping
+The namespace is the dataset's OpenLineage namespace (`lineage.namespace`). It
+selects datasets on import (`--ns`), is rendered as `dct:isPartOf`, and is passed
+to the policy. Exposure is decided by `expose` / `dataspace.expose`, not by
+namespace. Medallion (`bronze`/`silver`/`gold`) is a separate governance hint,
+inferred from the name when not declared, and rendered as `ds:medallion`.
 
 ### Distribution
 
@@ -111,7 +133,7 @@ In practice:
 Consumers cannot mutate data or catalogue state. Mutations happen only via:
 - data pipelines (tables/views)
 - CLI-managed catalogue imports
-- admin endpoints used by CLI
+- admin endpoints used by CLI, which require the `dataset.admin` scope
 
 This guarantees:
 - reproducibility
@@ -124,23 +146,27 @@ This guarantees:
 
 The catalogue is **validated against storage**.
 
-Expected behaviors:
-- if a dataset points to a missing table/view, it should be marked invalid and/or removed during cleanup
-- imports reconcile desired state (YAML) vs actual DB objects
+- a PostgreSQL dataset is checked against the table it would be queried through
+  (`backend_config.table`, or the table its id names); a missing one is skipped at
+  import
+- on every import, any PostgreSQL entry whose table no longer exists is deleted;
+  other backends are catalogue-only, not checked and not queryable
 - schema endpoints reflect what exists in storage today
 
 The catalogue **never creates** physical data.
 
 ---
 
-## Lifecycle of a Dataset (Conceptual)
+## Lifecycle of a Dataset
 
 1. Pipeline creates/refreshes physical table/view
-2. Lineage is emitted to Marquez (OpenLineage)
-3. Operator exports lineage-derived candidates (CLI)
-4. Operator curates YAML (titles, descriptions, access levels, tags, docs)
+2. Pipeline declares governance (`governance.yaml`); lineage is emitted to Marquez
+3. Operator exports catalogue YAML: from `governance.yaml` (`export governance`),
+   Marquez (`export openlineage`) or PostgreSQL introspection (`export postgres`)
+4. Operator curates YAML where needed (titles, descriptions, access levels, tags, docs)
 5. CLI imports catalogue (create/update)
-6. API exposes dataset in catalogue (if allowed)
+6. API lists the dataset in the catalogue (if `expose`) and offers it to dataspace
+   consumers (if `dataspace.expose`)
 7. Consumers query datasets under governance
 8. Cleanup removes stale entries when physical assets disappear
 
@@ -150,6 +176,15 @@ The catalogue **never creates** physical data.
 
 - SQL must be validated (AST-based, allowlisted)
 - dataset references must resolve to catalogued assets
-- access is policy-controlled (OPA)
+- access is policy-controlled (Rego) on the ordinary path, and decided by the
+  provider's ds-connector on dataspace requests
 - limits and pagination protect the system from unbounded workloads
 
+---
+
+## Extension points
+
+- routes: the `celine.dataset.routes` entry-point group
+- row-filter handlers: the `celine.dataset.row_filters` entry-point group, or
+  `ROW_FILTERS_MODULES`
+- the public API for extensions: `celine.dataset.ext`

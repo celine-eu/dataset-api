@@ -154,6 +154,25 @@ class TestYamlConfig:
             s = get_settings()
             assert s.oidc.audience == "custom-audience"
 
+    def test_oidc_audience_from_environment(self):
+        """An `audience=` init default used to beat `CELINE_OIDC_AUDIENCE`."""
+        with patch.dict(os.environ, {"CELINE_OIDC_AUDIENCE": "env-audience"}):
+            os.environ.pop("DATASET_CONFIG", None)
+            reset_settings()
+            assert get_settings().oidc.audience == "env-audience"
+        reset_settings()
+
+    def test_oidc_audience_defaults_when_unset_or_empty(self):
+        for value in (None, ""):
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("DATASET_CONFIG", None)
+                os.environ.pop("CELINE_OIDC_AUDIENCE", None)
+                if value is not None:
+                    os.environ["CELINE_OIDC_AUDIENCE"] = value
+                reset_settings()
+                assert get_settings().oidc.audience == "svc-dataset-api"
+        reset_settings()
+
     def test_invalid_yaml_type_raises(self, tmp_path):
         config = tmp_path / "config.yaml"
         config.write_text("- just\n- a\n- list\n")

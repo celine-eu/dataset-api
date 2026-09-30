@@ -127,6 +127,31 @@ def extract_dataset_namespace(entry: Dict[str, Any]) -> str:
     return lineage.get("namespace") or "default"
 
 
+def resolve_admin_token() -> str:
+    """A client-credentials token for this service's own OIDC client.
+
+    `POST /admin/catalogue` requires the `dataset.admin` scope, which
+    `svc-dataset-api` holds: an import job authenticates as the service it feeds.
+    """
+    import asyncio
+
+    from celine.sdk.auth import OidcClientCredentialsProvider
+
+    from celine.dataset.core.config import get_settings
+
+    oidc = get_settings().oidc
+    if not oidc.client_id or not oidc.client_secret:
+        raise RuntimeError(
+            "no --token and no CELINE_OIDC_CLIENT_ID / CELINE_OIDC_CLIENT_SECRET set"
+        )
+    provider = OidcClientCredentialsProvider(
+        base_url=oidc.base_url,
+        client_id=oidc.client_id,
+        client_secret=oidc.client_secret,
+    )
+    return asyncio.run(provider.get_token()).access_token
+
+
 @import_app.command("catalogue")
 def import_catalogue(
     input_yaml: List[Path] = typer.Option(
@@ -166,6 +191,15 @@ def import_catalogue(
         help=(
             "Do not refuse a dataset_id declared differently in two inputs; "
             "keep the declaration from the last file in sorted order."
+        ),
+    ),
+    token: str = typer.Option(
+        None,
+        "--token",
+        envvar="DATASET_API_TOKEN",
+        help=(
+            "Bearer token with the dataset.admin scope. Default: a client-credentials "
+            "token for CELINE_OIDC_CLIENT_ID / CELINE_OIDC_CLIENT_SECRET."
         ),
     ),
 ):
@@ -302,11 +336,19 @@ def import_catalogue(
 
     url = api_url.rstrip("/") + "/admin/catalogue"
 
+    try:
+        bearer = token or resolve_admin_token()
+    except Exception as exc:
+        typer.echo(f"Cannot authenticate to the Dataset API: {exc}", err=True)
+        raise typer.Exit(code=1)
+
     typer.echo(f"Importing {len(payload['datasets'])} datasets → {url}")
 
     try:
         with httpx.Client(timeout=15.0) as client:
-            resp = client.post(url, json=payload)
+            resp = client.post(
+                url, json=payload, headers={"Authorization": f"Bearer {bearer}"}
+            )
             resp.raise_for_status()
     except Exception as exc:
         typer.echo(f"Error importing catalogue: {exc}", err=True)

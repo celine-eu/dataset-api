@@ -15,6 +15,19 @@ from celine.sdk.settings.models import OidcSettings
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_OIDC_AUDIENCE = "svc-dataset-api"
+
+
+def _oidc_settings() -> OidcSettings:
+    # The same `.env` the rest of Settings reads: a nested settings model only
+    # sees the process environment otherwise, so `CELINE_OIDC_*` in `.env` worked
+    # under docker compose (which exports it) and nowhere else.
+    oidc = OidcSettings(_env_file=".env", _env_file_encoding="utf-8")
+    if not oidc.audience:
+        oidc = oidc.model_copy(update={"audience": DEFAULT_OIDC_AUDIENCE})
+    return oidc
+
+
 class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
@@ -44,10 +57,10 @@ class Settings(BaseSettings):
     # hardcode `https://w3id.org/celine/`, which is not a registered w3id namespace,
     # so every instance IRI it emitted answered 404.
     #
-    # It is deployment configuration, not a constant. Production is a real host —
-    # likely `https://datasets.celine.dev.spindoxlabs.it/entity` — and the default
-    # here stays `.localhost` so an unconfigured deployment is visibly unconfigured
-    # rather than quietly claiming a permanent identity.
+    # It is deployment configuration, not a constant. A deployment sets its own
+    # public host; the default stays `*.celine.localhost` so an unconfigured
+    # deployment is visibly unconfigured rather than quietly claiming a permanent
+    # identity.
     #
     # Nothing resolves these yet; see the plan for `GET /entity/{type}/{path}`.
     # Until it exists these are stable, correctly-namespaced identifiers that do not
@@ -77,7 +90,10 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
-    oidc: OidcSettings = OidcSettings(audience="svc-dataset-api")
+    # Built per Settings, not once at import, and defaulted only where the
+    # environment is silent: an `audience=` init argument beats the environment,
+    # so `CELINE_OIDC_AUDIENCE` used to be ignored.
+    oidc: OidcSettings = Field(default_factory=lambda: _oidc_settings())
 
     # Policy Settings
     policies_check_enabled: bool = Field(
@@ -102,10 +118,6 @@ class Settings(BaseSettings):
     # Cache settings
     policies_cache_enabled: bool = Field(
         default=True, description="Enable in-memory decision caching"
-    )
-    policies_cache_ttl: int = Field(default=300, description="Cache TTL in seconds")
-    policies_cache_maxsize: int = Field(
-        default=10000, description="Maximum cache entries"
     )
 
     # =============================================================================

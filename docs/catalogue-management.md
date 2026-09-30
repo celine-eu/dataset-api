@@ -9,112 +9,136 @@ This document covers how datasets are defined, imported, reconciled, and cleaned
 Catalogue state is defined in YAML and treated like application config:
 - version controlled
 - reviewed
-- validated before import
+- validated on import
 
 The API database stores the *result* of the import, but YAML remains the source of truth.
 
 ---
 
-## YAML Structure (Recommended)
+## YAML Structure
 
-A compact pattern:
+Two formats are involved.
+
+### Source: `governance.yaml`
+
+Pipelines declare governance next to the data, as `defaults` plus rules matched by
+dataset glob under `sources`, with `governance.<app>.yaml` overlays. It is parsed by
+`celine.governance` (celine-utils):
 
 ```yaml
 defaults:
   access_level: internal
   classification: green
-  tags: []
-  ownership: []
-  retention_days: 365
 
 sources:
-  datasets.gold.example:
-    access_level: external
+  datasets.ds_dev_gold.example:
     title: Example dataset
     description: Curated indicator for X.
+    expose: true
+    access_level: open
     tags: [gold, example]
-    documentation_url: https://...
-    source_system: Example producer
+    documentation_url: https://example.org/docs
+    dataspace:
+      expose: true
 ```
 
-Key fields you typically need:
-- `dataset_id`
-- `title`, `description`
-- `access_level`
-- `tags`, `classification`
-- `source_system`, `documentation_url`
-- optional ownership, license, retention hints
+Rule fields include `title`, `description`, `expose`, `access_level`
+(`open|internal|restricted|secret`), `classification` (`green|yellow|red|pii`),
+`tags`, `ownership`, `license`, `documentation_url`, `source_system`,
+`retention_days`, `row_filters`, `dcat`, `ontology` and `dataspace`.
+
+### Import format
+
+`dataset-cli export governance` turns governance files into the format
+`dataset-cli import catalogue` reads, a top-level `datasets` map keyed by
+`dataset_id` (a file without it is skipped with a warning):
+
+```yaml
+datasets:
+  datasets.ds_dev_gold.example:
+    title: Example dataset
+    description: Curated indicator for X.
+    backend_type: postgres            # postgres|s3|fs|quantumleap|context_broker
+    backend_config: {table: ds_dev_gold.example}
+    expose: true                      # catalogue gate (default false)
+    dataspace_expose: true            # offered to the dataspace (default false)
+    access_level: open                # open|internal|restricted|secret
+    tags: {keywords: [gold, example, "classification:green"]}
+    lineage: {name: datasets.ds_dev_gold.example, facets: {governance: {}}}
+    landing_page: https://example.org/docs   # from documentation_url
+```
+
+`title` and `backend_type` are required. `access_level`, when given, must be one of
+`open`, `internal`, `restricted`, `secret` (any case); an entry that states none is
+stored as `internal`. `classification` becomes the keyword
+`classification:<value>`; `source_system` and `retention_days` live only in the
+governance facet. Only `postgres` datasets are queryable; the other backend types
+are catalogue entries only. See [cli-operations.md](cli-operations.md) for the
+exporters (`governance`, `postgres`, `openlineage`).
 
 ---
 
 ## Import Semantics
 
-Imports are **reconciling**:
+`POST /admin/catalogue` (called by `dataset-cli import catalogue`) requires the
+`dataset.admin` scope or the `admins` group, and upserts on `dataset_id`:
 
-- create missing dataset entries
-- update metadata on existing entries
-- optionally delete or disable entries that are no longer present in YAML
+- missing entries are created
+- existing entries have every field overwritten
+- entries absent from the input are left in place; removal happens only through
+  the stale-entry cleanup below
 
-This makes environments reproducible.
+The response is `{created, updated}`.
 
-### Create vs Update
-- if dataset_id exists → update metadata and refresh schema references
-- if not → create entry, then validate physical mapping
+### Physical validation
+For `postgres` datasets the table is checked by reflection **before** create or
+update: `backend_config.table`, or when the entry states none, the table its id
+names (`datasets.<schema>.<table>` → `<schema>.<table>`) — the same table the query
+path would use. A dataset whose table does not exist is skipped (logged server-side, not
+reported in the response). Column schema is not stored: `GET
+/catalogue/{id}/schema` reflects it on request.
 
 ---
 
 ## Selection & Filters
 
-To manage large catalogues, imports support dataset selection filters.
+`dataset-cli import catalogue` resolves the selection before sending anything:
 
-Recommended semantics:
-- `+pattern` includes (glob)
-- `-pattern` excludes (glob)
+- `--input/-i` — file or glob, repeatable; inputs are sorted and de-duplicated
+- `--ns` — namespace filter on `lineage.namespace` (default `default`); supports
+  `*`, `+ns`, `-ns`
+- `--datasets` — `dataset_id` globs, repeatable: `+pattern` (or bare) includes,
+  `-pattern` excludes; includes are applied first, then excludes
 
 Example:
-- include only gold: `+datasets.*.gold.*`
-- exclude one: `-datasets.gold.experimental_*`
+- include only gold: `--datasets '+datasets.*.gold.*'`
+- exclude one: `--datasets '-datasets.*.gold.experimental_*'`
 
-The import command should resolve the final selection list *before* applying changes.
+A `dataset_id` declared differently in two inputs is refused unless
+`--allow-conflicts`, which keeps the declaration from the last file in sorted order.
+Invalid entries are skipped with a warning; `--strict` fails on the first one.
 
 ---
 
 ## Dry Run
 
-`--dry-run` should:
-- print the selected dataset_ids after filters
-- show what would be created/updated/deleted
-- perform no writes
-
-This is essential for safe ops.
-
----
-
-## Physical Validation & Reflection
-
-During import (or post-import), the system should:
-- verify the referenced physical table/view exists
-- reflect schema to build columns/types
-- optionally generate JSON Schema artifacts
-
-If reflection fails:
-- mark dataset as invalid (or reject import for that dataset)
-- surface actionable error
+`--dry-run` prints the dataset_ids selected after `--ns` and `--datasets` and exits.
+It does not validate entries and does not contact the API, so it cannot say what
+would be created, updated or cleaned up.
 
 ---
 
 ## Cleanup of Stale Entries
 
-A robust import process includes a cleanup phase.
+Every import ends with a cleanup, in the same transaction, over the **whole**
+catalogue (not just the selection):
 
-**Goal:** remove catalogue entries whose physical tables no longer exist.
+1. only `postgres` entries are checked, against the same table the query path uses
+   (stated or derived from the id)
+2. an entry whose table no longer exists is deleted
+3. tables validated earlier in this import are skipped
 
-Recommended algorithm:
-
-1. list catalogue entries
-2. for each, check existence (reflection / information_schema)
-3. if missing, delete entry unless protected
-4. support skip-list for datasets just imported or explicitly pinned
+There is no protection or pinning. The number removed is logged server-side.
 
 This addresses real-world drift when pipelines drop or rename tables.
 
@@ -122,21 +146,21 @@ This addresses real-world drift when pipelines drop or rename tables.
 
 ## DCAT Exposure Rules
 
-The API should only expose datasets in the public catalogue that meet both:
-- configured exposure rules (e.g. namespace in {gold})
-- access level compatible with anonymous viewing (typically `open`)
-
-You can still keep internal/restricted datasets in the internal catalogue, but hide from public endpoints.
+Every catalogue surface (`GET /catalogue`, `GET /catalogue/{id}`, `POST
+/catalogue/search`, `/schema`, `/vocabulary`, the HTML pages) lists each entry with
+`expose: true`, except `access_level: secret`. Metadata of `internal` and
+`restricted` datasets is public; access to their rows is governed separately at
+`/query`. `dataspace_expose` does not affect the catalogue: it only gates the
+dataspace path.
 
 ---
 
 ## Operational Tips
 
 - keep titles/descriptions in YAML (reviewable)
-- use tags to express domain/tenant scoping for OPA
+- use the governance facet and the namespace for policy scoping
 - keep dataset_ids stable; rename through controlled migration
 - do not overload YAML with physical implementation details unless necessary
-
 
 ---
 
@@ -196,10 +220,15 @@ not the dataset's own claim.
 ### Access
 
 Authorised exactly like `/query`, and through the same executor: same governance and
-OPA checks, same row filters. The report quotes row values back in its violation
+policy checks, same row filters. The report quotes row values back in its violation
 messages, so anything weaker would be a row-level leak wearing a metadata endpoint's
 clothes. 404 when the dataset is not exposed or declares no mapping, matching
 `/vocabulary`.
+
+The request body is `{limit, profile_version, context}`, all optional. `limit`
+defaults to `CONFORMANCE_SAMPLE_LIMIT` (100) and is capped at
+`CONFORMANCE_MAX_SAMPLE` (1000). An unknown `profile_version` is a 400 naming the
+available versions.
 
 ### Reading the response
 

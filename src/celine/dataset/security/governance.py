@@ -132,15 +132,25 @@ async def enforce_dataset_access(
                       503 if policy service unavailable
     """
 
-    # Parse access level
+    # Parse access level. A secret or unreadable level answers exactly as an
+    # unexposed dataset does, so the two cannot be told apart from outside.
     try:
         level = AccessLevel.from_value(entry.access_level)
     except ValueError as exc:
-        logger.warning(f"Failed to parse access_level={entry.access_level}")
+        logger.error(
+            "Dataset %s has an invalid access_level %r; refusing",
+            entry.dataset_id,
+            entry.access_level,
+        )
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Invalid dataset access level configuration",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Dataset not available",
         ) from exc
+    if level is AccessLevel.SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Dataset not available",
+        )
 
     policy = ACCESS_LEVEL_MATRIX[level]
 
@@ -319,15 +329,26 @@ async def resolve_datasets_for_tables(
     # e.g. SQL ref "ds_dev_gold.meters_data_15m" matches catalogue
     # "datasets.ds_dev_gold.meters_data_15m"
     missing = table_names - by_id.keys()
+    # The ref is matched literally: `_` and `%` are LIKE wildcards, and every
+    # `ds_dev_gold` name carries one, so an unescaped ref matched ids it does
+    # not name. More than one match is refused rather than picked from.
     for ref in list(missing):
         if ref.count(".") == 1:
+            literal = (
+                ref.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
             stmt2 = select(DatasetEntry).where(
-                DatasetEntry.dataset_id.like(f"%.{ref}")
+                DatasetEntry.dataset_id.like(f"%.{literal}", escape="\\")
             )
             res2 = await db.execute(stmt2)
-            found = res2.scalars().first()
+            found = res2.scalars().all()
+            if len(found) > 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Query reference {ref} is ambiguous; use the full dataset id",
+                )
             if found:
-                by_id[ref] = found
+                by_id[ref] = found[0]
                 missing = missing - {ref}
 
     if missing:

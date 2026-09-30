@@ -75,3 +75,43 @@ async def list_catalogue_entries(*, db: AsyncSession) -> list[DatasetEntry]:
     stmt = catalogue_visible(select(DatasetEntry)).order_by(DatasetEntry.dataset_id)
     res = await db.execute(stmt)
     return list(res.scalars().all())
+
+
+#: The only backend this service can run SQL against. Entries of any other type
+#: (s3, fs, …) are catalogue-only: listed, never queryable.
+QUERYABLE_BACKEND = "postgres"
+
+
+def derive_physical_table(dataset_id: str) -> str:
+    """The physical `schema.table` a dataset id names by convention.
+
+    "datasets.ds_dev_gold.foo"  -> "ds_dev_gold.foo"
+    "singer.tap-test.foo"       -> "tap-test.foo"
+    "schema.table"              -> "schema.table"  (already 2-part, kept as-is)
+
+    The one rule for it: `export governance` writes this as `backend_config.table`,
+    and the query path falls back to it when an entry states no table.
+    """
+    parts = dataset_id.split(".")
+    if len(parts) >= 3:
+        return ".".join(parts[1:])
+    return dataset_id
+
+
+def physical_table(
+    dataset_id: str,
+    backend_type: str | None,
+    backend_config: dict | None,
+) -> str | None:
+    """The table a dataset is queried through, or None when it has none.
+
+    `backend_config.table` when stated; for a postgres entry that states none,
+    the table its id names (`derive_physical_table`). Every consumer — the query
+    path, the import's existence check and the stale-entry cleanup — resolves it
+    here, so an entry is kept exactly when the table it would be queried through
+    exists, and a query never reaches SQL under a name nobody resolved.
+    """
+    if backend_type != QUERYABLE_BACKEND:
+        return None
+    table = (backend_config or {}).get("table")
+    return table or derive_physical_table(dataset_id)

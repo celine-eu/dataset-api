@@ -4,38 +4,36 @@ This document explains the governed SQL interface: request/response semantics, v
 
 ---
 
-## Endpoints (Conceptual)
+## Endpoints
 
-Your exact route names may differ; the engine typically exposes:
-- **POST query**: run a SQL query against a dataset
-- **GET schema**: fetch JSON Schema for a dataset
-- **GET metadata**: column and dataset metadata for UI/clients
-
-The README should link to the concrete API reference.
+- `POST /query` — run a governed SQL statement (this document)
+- `POST /dps/public/query` — the same body, authorised by a DPS pull token (see [dps-data-plane.md](dps-data-plane.md))
+- `GET /catalogue/{dataset_id}/schema` — JSON Schema of a dataset's rows
+- `GET /catalogue`, `GET /catalogue/{dataset_id}` — dataset metadata (see [catalogue-management.md](catalogue-management.md))
 
 ---
 
 ## Query Request Model
 
-Typical POST body:
-
 ```json
 {
   "sql": "SELECT ...",
   "limit": 100,
-  "offset": 0
+  "offset": 0,
+  "skip_count": false
 }
 ```
 
 Notes:
 - `limit`/`offset` are applied server-side.
-- the engine may override `limit` with a maximum.
+- `limit` defaults to 100; a value ≤ 0 means 100, and anything above `MAX_LIMIT`
+  (10 000, fixed in `executor.py`) is clamped to it. A negative `offset` is read as 0.
+- `skip_count: true` skips the `COUNT(*)` query; `total` is then `null`.
+- A missing or blank `sql` is a `400` (*"sql query not provided"*).
 
 ---
 
 ## Response Model
-
-A typical paginated response:
 
 ```json
 {
@@ -45,20 +43,38 @@ A typical paginated response:
   ],
   "limit": 100,
   "offset": 0,
-  "count": 2
+  "count": 2,
+  "total": 2
 }
 ```
+
+`count` is the number of rows on this page; `total` is the number of rows the
+statement yields after row filters (`null` with `skip_count`); `limit` and
+`offset` echo the values actually applied.
+
 ---
 
 ## SQL Validation Rules
 
 ### Statement restrictions
-- single statement only
-- `SELECT` only
+- one statement; a trailing `;` is tolerated
+- `SELECT` only, with CTEs and subqueries; `UNION`, `INTERSECT` and `EXCEPT` are refused
+- no comments (`--`, `/* */`)
+- no top-level `LIMIT`/`OFFSET`: the request's `limit`/`offset` page the result
+- an AST deeper than 200 nodes is refused (*"Query too complex"*)
+- a tautology (`x = x`) inside an `OR` is refused; on its own (`WHERE 1=1`) it is
+  logged and allowed
 
 ### Table restrictions
-- references must map to **catalogued datasets**
+- references must map to **catalogued datasets**; an unknown reference is a `400`
+  (*"Query references unknown datasets: [...]"*)
 - if a query contains multiple table references, each must be resolvable
+- a two-part reference (`schema.table`) also matches a three-part catalogue id by
+  literal suffix (`_` is not a wildcard); more than one match is a `400`
+- a statement that references no table (`SELECT 1`) is a `400`
+- a dataset that is unexposed, `secret`, or carries an unreadable access level is a
+  `403` (*"Dataset not available"*), the same answer for all three
+- a dataset whose backend has no SQL table (`s3`, `fs`, …) is a `400` (*"not queryable"*)
 
 ### Function and expression allowlist
 - only allow safe scalar functions
@@ -70,9 +86,17 @@ timeout bounds. On that basis the parser admits:
 
 - the functions in `ALLOWED_FUNCTIONS` (`parser.py`), whether sqlglot parses them
   as a typed node (`COALESCE`, `FLOOR`, `EXTRACT`, …) or as an anonymous call. Any
-  of a function's SQL names counts, so `IFNULL` is `COALESCE`
-- `GREATEST`, `LEAST`, `NULLIF`
-- `CASE` expressions
+  of a function's SQL names counts, so `IFNULL` is `COALESCE`. The set covers the
+  PostGIS `ST_*` functions listed in the README, `LOWER`, `UPPER`, `LENGTH`, `TRIM`,
+  `LTRIM`, `RTRIM`, `SUBSTRING`, `REPLACE`, `ABS`, `ROUND`, `CEIL`, `FLOOR`,
+  `COALESCE`, `GREATEST`, `LEAST`, `NULLIF`, `DATE`, `DATE_TRUNC`, `EXTRACT`
+- aggregates `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `ARRAY_AGG`, with `DISTINCT` and
+  `FILTER (WHERE …)`
+- `CAST` and `::`, `INTERVAL`, `CURRENT_DATE`, `CURRENT_TIMESTAMP`, `NOW()`,
+  arithmetic `+ - * /`
+- `IN` (list, tuple or subquery), `BETWEEN`, `IS [NOT] NULL`, `NOT`/`AND`/`OR`
+- joins, subqueries and CTEs
+- `CASE` expressions and `IF(...)`
 - window functions (`… OVER (…)`) and the ranking functions `ROW_NUMBER`, `RANK`,
   `DENSE_RANK`. The function inside a window is still checked on its own
 - `PERCENTILE_CONT` / `PERCENTILE_DISC` with `WITHIN GROUP`, and `BOOL_OR` /
@@ -81,6 +105,11 @@ timeout bounds. On that basis the parser admits:
 
 Hash and crypto functions (`MD5`, `SHA256`, …) and string concatenation (`||`)
 are not admitted. No read path needs them, so derive such values in the caller.
+Also refused, for want of a reader: `LIKE`/`ILIKE`, `%`, `~`, `IS DISTINCT FROM`,
+`AT TIME ZONE`, `ANY`/`ALL`, `EXISTS`, and any function outside
+`ALLOWED_FUNCTIONS` (`LAG`, `STDDEV`, `TO_CHAR`, `CONCAT`, …). A refusal is a `400`
+naming the node: *"SQL function not allowed: X"* or *"Unsupported SQL construct: X"*.
+Tests: `tests/api/dataset_query/sql_parser/test_accept_analytics.py`.
 
 A clause below marked **planned** describes a widening decided but not yet in
 the code: the parser still rejects it. The change that lands it adds its tests
@@ -141,7 +170,10 @@ Tests: `tests/api/dataset_query/sql_parser/test_accept_negative_literals.py`
 through `POST /query`).
 
 ### Row filters
-A dataset's governance can declare row filters (`rowFilters`). They are applied to
+A dataset's governance can declare row filters (`rowFilters` or `row_filters`; the
+legacy `userFilterColumn` becomes a `direct_user_match` filter). An unauthenticated
+caller of a filtered dataset gets `401`; a member of the `admins` group is not
+filtered. Filters are applied to
 the validated AST after physical table names are substituted, and the query is then
 rendered once, as PostgreSQL. The SQL is never re-parsed from text in between: a
 text round trip changes the dialect (`INTERVAL '30 minutes'` becomes
@@ -192,8 +224,8 @@ statement, nor for a count or data query failing with a non-driver error, while
 the shape still does).
 
 ### Projection safety
-- avoid `SELECT *` if you want strict contracts (optional)
-- optionally enforce explicit column selection for restricted datasets
+`SELECT *` is admitted. Column-level restriction is not implemented: a dataset
+that must hide columns needs a view as its physical table.
 
 ---
 
@@ -207,8 +239,12 @@ Resolution steps:
 
 1. parse SQL and extract table identifiers
 2. map identifiers to catalogue entries
-3. substitute physical references into the execution query (or bind via prepared mapping)
-4. reject if any identifier cannot be mapped
+3. substitute the physical name into the AST: `backend_config.table`, or for a
+   postgres entry that states none, the table its id names
+   (`datasets.<schema>.<table>` → `<schema>.<table>`)
+4. reject (`400`) any identifier that matches no catalogue entry
+
+Every referenced dataset is mapped, access-checked and row-filtered; none skips a step.
 
 This prevents “escaping” to arbitrary tables.
 
@@ -216,15 +252,15 @@ This prevents “escaping” to arbitrary tables.
 
 ## Pagination, Limits & Timeouts
 
-The engine must guard the storage backend.
+The engine guards the storage backend, for `open` datasets too:
 
-Recommended controls:
-- hard max `limit` (e.g. 1k / 10k rows)
-- max offset (to prevent deep scans) or encourage keyset pagination
-- statement timeout
-- max query complexity (joins, subqueries, regex-like operations)
-
-Even for `open` datasets, resource controls must remain enforced.
+- `limit` is capped at 10 000 (`MAX_LIMIT`, not configurable); there is no offset cap
+- the count query and the page query each run under
+  `statement_timeout = QUERY_STATEMENT_TIMEOUT_MS` (default 5000 ms); a timeout is a
+  `400` (*"Query exceeded time limit"*)
+- the parser refuses an AST deeper than 200 nodes
+- there is no join, subquery or pattern-cost limit; `skip_count: true` saves the
+  full `COUNT(*)` scan
 
 The row cap is the request's `limit`: a `LIMIT` or `OFFSET` in the top-level
 statement is refused. The engine wraps the statement as
@@ -282,35 +318,44 @@ tables share column names still run, with no outer `ORDER BY`).
 
 ## Join Policy
 
-Joins can be permitted, but only within controlled boundaries:
-
-- join only catalogued datasets
-- join only within allowed namespaces (e.g. silver+gold)
-- reject cartesian products
-- optionally limit join count (e.g. <= 3 tables)
-
-If you want safer defaults:
-- forbid joins by default, allow per-dataset tags/policy
+Joins (inner, outer, cross, comma) are admitted. Each joined table must resolve to
+a catalogued dataset and pass that dataset's access check and row filters. On the
+dataspace path every joined dataset must be `dataspace_expose`, and ds judges the
+join as a whole: one refused dataset refuses the query. There is no join-count,
+namespace or cartesian-product limit.
 
 ---
 
-## Error Semantics (Examples)
+## Error Semantics
 
-### Validation error (400)
-- invalid SQL
-- forbidden keyword
-- unknown dataset reference
+### 400 — the statement
+- invalid SQL, a refused construct or function, a top-level `LIMIT`/`OFFSET`
+- unknown or ambiguous dataset reference, or no dataset referenced
+- a dataset whose backend has no SQL table
+- statement timeout (*"Query exceeded time limit"*), or any other database error
+  (*"Database query failed"*)
 
-### Authorization error (403)
-- identity not permitted by OPA
-- missing required scopes/roles/groups
+### 401 — identity
+- the dataset requires authentication and none was given
+- a row-filtered dataset queried without a user
+- an EDR token missing or invalid on the dataspace path
 
-### Not found (404)
-- dataset id does not exist in catalogue
+### 403 — authorization
+- identity not permitted by the policy engine
+- dataset unexposed, `secret`, or with an unreadable access level (*"Dataset not available"*)
+- dataspace path: dataset not offered, refused by ds, or a row filter this
+  instance cannot enforce
 
-### Execution error (500/502)
-- database error
-- upstream dependency failure (OPA/lineage)
+### 500 — the service
+- a row filter that cannot be built or applied (unknown handler, bad spec,
+  handler failure)
+- an unexpected execution error
+
+### 502 / 503 — upstream
+- `502`: ds-connector unreachable or answering an error
+- `503`: policy engine unavailable, or a pooled database connection lost (retry)
+
+`/query` never answers `404`: an unknown dataset is a `400`.
 
 ---
 
@@ -321,8 +366,9 @@ If you want safer defaults:
 curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT * FROM datasets.gold.example WHERE ts >= now() - interval \'1 day\'","limit":100,"offset":0}' \
-  https://host/api/dataset/datasets.gold.example/query
+  --data @- https://host/query <<'JSON'
+{"sql": "SELECT * FROM datasets.gold.example WHERE ts >= now() - interval '1 day'", "limit": 100, "offset": 0}
+JSON
 ```
 
 ### Paginate
@@ -331,7 +377,7 @@ curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"sql":"SELECT id, ts, value FROM datasets.gold.example ORDER BY ts DESC","limit":100,"offset":100}' \
-  https://host/api/dataset/datasets.gold.example/query
+  https://host/query
 ```
 
 ---
@@ -342,4 +388,5 @@ curl -X POST \
 - request only needed columns
 - prefer indexed predicates
 - avoid deep offsets; paginate with stable ordering
+- send `skip_count: true` when `total` is not needed
 

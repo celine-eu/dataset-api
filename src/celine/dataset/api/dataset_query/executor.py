@@ -16,7 +16,8 @@ from sqlglot import exp as sqlglot_exp
 from celine.dataset.schemas.dataset_query import DatasetQueryResult
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.db.reflection import reflect_table_async
-from celine.dataset.core.datasets import load_dataset_entry
+from celine.dataset.core.datasets import load_dataset_entry, physical_table
+from celine.dataset.security.disclosure import is_available
 from celine.dataset.security.governance import (
     enforce_dataset_access,
     resolve_datasets_for_tables,
@@ -211,20 +212,21 @@ async def execute_query(
             raise HTTPException(403, f"Refused by ds: {edr_decision.reason}")
 
     for ref_table, ds in datasets.items():
-        if not ds.expose:
-            logger.warning(f"Requested datasets {ds.dataset_id} is not exposed.")
+        # Unexposed, secret, or a level nobody can read: one answer for all three.
+        if not is_available(ds.expose, ds.access_level):
+            logger.warning("Requested dataset %s is not available", ds.dataset_id)
             raise HTTPException(403, "Dataset not available")
 
-        if ds.backend_config is None:
-            logger.warning(f"Table {ref_table} has no backend_config table mapping")
-            continue
-
-        phy_table_name = ds.backend_config.get("table", None)
+        # Every dataset is mapped, checked and filtered below — there is no path
+        # that skips ahead. An entry that states no table was once left unmapped
+        # *and* unchecked: its logical name reached SQL with no access decision.
+        phy_table_name = physical_table(ds.dataset_id, ds.backend_type, ds.backend_config)
         if phy_table_name is None:
-            logger.warning(
-                f"Table {ref_table} has no backend_config.table value configured"
+            raise HTTPException(
+                400,
+                f"Dataset {ds.dataset_id} is not queryable: its backend "
+                f"'{ds.backend_type}' has no SQL table",
             )
-            continue
 
         logger.debug(f"Mapped SQL table {ref_table} -> {phy_table_name}")
         tables_map[ref_table] = phy_table_name

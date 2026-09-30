@@ -32,13 +32,16 @@ Each clause below names its tests.
 
 ## Handlers
 
-| Handler | Reads | Resolves |
-|---|---|---|
-| `direct_user_match` | `principals` | nothing — the column holds the principal itself |
-| `rec_registry` | `principals` | a member to the meters they own, through the REC registry |
-| `subject_key_match` | `keys` | nothing — the column holds a data key, and `args.key_type` names which type |
-| `http_in_list` | — | the caller's own rows; refuses a delegated request |
-| `table_pointer` | — | the caller's own rows; refuses a delegated request |
+| Handler | Reads | Resolves | Args |
+|---|---|---|---|
+| `direct_user_match` | `principals` | nothing — the column holds the principal itself | `column` |
+| `rec_registry` | `principals` | a member to the meters they own, through the REC registry | `column`; `url` (default `REC_REGISTRY_URL`) |
+| `subject_key_match` | `keys` | nothing — the column holds a data key, and `args.key_type` names which type | `column`, `key_type` |
+| `http_in_list` | — | the caller's own rows; refuses a delegated request | `column`, `url`; `method` (`GET`), `headers`, `params`, `json`, `response_path` (`$`), `timeout_seconds` (5), `max_items` (2000), `empty_means_deny` (true), `forward_token` (false) |
+| `table_pointer` | — | the caller's own rows; refuses a delegated request | `column`, `pointer_table`, `pointer_key_column`; `pointer_subject_column` (`user_id`) |
+
+Args before a `;` are required. `http_in_list` formats its string args with
+`{sub}`, `{username}`, `{email}` and `{token}`.
 
 Handler names belong to the data plane, not to ds: ds passes the name through
 from `governance.yaml` and never interprets it. The two ends agree through that
@@ -47,10 +50,12 @@ file, which the connector reads and this service must recognise.
 ### `rec_registry` on the normal API path
 
 The same handler serves requests that do not come through the dataspace, where
-`principals` is absent, and it decides by who the caller is, in this order:
+`principals` is absent. Before any handler runs, the normal path answers an
+unauthenticated caller with `401` and skips row filters for members of the
+`admins` group. The handler then decides by who the caller is, in this order:
 
-1. **`principals` present**, even empty: a delegated request, resolved for the
-   named members on this service's identity (RF-05).
+1. **`principals` present** (dataspace path only), even empty: a delegated
+   request, resolved for the named members on this service's identity (RF-05).
 2. **A service account**: not narrowed at all. A service is not a registry
    member, has no meters of its own, and has already passed the policy's
    `dataset.query` check; the handler returns no predicate and the whole table
@@ -94,7 +99,7 @@ of the contract disagree.
 
 The cost is accepted and symmetric with ds's own choice: upgrading the connector
 ahead of this service stops the data plane rather than widening it. **So every
-field in the filter has a default**, here and in ds: `forbid` governs what a
+field in the filter but `handler` has a default**, here and in ds: `forbid` governs what a
 reader has never heard of, and making a known field *required* would refuse an
 older connector too. One impossible direction is a deployment order; two are a
 deadlock. See RF-10.
@@ -127,7 +132,7 @@ renders the same SQL. Keys of another type are not ours to match.
 **The principals are ignored, and are not a fallback.** They name the same people
 in a vocabulary this column does not speak; matching a username against a supply
 point returns nothing, or something by coincidence. A filter naming no `column`
-or no `key_type` cannot be applied and is an error, never an empty filter.
+or no `key_type` cannot be applied and is an error (a `500`), never an empty filter.
 Tests: `tests/api/dataset_query/test_subject_key_match.py`,
 `tests/api/test_edr_subject_key_filter.py`.
 
@@ -165,6 +170,11 @@ would be served the first one's rows.
 
 The keys enter the cache key as a digest, not in clear. They are personal data and
 a cache key is the kind of string that ends up in a repr.
+
+A plan lives for `ROW_FILTERS_CACHE_TTL` seconds (default 300), shortened to ds's
+`cache_ttl` on the dataspace path and to the token's remaining lifetime on the
+normal path; the cache holds at most `ROW_FILTERS_CACHE_MAXSIZE` plans (default
+10 000).
 Tests: `tests/api/dataset_query/test_delegated_allow_lists.py`.
 
 ### RF-08 — Keys reach the predicate and nothing else
@@ -278,11 +288,7 @@ is not the answer. A failure is logged with its status and code only, not the
 registry's sentence. This needs a celine-sdk that carries REQ-0132, the
 1.21.0 release: `pyproject.toml` requires `celine-sdk>=1.21.0`. Against 1.20.0,
 `get_my_assets` raises `UnexpectedStatus` on the 403 (or returns `None`) and the
-answer is a 500 (the loud side), never a deny. Until 1.21.0 is on PyPI, `uv lock`
-cannot meet the floor and `uv.lock` still pins 1.20.0; an image built from that
-lock (the Dockerfile's `uv sync --frozen` does not check the lock against
-`pyproject.toml`) would carry the 500, so this change does not ship until the
-lock is refreshed. Tests run against the editable SDK checkout in `.venv`.
+answer is a 500 (the loud side), never a deny. `uv.lock` pins 1.21.0 from PyPI.
 `tests/test_sdk_dependency_floor.py` pins the floor.
 Code: `_is_not_a_member` in
 `src/celine/dataset/api/dataset_query/row_filters/handlers/rec_registry.py`.

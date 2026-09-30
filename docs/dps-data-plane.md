@@ -20,7 +20,8 @@ maintainer on 2026-09-17.
 
 - `/query` serves API clients with their own tokens (user or service). With
   `EDR_ENABLED`, the `Edc-Contract-Agreement-Id` header switches it to the legacy EDR path
-  (see [governance-security.md](governance-security.md)). This mode changes neither.
+  (see [governance-security.md](governance-security.md#dataspace-edr-path)). This mode
+  changes neither.
 - `/dps/public/query` serves only holders of a DPS pull token.
 
 Keeping the two concerns apart means neither endpoint has to guess which kind of
@@ -44,14 +45,16 @@ Code: `src/celine/dataset/dps/`. Tests: `tests/dps/`. Each clause below names it
 | `DPS_DATAPLANE_ID` | `dataset-api` | the id this data plane registers under |
 | `DPS_SIGNALING_URL` | `http://localhost:8001` | base URL the control plane reaches; the registered endpoint is this + `/dps/v1/dataflows` |
 | `DPS_PUBLIC_URL` | `http://localhost:8001` | base URL consumers reach; the data address endpoint is this + `/dps/public` |
-| `DPS_TRANSFER_TYPES` | `["HttpData-PULL"]` | accepted and registered transfer types; pull only |
+| `DPS_TRANSFER_TYPES` | `["HttpData-PULL"]` | accepted and registered transfer types; pull only, a push type fails start-up |
 | `DPS_LABELS` | `[]` | registration labels |
 | `DPS_CONTROL_PLANE_CLIENTS` | `[]` | OIDC client ids allowed to signal; empty admits nobody |
 | `DPS_TOKEN_SIGNING_KEY` | — (required when enabled) | PEM EC P-256 private key for pull tokens. It must be the same on every worker and kept across restarts |
 | `DPS_TOKEN_KEY_ID` | unset | `kid` stamped on pull tokens |
 
 The pull path calls ds exactly as the legacy EDR path does, so it also needs
-`CONNECTOR_INTERNAL_URL` and the OIDC client settings. The flows are stored in the
+`CONNECTOR_INTERNAL_URL` (or `CONNECTOR_INTERNAL_URLS`, keyed by the flow's
+`participantId`) and the `CELINE_OIDC_*` client settings; `EDR_ENABLED` is not
+required. The flows are stored in the
 catalogue database (`DATABASE_URL`), so run `alembic upgrade head` before enabling the
 mode.
 
@@ -144,7 +147,8 @@ All of these are `POST /dps/v1/dataflows/{id}/<signal>`.
   an already `TERMINATED` flow succeeds and changes nothing.
 - `completed`: `STARTED` → `COMPLETED`. The token is retired.
 - `started`: consumer flows only, `PREPARED` → `STARTED`. The message must carry a data
-  address, which is recorded without its credential.
+  address, which is recorded without its credential. A missing data address gets
+  `400`; `started` on a provider flow gets `409`.
 
 Errors:
 
@@ -166,8 +170,9 @@ by decision (see *Two query endpoints* above). The token goes in
 
 Refusals:
 
-- `401`: no token, a token not signed by this data plane, or a token that is not the
-  flow's live one.
+- `401`: no token, a token not signed by this data plane, a token that is not the
+  flow's live one, or a token whose `aud`/`iss` do not match the flow's
+  `counterPartyId`/`participantId`.
 - `403`: the flow is not `STARTED`.
 - `403`: an `Edc-Contract-Agreement-Id` header that differs from the flow's agreement.
 
@@ -175,10 +180,12 @@ Otherwise the request becomes a dataspace request:
 
 - the agreement is the flow's;
 - the consumer is the token's `aud`;
+- the provider, which selects the connector, is the flow's `participantId`;
 - the purpose comes from `Edc-Purpose`, and the transfer id from `Edc-Transfer-Process-Id`.
 
 From there it follows the legacy EDR path unchanged: the `dataspace_expose` gate, then
-ds's `POST /internal/dataplane/authorize`, then row filters, then the disclosure audit.
+ds's `POST /internal/dataplane/authorize`, then the `expose` gate, row filters, and the
+disclosure audit.
 Tests: `tests/dps/test_pull.py` (PostgreSQL).
 
 ### DPS-10 — Registration message
@@ -209,7 +216,8 @@ The base is the message's `callbackAddress`. If there is none, it is the endpoin
 caller registered under DPS-11. With neither, the notification fails, and so does a
 non-2xx answer.
 
-The synchronous flows above send no callbacks.
+No signal sends a callback today: the synchronous flows above do not need one, and
+`ControlPlaneClient` (`dps/callbacks.py`) is the client a long-running flow would use.
 Tests: `tests/dps/test_callbacks.py`, `tests/dps/test_signaling_api.py`.
 
 ### DPS-13 — Flows live in the catalogue database

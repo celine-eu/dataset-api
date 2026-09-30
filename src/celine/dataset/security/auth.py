@@ -178,3 +178,30 @@ async def get_current_user(
     """
     jwt_user = await _decode_and_validate_token(credentials.credentials)
     return _normalize_user(jwt_user, token=jwt_user.token)
+
+
+#: What may write the catalogue: the pair the shipped Rego grants `restricted` on.
+#: `svc-dataset-api` holds the scope, so an import job authenticates as the service.
+CATALOGUE_ADMIN_SCOPE = "dataset.admin"
+CATALOGUE_ADMIN_GROUP = "admins"
+
+
+async def require_catalogue_admin(
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AuthenticatedUser:
+    """Admit a caller that may overwrite or delete catalogue entries.
+
+    The import sets `expose` and `access_level` — the very fields every other gate
+    reads — so an unauthenticated import would be a way around all of them.
+
+    Raises:
+        HTTPException: 401 without a valid token, 403 without the scope or group
+    """
+    if CATALOGUE_ADMIN_SCOPE in user.scopes or CATALOGUE_ADMIN_GROUP in user.groups:
+        return user
+    logger.warning("Catalogue admin refused for %s", user.sub)
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"Requires the {CATALOGUE_ADMIN_SCOPE} scope or the "
+        f"{CATALOGUE_ADMIN_GROUP} group",
+    )

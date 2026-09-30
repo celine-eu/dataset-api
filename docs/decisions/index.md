@@ -36,5 +36,4 @@ edited to say something else.
 
 ## The records
 
-<TODO: a one-line table as they accumulate. An index nobody updates is worse than none,
-so either keep it or delete this section.>
+No decisions recorded yet.

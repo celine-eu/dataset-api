@@ -73,7 +73,7 @@ class _Recorder:
     def __exit__(self, *_: Any) -> bool:
         return False
 
-    def post(self, url: str, json: dict) -> "_Recorder":  # noqa: A002
+    def post(self, url: str, json: dict, headers: dict | None = None) -> "_Recorder":  # noqa: A002
         self._store.append(json)
         return self
 
@@ -98,6 +98,8 @@ def _run(pattern: str, *extra: str):
             pattern,
             "--api-url",
             "http://catalogue.invalid",
+            "--token",
+            "test-token",
             *extra,
         ],
     )

@@ -12,6 +12,10 @@ from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.db.engine import get_session, get_datasets_session
 from celine.dataset.db.reflection import reflect_table_async
 from celine.dataset.schemas.catalogue_import import CatalogueImportModel
+from celine.dataset.core.datasets import physical_table
+from celine.dataset.security.auth import require_catalogue_admin
+from celine.dataset.security.disclosure import AccessLevel
+from celine.dataset.security.models import AuthenticatedUser
 
 logger = logging.getLogger(__name__)
 
@@ -56,19 +60,9 @@ async def _cleanup_entries(
     entries = res.scalars().all()
 
     for entry in entries:
-        # Only physical backends are checked for now
-        if entry.backend_type != "postgres":
-            continue
-
-        backend_config = entry.backend_config or {}
-        table = backend_config.get("table")
-        if not table:
-            logger.info(
-                "Removing dataset %s: missing backend table reference",
-                entry.dataset_id,
-            )
-            await db.delete(entry)
-            removed += 1
+        # Only queryable backends have a table to check; others are catalogue-only.
+        table = physical_table(entry.dataset_id, entry.backend_type, entry.backend_config)
+        if table is None:
             continue
 
         if table in skip_tables:
@@ -101,6 +95,7 @@ async def import_catalogue(
     body: CatalogueImportModel,
     db: AsyncSession = Depends(get_session),
     datasets_db: AsyncSession = Depends(get_datasets_session),
+    admin: AuthenticatedUser = Depends(require_catalogue_admin),
 ):
     """Import or update datasets in the internal catalogue.
 
@@ -112,17 +107,26 @@ async def import_catalogue(
 
     for ds in body.datasets:
 
-        if ds.backend_type == "postgres":
-            table = ds.backend_config.table if ds.backend_config else None
-            if table and not await postgres_table_exists_via_reflection(datasets_db, table):
+        # The table the entry would be queried through, stated or derived from
+        # its id; a postgres entry is only catalogued once that table exists.
+        table = physical_table(
+            ds.dataset_id,
+            ds.backend_type,
+            ds.backend_config.model_dump() if ds.backend_config else None,
+        )
+        if table is not None:
+            if not await postgres_table_exists_via_reflection(datasets_db, table):
                 logger.info(
                     "Skipping dataset %s: postgres table %s does not exist",
                     ds.dataset_id,
                     table,
                 )
                 continue
-            if table:
-                validated_tables.add(table)
+            validated_tables.add(table)
+
+        # An entry that states no level is `internal`, stored as such, so the
+        # catalogue, its search and the query path all read the same level.
+        access_level = ds.access_level or AccessLevel.INTERNAL.value
 
         # Check if dataset already exists
         stmt = select(DatasetEntry).where(DatasetEntry.dataset_id == ds.dataset_id)
@@ -151,7 +155,7 @@ async def import_catalogue(
             existing.landing_page = ds.landing_page
             existing.language_uris = ds.language_uris
             existing.spatial_uris = ds.spatial_uris
-            existing.access_level = ds.access_level
+            existing.access_level = access_level
             updated += 1
         else:
             entry = DatasetEntry(
@@ -173,7 +177,7 @@ async def import_catalogue(
                 landing_page=ds.landing_page,
                 language_uris=ds.language_uris,
                 spatial_uris=ds.spatial_uris,
-                access_level=ds.access_level,
+                access_level=access_level,
             )
             db.add(entry)
             created += 1

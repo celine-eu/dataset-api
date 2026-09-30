@@ -88,6 +88,21 @@ class DatasetEntryModel(BaseModel):
 
     access_level: Optional[str] = None  # open | internal | restricted | secret
 
+    @field_validator("access_level")
+    def check_access_level(cls, v):
+        # Refused here, at import, rather than discovered by the first query: an
+        # unreadable level makes the dataset unavailable to everyone.
+        if v is None:
+            return v
+        from celine.dataset.security.disclosure import ACCESS_LEVELS
+
+        level = v.lower()
+        if level not in ACCESS_LEVELS:
+            raise ValueError(
+                f"access_level must be one of {sorted(ACCESS_LEVELS)}, got '{v}'"
+            )
+        return level
+
     @field_validator("backend_type")
     def check_backend_type(cls, v):
         allowed = {"postgres", "s3", "fs", "quantumleap", "context_broker"}

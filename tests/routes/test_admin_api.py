@@ -2,6 +2,9 @@
 import pytest
 from sqlalchemy import text
 
+from celine.dataset.security.auth import get_current_user
+from celine.dataset.security.models import AuthenticatedUser
+
 
 @pytest.mark.asyncio
 async def test_admin_catalogue_import(client, test_session):
@@ -23,6 +26,9 @@ async def test_admin_catalogue_import(client, test_session):
         ]
     }
 
+    client._transport.app.dependency_overrides[get_current_user] = lambda: (
+        AuthenticatedUser(sub="svc", scopes=["dataset.admin"])
+    )
     resp = await client.post("/admin/catalogue", json=payload)
     assert resp.status_code == 200
     data = resp.json()
