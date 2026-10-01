@@ -481,12 +481,12 @@ async def audit_query(
     holding the payload"*. That is false, and it argued for sending the address
     rather than a pseudonym of it. A subject DID is required to be an opaque,
     one-shot, non-reversible identifier (ds, 2026-09-21): nothing converts it
-    back, and the mapping lives in the registry that owns the member. Where the
-    identity registry mints the id, it is an HMAC of the email keyed with the
-    registry's `ENCRYPTION_KEY`, truncated to 96 bits
-    (`identity_registry.services.crypto.derive_email_subject_id`); where the
-    issuing caller supplies the id, the DID carries it verbatim. Either way this
-    PEP only forwards the DIDs ds decided on — it never builds one.
+    back, and the mapping lives in the registry that owns the member. The
+    identity registry mints no id: the issuing caller supplies it (onboarding
+    mints a random UUID) and the DID carries it verbatim. DIDs issued before
+    2026-10-01 as `…:users:email-<24hex>`, from the registry's since-removed
+    HMAC derivation, stay valid and are not re-derived. Either way this PEP
+    only forwards the DIDs ds decided on — it never builds one.
 
     **Best-effort.** A failure here must not fail a query the control plane
     already authorised and served, but it is logged: a silently dropped
