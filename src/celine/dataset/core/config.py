@@ -4,12 +4,13 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
 import yaml
 from pydantic import AnyUrl, HttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from celine.sdk.posture import DEV, current_env
 from celine.sdk.settings.models import OidcSettings
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,21 @@ def _oidc_settings() -> OidcSettings:
     return oidc
 
 
+def _without_posture(source):
+    """A settings source with the posture signal removed.
+
+    `env` is computed by `celine.sdk.posture` from the process environment; a
+    value read by field name — `ENV=dev` in a `.env` — would bypass that rule.
+    """
+
+    def read() -> dict:
+        values = source()
+        values.pop("env", None)
+        return values
+
+    return read
+
+
 class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
@@ -36,8 +52,30 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @classmethod
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+    ):
+        return (
+            init_settings,
+            _without_posture(env_settings),
+            _without_posture(dotenv_settings),
+            file_secret_settings,
+        )
+
     app_name: str = "Dataset API"
-    env: Literal["dev", "prod", "test"] = "dev"
+    # The posture signal: `CELINE_ENV`, then `ENVIRONMENT`, then the bare `ENV`
+    # this service read before. **Only `dev` relaxes** — unset, `prod`, `staging`,
+    # `test` or a typo is hardened (`celine.sdk.posture`). Read from the process
+    # environment, never from `.env` or YAML: a dotfile copied next to a
+    # deployment must not be able to relax it. `task run` exports `CELINE_ENV=dev`.
+    # `settings_customise_sources` drops it from the environment and `.env`
+    # sources and `get_settings` from YAML, so only `Settings(env=...)` sets it.
+    env: str = Field(default_factory=lambda: current_env("ENV"))
+
+    @property
+    def is_dev(self) -> bool:
+        return self.env.strip().lower() == DEV
 
     api_base_url: HttpUrl = HttpUrl("http://api.celine.localhost/datasets")
     catalog_uri: AnyUrl = HttpUrl("http://api.celine.localhost/datasets/catalog")
@@ -275,7 +313,10 @@ def get_settings() -> Settings:
     if yaml_data:
         # env vars take precedence over YAML values
         filtered = {
-            k: v for k, v in yaml_data.items() if k.upper() not in os.environ
+            k: v
+            for k, v in yaml_data.items()
+            # `env` is the posture signal: the process environment's alone.
+            if k.upper() not in os.environ and k != "env"
         }
         _settings_instance = Settings(**filtered)
     else:

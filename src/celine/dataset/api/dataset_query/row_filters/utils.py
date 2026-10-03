@@ -4,16 +4,18 @@ import time
 from typing import Any, Optional
 
 from celine.dataset.security.models import AuthenticatedUser
-from celine.sdk.auth.jwt import extract_groups
-
-ADMIN_GROUPS = {"admins"}
+from celine.dataset.security.groups import is_realm_admin
 
 
 def is_admin_user(user: Optional[AuthenticatedUser]) -> bool:
+    """True for a realm-level `admins` member, whom row filters do not narrow.
+
+    An organization's own `admins` group is not a platform administrator: it is
+    the community's operator, and must see only what its row filters allow.
+    """
     if user is None:
         return False
-    groups = extract_groups(user.claims)
-    return bool(ADMIN_GROUPS & set(groups))
+    return is_realm_admin(user.claims)
 
 
 def token_ttl_seconds(user: Optional[AuthenticatedUser]) -> Optional[int]:

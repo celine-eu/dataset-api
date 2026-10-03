@@ -1,6 +1,12 @@
 # tests/conftest.py
 import os
 
+# The suite runs the development posture: the dev database password and the
+# local Keycloak are its defaults. Assigned, not defaulted, so a shell that
+# exports `CELINE_ENV=staging` does not decide what the suite asserts; the
+# hardened posture is tested explicitly in tests/security/test_posture.py.
+os.environ["CELINE_ENV"] = "dev"
+
 from celine.dataset.core.config import get_settings, reset_settings
 
 from .testdb import assert_disposable, derive_test_url, ensure_database

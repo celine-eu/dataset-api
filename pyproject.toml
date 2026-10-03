@@ -47,7 +47,7 @@ dependencies = [
     # Imported directly: the EDR token check (`security/edr.py`) and the DPS
     # pull token (`dps/tokens.py`, ES256). It used to arrive only through
     # celine-sdk.
-    "pyjwt[crypto]>=2.10.0",
+    "pyjwt[crypto]>=2.14",
     "uvicorn[standard]>=0.52.1",
 ]
 

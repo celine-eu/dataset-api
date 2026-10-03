@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from celine.dataset.core.config import Settings, configure, get_settings
 from celine.dataset.api.healthcheck import is_healthly
 from celine.dataset.core.logging import setup_logging
+from celine.dataset.core.posture import enforce_posture
 from celine.dataset.routes import register_routes
 from celine.governance import OwnersRegistry, load_owners_yaml
 
@@ -24,7 +25,11 @@ async def lifespan(app: FastAPI):
     Lifespan manager.
     """
     s = get_settings()
-    logger.info("Starting %s (%s mode)", s.app_name, s.env)
+    logger.info("Starting %s (CELINE_ENV=%s)", s.app_name, s.env or "<unset>")
+
+    # Before anything touches the database: a hardened deployment that still
+    # carries a development default stops here, not after the health check.
+    enforce_posture(s)
 
     failed = await is_healthly()
 

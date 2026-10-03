@@ -19,7 +19,8 @@ from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.core.config import get_settings
-from celine.sdk.auth.jwt import extract_groups, is_service_account
+from celine.dataset.security.groups import authorization_groups
+from celine.sdk.auth.jwt import is_service_account
 
 # Import from celine-sdk (in-process policies)
 from celine.sdk.policies import (
@@ -100,7 +101,9 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
     elif not isinstance(scopes, list):
         scopes = []
 
-    groups = extract_groups(user.claims)
+    # Realm groups plus organization groups, minus an organization's `admins`:
+    # the Rego grants `admins` restricted and full internal access.
+    groups = authorization_groups(user.claims)
 
     if is_service_account(user.claims):
         subject_type = SubjectType.SERVICE
@@ -167,10 +170,21 @@ async def enforce_dataset_access(
         # Get policy engine
         engine = _get_policy_engine()
 
-        # If policies are disabled, log warning and allow
+        # Policies off is a development switch. Startup refuses it outside
+        # `CELINE_ENV=dev`; this refuses it again per request, so a settings
+        # object swapped in at runtime cannot open every dataset either.
         if not get_settings().policies_check_enabled:
+            if not get_settings().is_dev:
+                logger.error(
+                    "Policies disabled outside CELINE_ENV=dev; refusing dataset %s",
+                    entry.dataset_id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Policy engine unavailable",
+                )
             logger.warning(
-                "Policies disabled, allowing access to dataset %s",
+                "Policies disabled (CELINE_ENV=dev), allowing access to dataset %s",
                 entry.dataset_id,
             )
             return

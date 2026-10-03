@@ -12,7 +12,7 @@ from celine.dataset.security.models import AuthenticatedUser
 
 # Use celine.sdk for JWT validation
 from celine.sdk.auth import JwtUser
-from celine.sdk.auth.jwt import extract_groups
+from celine.dataset.security.groups import ADMIN_GROUP, authorization_groups
 
 logger = logging.getLogger(__name__)
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -84,7 +84,8 @@ def _normalize_user(jwt_user: JwtUser, token: Optional[str]) -> AuthenticatedUse
         .get("roles", [])
     )
 
-    groups = extract_groups(jwt_user.claims)
+    # `admins` counts only at realm level — see security/groups.py.
+    groups = authorization_groups(jwt_user.claims)
 
     # Extract scopes
     scopes = jwt_user.claims.get("scope", "")
@@ -183,7 +184,8 @@ async def get_current_user(
 #: What may write the catalogue: the pair the shipped Rego grants `restricted` on.
 #: `svc-dataset-api` holds the scope, so an import job authenticates as the service.
 CATALOGUE_ADMIN_SCOPE = "dataset.admin"
-CATALOGUE_ADMIN_GROUP = "admins"
+#: A realm-level group only: `user.groups` never carries an organization's `admins`.
+CATALOGUE_ADMIN_GROUP = ADMIN_GROUP
 
 
 async def require_catalogue_admin(
