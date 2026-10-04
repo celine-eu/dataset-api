@@ -45,8 +45,9 @@ normalizes its claims into an authenticated user:
 
 - `sub`
 - `username` (`preferred_username`, falling back to `email`) and `email`
-- `groups` (realm and organization groups)
-- `roles` (realm roles and the client roles of the configured client)
+- `roles`: the realm roles (`realm_access.roles`), the platform level
+- `groups`: the groups the caller holds inside its organizations
+  (`organization.<alias>.groups`), the organization level
 - `scopes`
 - `issuer`, `audiences`, and the raw `claims`
 
@@ -55,7 +56,26 @@ normalizes its claims into an authenticated user:
 Service accounts (client credentials) are treated as first-class identities. A
 token is a service account's when its `preferred_username` starts with
 `service-account-` or it carries `gty=client-credentials`. Services are authorized
-by **scopes**, users by **groups**.
+by **scopes**, users by the **platform role** or their **organization groups**.
+
+### Two levels, never mixed
+
+A person's grants come from exactly two places, read apart
+(`src/celine/dataset/security/groups.py`):
+
+- **Platform.** The realm role `platform-admin` is the only platform-wide grant.
+  Its holder skips every row filter, reads `restricted` datasets and may write the
+  catalogue.
+- **Organization.** `managers` and `viewers` held inside an organization read
+  `internal` datasets, and row filters still apply. An organization's `admins` and
+  `editors` grant nothing here. The organization is not matched against the
+  dataset yet: a `viewers` membership in any organization reads every `internal`
+  dataset, narrowed only by row filters.
+
+**A realm group grants nothing.** The top-level `groups` claim is not read, so a
+token that still carries `/admins` there is not an administrator. Neither are the
+retired realm roles `admin`, `manager`, `editor` and `viewer`, a client role, or
+an organization group *named* `platform-admin`.
 
 You should avoid “god tokens” unless policy explicitly supports it.
 
@@ -88,7 +108,8 @@ Decisions are cached in memory when `POLICIES_CACHE_ENABLED` is true (the defaul
   "subject": {
     "id": "service-account-dt-app",
     "type": "service",
-    "groups": ["ops"],
+    "roles": [],
+    "groups": [],
     "scopes": ["dataset.query"],
     "claims": {"…": "raw JWT claims"}
   },
@@ -107,18 +128,21 @@ Decisions are cached in memory when `POLICIES_CACHE_ENABLED` is true (the defaul
 }
 ```
 
-`subject.type` is `user`, `service` or `anonymous` (`id: "anonymous"`). Roles reach
-the policy only inside `claims`; tags are not sent.
+`subject.type` is `user`, `service` or `anonymous` (`id: "anonymous"`).
+`subject.roles` carries the realm roles and `subject.groups` the organization
+groups; neither ever carries a realm group. A policy reads the platform level as
+`"platform-admin" in input.subject.roles` and never from `groups` or `claims`.
+Tags are not sent.
 
 ### Shipped policy
 
 `policies/celine/dataset.rego` implements:
 
-| Access level | Service (by scope) | User (by group) |
+| Access level | Service (by scope) | User |
 |---|---|---|
 | `open` | never reaches the policy | never reaches the policy |
-| `internal` | `dataset.query` | `admins`, `managers` or `viewers` |
-| `restricted` | `dataset.admin` | `admins` |
+| `internal` | `dataset.query` | the `platform-admin` role, or `managers` or `viewers` in an organization |
+| `restricted` | `dataset.admin` | the `platform-admin` role |
 
 Scopes use `.` as separator; `dataset.admin` matches every `dataset.*` scope.
 Custom rules can read `resource.attributes.governance` and `namespace`.
@@ -173,7 +197,8 @@ If any step fails → request fails.
 
 `POST /admin/catalogue` overwrites and deletes catalogue entries, including the
 `expose` and `access_level` every other gate reads. It requires a valid token with
-the `dataset.admin` scope, or a user in the `admins` group: `401` without a token,
+the `dataset.admin` scope, or a user holding the `platform-admin` realm role: `401`
+without a token,
 `403` without either. `svc-dataset-api` holds the scope, so an import job
 authenticates as the service with its own client credentials.
 

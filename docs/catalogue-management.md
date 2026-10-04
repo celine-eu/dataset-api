@@ -81,7 +81,7 @@ exporters (`governance`, `postgres`, `openlineage`).
 ## Import Semantics
 
 `POST /admin/catalogue` (called by `dataset-cli import catalogue`) requires the
-`dataset.admin` scope or the `admins` group, and upserts on `dataset_id`:
+`dataset.admin` scope or the `platform-admin` realm role, and upserts on `dataset_id`:
 
 - missing entries are created
 - existing entries have every field overwritten

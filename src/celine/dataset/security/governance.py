@@ -19,7 +19,7 @@ from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.core.config import get_settings
-from celine.dataset.security.groups import authorization_groups
+from celine.dataset.security.groups import organization_groups_held, platform_roles
 from celine.sdk.auth.jwt import is_service_account
 
 # Import from celine-sdk (in-process policies)
@@ -101,9 +101,12 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
     elif not isinstance(scopes, list):
         scopes = []
 
-    # Realm groups plus organization groups, minus an organization's `admins`:
-    # the Rego grants `admins` restricted and full internal access.
-    groups = authorization_groups(user.claims)
+    # Two levels, never one list: the platform level is the realm roles
+    # (`input.subject.roles`, emitted by celine-sdk's engine), the organization
+    # level the groups held inside organizations. The top-level `groups` claim
+    # is not read, so a realm group grants nothing.
+    roles = platform_roles(user.claims)
+    groups = organization_groups_held(user.claims)
 
     if is_service_account(user.claims):
         subject_type = SubjectType.SERVICE
@@ -113,6 +116,7 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
     return Subject(
         id=user.sub,
         type=subject_type,
+        roles=roles,
         groups=groups,
         scopes=scopes,
         claims=user.claims,

@@ -172,8 +172,8 @@ through `POST /query`).
 ### Row filters
 A dataset's governance can declare row filters (`rowFilters` or `row_filters`; the
 legacy `userFilterColumn` becomes a `direct_user_match` filter). An unauthenticated
-caller of a filtered dataset gets `401`; a member of the `admins` group is not
-filtered. Filters are applied to
+caller of a filtered dataset gets `401`; a holder of the `platform-admin` realm
+role is not filtered. Filters are applied to
 the validated AST after physical table names are substituted, and the query is then
 rendered once, as PostgreSQL. The SQL is never re-parsed from text in between: a
 text round trip changes the dialect (`INTERVAL '30 minutes'` becomes

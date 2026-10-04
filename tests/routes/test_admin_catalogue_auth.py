@@ -1,4 +1,4 @@
-"""`POST /admin/catalogue` admits only the `dataset.admin` scope or the `admins` group.
+"""`POST /admin/catalogue` admits only the `dataset.admin` scope or the `platform-admin` role.
 
 The import writes `expose` and `access_level`, the fields every other gate reads, so
 an import open to anyone is a way around all of them.
@@ -70,10 +70,32 @@ async def test_a_user_without_scope_or_group_is_forbidden(client, test_session, 
 @pytest.mark.parametrize(
     "user",
     [
-        AuthenticatedUser(sub="service-account-svc-dataset-api", scopes=["dataset.admin"]),
+        # A group of either level grants nothing here, and neither does a
+        # retired realm role.
         AuthenticatedUser(sub="alice", groups=["admins"]),
+        AuthenticatedUser(
+            sub="alice",
+            claims={"groups": ["/admins", "admins"], "realm_access": {"roles": ["admin"]}},
+        ),
     ],
-    ids=["dataset.admin scope", "admins group"],
+    ids=["admins group", "legacy realm /admins and role admin"],
+)
+async def test_an_admins_group_is_forbidden(client, test_session, table, user):
+    _as(client, user)
+    resp = await client.post("/admin/catalogue", json=_payload())
+    assert resp.status_code == 403
+    assert await _count(test_session) == 0
+
+
+@pytest.mark.parametrize(
+    "user",
+    [
+        AuthenticatedUser(sub="service-account-svc-dataset-api", scopes=["dataset.admin"]),
+        AuthenticatedUser(
+            sub="alice", claims={"realm_access": {"roles": ["platform-admin"]}}
+        ),
+    ],
+    ids=["dataset.admin scope", "platform-admin role"],
 )
 async def test_an_admin_imports(client, test_session, table, user):
     _as(client, user)

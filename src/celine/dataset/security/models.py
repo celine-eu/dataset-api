@@ -18,8 +18,14 @@ class AuthenticatedUser(BaseModel):
     username: Optional[str] = Field(None, description="Human-readable username")
     email: Optional[str] = None
 
-    roles: List[str] = Field(default_factory=list)
-    groups: List[str] = Field(default_factory=list)
+    roles: List[str] = Field(
+        default_factory=list,
+        description="Realm roles (`realm_access.roles`): the platform level",
+    )
+    groups: List[str] = Field(
+        default_factory=list,
+        description="Groups held inside the caller's organizations; never a realm group",
+    )
     scopes: List[str] = Field(default_factory=list)
 
     issuer: Optional[str] = None

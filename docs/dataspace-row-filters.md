@@ -51,8 +51,8 @@ file, which the connector reads and this service must recognise.
 
 The same handler serves requests that do not come through the dataspace, where
 `principals` is absent. Before any handler runs, the normal path answers an
-unauthenticated caller with `401` and skips row filters for members of the
-`admins` group. The handler then decides by who the caller is, in this order:
+unauthenticated caller with `401` and skips row filters for holders of the
+`platform-admin` realm role. The handler then decides by who the caller is, in this order:
 
 1. **`principals` present** (dataspace path only), even empty: a delegated
    request, resolved for the named members on this service's identity (RF-05).

@@ -13,12 +13,19 @@ import rego.v1
 #
 # Subjects:
 #   - service: client credentials with scopes (dataset.query, dataset.admin, etc.)
-#   - user: human users with groups (admins, managers, etc.)
+#   - user: a person, with grants at two levels that are never mixed:
+#       input.subject.roles   realm roles; "platform-admin" is the only
+#                             platform-wide grant
+#       input.subject.groups  groups held inside the caller's organizations
+#                             (never a realm group); "managers" and "viewers"
+#                             read internal datasets. An organization's
+#                             "admins" grants nothing here.
 #
 # Access levels:
 #   - open: any authenticated subject can read
-#   - internal: services need scope, users need group membership
-#   - restricted: requires dataset.admin scope or admins group
+#   - internal: services need scope; users need platform-admin, or managers or
+#     viewers in an organization (row filters still apply)
+#   - restricted: requires the dataset.admin scope or the platform-admin role
 #
 # =============================================================================
 
@@ -43,6 +50,12 @@ is_anonymous if {
 
 is_anonymous if {
     input.subject.type == "anonymous"
+}
+
+# The platform administrator: the realm role, never a group of any level.
+is_platform_admin if {
+    is_user
+    "platform-admin" in input.subject.roles
 }
 
 # =============================================================================
@@ -141,17 +154,16 @@ reason := "restricted dataset - admin scope granted" if {
     is_service
 }
 
-# Users need admins group
+# Users need the platform-admin role
 allow if {
     is_restricted
-    is_user
-    "admins" in input.subject.groups
+    is_platform_admin
 }
 
-reason := "restricted dataset - admin group granted" if {
+reason := "restricted dataset - platform-admin role granted" if {
     allow
     is_restricted
-    is_user
+    is_platform_admin
 }
 
 # =============================================================================
@@ -171,21 +183,21 @@ reason := "internal dataset - scope granted" if {
     is_service
 }
 
-# Users with admins group get full access
+# The platform administrator gets full access
 allow if {
     is_internal
-    is_user
-    "admins" in input.subject.groups
+    is_platform_admin
 }
 
-reason := "internal dataset - admin group granted" if {
+reason := "internal dataset - platform-admin role granted" if {
     allow
     is_internal
-    is_user
-    "admins" in input.subject.groups
+    is_platform_admin
 }
 
-# Users with managers group can read
+# Organization managers and viewers can read. Which organization is not
+# checked: whether an organization's group should reach only its own
+# organization's datasets is not decided yet; row filters narrow the rows.
 allow if {
     is_internal
     is_user
@@ -203,14 +215,15 @@ allow if {
 reason := "internal dataset - manager group granted" if {
     allow
     is_internal
-    is_user
+    not is_platform_admin
     "managers" in input.subject.groups
 }
 
 reason := "internal dataset - viewer group granted" if {
     allow
     is_internal
-    is_user
+    not is_platform_admin
+    not "managers" in input.subject.groups
     "viewers" in input.subject.groups
 }
 
@@ -223,7 +236,7 @@ reason := "anonymous access denied" if {
     is_anonymous
 }
 
-reason := "restricted dataset requires admin scope or group" if {
+reason := "restricted dataset requires admin scope or platform-admin role" if {
     not allow
     is_restricted
 }

@@ -31,6 +31,12 @@ dependencies = [
     # 1.21.0 carries RecRegistryApiError from get_my_assets (celine-sdk
     # REQ-0132/0133), which RF-12 reads; 1.20.0 raises UnexpectedStatus there and
     # the non-member deny becomes a 500 (tests/test_sdk_dependency_floor.py).
+    # TODO: raise to >=2.0.0 and re-lock once it is published. security/groups.py
+    # imports PLATFORM_ADMIN_ROLE, Grants, realm_roles and is_platform_admin, and
+    # security/governance.py passes Subject(roles=...), all of which 2.0.0
+    # introduces; every 1.x fails that import or drops input.subject.roles.
+    # Until then the suite runs against an editable celine-sdk (`task dev:link`
+    # in celine-dev).
     "celine-sdk>=1.21.0",
     "fastapi>=0.139.0",
     "geoalchemy2>=0.19.0",

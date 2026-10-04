@@ -160,7 +160,7 @@ else `./config.yaml`).
 
 ### “Import refused (401/403)”
 - no token: set `--token`/`DATASET_API_TOKEN`, or `CELINE_OIDC_CLIENT_ID`/`_SECRET`
-- the token lacks the `dataset.admin` scope (or the user the `admins` group)
+- the token lacks the `dataset.admin` scope (or the user the `platform-admin` realm role)
 
 ### “SQL rejected”
 - non-SELECT statement

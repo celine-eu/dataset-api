@@ -1,51 +1,65 @@
-"""Which of a caller's groups this service authorizes on.
+"""What a caller is granted here, read at the level it was granted at.
 
-A token carries groups at two levels: the realm's top-level ``groups`` claim, and
-``organization.<alias>.groups`` for every organization the caller belongs to. The
-SDK's ``extract_groups`` merges the two into one list, and that merge is what
-made a community's own ``admins`` the platform's ``admins`` here: skipping every
-row filter, reading ``restricted`` datasets and writing the catalogue — so one
-community's operator could read every community's meter data.
+A token carries grants at exactly two levels, and this module never mixes them:
 
-**``admins`` is honoured at realm level only.** An ``admins`` group held inside
-an organization grants nothing here. ``managers`` and ``viewers`` are still read
-from both levels, because members are placed in their community organization's
-``viewers`` group and no realm group, and the Digital Twin and the assistant
-query with the member's own token; row filters still apply to them. Whether an
-organization-level group should reach datasets outside that organization is an
-open question with its own plan, not something this module decides.
+- **Platform.** The realm role ``platform-admin`` (``realm_access.roles``) is the
+  only platform-wide grant. Its holder skips every row filter, reads
+  ``restricted`` datasets and writes the catalogue.
+- **Organization.** ``organization.<alias>.groups`` are the groups a caller holds
+  inside one organization. ``managers`` and ``viewers`` read ``internal``
+  datasets, with row filters still applied. An organization's ``admins`` and
+  ``editors`` grant nothing here. Whether an organization's group should reach
+  datasets beyond its own organization is an open question with its own plan,
+  not something this module decides.
+
+**A realm group grants nothing.** The top-level ``groups`` claim is never read,
+so a token still carrying ``/admins`` there is not an administrator. An
+organization's ``admins`` is not the platform's either: Keycloak gives both the
+same ``/admins`` path, which is why the platform level is a role whose name no
+organization group carries.
 """
 
 from __future__ import annotations
 
 from typing import Any, Mapping
 
-from celine.sdk.auth.jwt import organization_aliases, organization_groups, realm_groups
+from celine.sdk.auth import PLATFORM_ADMIN_ROLE, Grants, realm_roles
+from celine.sdk.auth import is_platform_admin as _sdk_is_platform_admin
 
-#: The platform administrator group.
-ADMIN_GROUP = "admins"
+__all__ = [
+    "PLATFORM_ADMIN_ROLE",
+    "is_platform_admin",
+    "organization_groups_held",
+    "platform_roles",
+]
 
-#: Groups that grant platform-wide power and are therefore read from the realm
-#: level only — never from inside an organization.
-REALM_ONLY_GROUPS = frozenset({ADMIN_GROUP})
+
+def platform_roles(claims: Mapping[str, Any]) -> list[str]:
+    """The caller's realm roles, from ``realm_access.roles`` only."""
+    return realm_roles(dict(claims))
 
 
-def authorization_groups(claims: Mapping[str, Any]) -> list[str]:
-    """Realm groups, then organization groups other than the realm-only ones.
+def is_platform_admin(claims: Mapping[str, Any]) -> bool:
+    """True exactly when the caller holds the realm role ``platform-admin``."""
+    return _sdk_is_platform_admin(dict(claims))
 
-    Deduplicated, leading slashes stripped, first-seen order preserved.
+
+def organization_groups_held(claims: Mapping[str, Any]) -> list[str]:
+    """The groups the caller holds inside at least one of its organizations.
+
+    Organization groups only, never a realm group or a realm role. Sorted by
+    organization alias, then by group, and deduplicated.
+
+    The list says *which* groups, not *where*: a ``viewers`` held in one
+    organization reads like a ``viewers`` held in another. That is today's
+    reading of ``internal`` datasets, where row filters narrow the rows. It stays
+    until organization-scoped access is decided. Never derive anything
+    platform-wide from this list.
     """
-    result = list(realm_groups(dict(claims)))
-    seen = set(result)
-    for alias in organization_aliases(dict(claims)):
-        for group in organization_groups(dict(claims), alias):
-            if group in REALM_ONLY_GROUPS or group in seen:
-                continue
-            seen.add(group)
-            result.append(group)
+    grants = Grants.from_claims(dict(claims))
+    result: list[str] = []
+    for alias in grants.aliases:
+        for group in sorted(grants.in_org(alias)):
+            if group not in result:
+                result.append(group)
     return result
-
-
-def is_realm_admin(claims: Mapping[str, Any]) -> bool:
-    """True only for a realm-level ``admins`` member."""
-    return ADMIN_GROUP in realm_groups(dict(claims))

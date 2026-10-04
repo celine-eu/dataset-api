@@ -12,7 +12,12 @@ from celine.dataset.security.models import AuthenticatedUser
 
 # Use celine.sdk for JWT validation
 from celine.sdk.auth import JwtUser
-from celine.dataset.security.groups import ADMIN_GROUP, authorization_groups
+from celine.dataset.security.groups import (
+    PLATFORM_ADMIN_ROLE,
+    is_platform_admin,
+    organization_groups_held,
+    platform_roles,
+)
 
 logger = logging.getLogger(__name__)
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -74,18 +79,11 @@ def _normalize_user(jwt_user: JwtUser, token: Optional[str]) -> AuthenticatedUse
     if isinstance(aud, str):
         aud = [aud]
 
-    # Extract realm roles
-    realm_roles = jwt_user.claims.get("realm_access", {}).get("roles", [])
-
-    # Extract client-specific roles
-    client_roles = (
-        jwt_user.claims.get("resource_access", {})
-        .get(get_settings().oidc.client_id, {})
-        .get("roles", [])
-    )
-
-    # `admins` counts only at realm level — see security/groups.py.
-    groups = authorization_groups(jwt_user.claims)
+    # The two levels, kept apart (see security/groups.py): `roles` is the
+    # platform level (realm roles only), `groups` the organization level. The
+    # top-level `groups` claim is not read: a realm group grants nothing.
+    roles = platform_roles(jwt_user.claims)
+    groups = organization_groups_held(jwt_user.claims)
 
     # Extract scopes
     scopes = jwt_user.claims.get("scope", "")
@@ -98,7 +96,7 @@ def _normalize_user(jwt_user: JwtUser, token: Optional[str]) -> AuthenticatedUse
         sub=jwt_user.sub,
         username=jwt_user.preferred_username or jwt_user.email,
         email=jwt_user.email,
-        roles=sorted(set(realm_roles + client_roles)),
+        roles=roles,
         groups=groups,
         issuer=jwt_user.iss,
         scopes=scopes,
@@ -184,8 +182,8 @@ async def get_current_user(
 #: What may write the catalogue: the pair the shipped Rego grants `restricted` on.
 #: `svc-dataset-api` holds the scope, so an import job authenticates as the service.
 CATALOGUE_ADMIN_SCOPE = "dataset.admin"
-#: A realm-level group only: `user.groups` never carries an organization's `admins`.
-CATALOGUE_ADMIN_GROUP = ADMIN_GROUP
+#: The platform level only. An organization's `admins` and a realm group grant nothing.
+CATALOGUE_ADMIN_ROLE = PLATFORM_ADMIN_ROLE
 
 
 async def require_catalogue_admin(
@@ -197,13 +195,13 @@ async def require_catalogue_admin(
     reads — so an unauthenticated import would be a way around all of them.
 
     Raises:
-        HTTPException: 401 without a valid token, 403 without the scope or group
+        HTTPException: 401 without a valid token, 403 without the scope or role
     """
-    if CATALOGUE_ADMIN_SCOPE in user.scopes or CATALOGUE_ADMIN_GROUP in user.groups:
+    if CATALOGUE_ADMIN_SCOPE in user.scopes or is_platform_admin(user.claims):
         return user
     logger.warning("Catalogue admin refused for %s", user.sub)
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=f"Requires the {CATALOGUE_ADMIN_SCOPE} scope or the "
-        f"{CATALOGUE_ADMIN_GROUP} group",
+        f"{CATALOGUE_ADMIN_ROLE} role",
     )

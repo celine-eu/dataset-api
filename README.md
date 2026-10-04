@@ -92,8 +92,8 @@ Flows are stored in the catalogue database, so any worker can serve a pull and f
 
 Access levels:
 - `open` — no authentication required; `downloadURL` exposed in DCAT
-- `internal` — JWT required; services need the `dataset.query` scope, users one of the `admins`/`managers`/`viewers` groups; ODRL carries `ds:accessScope eq "dataspaces.query"`
-- `restricted` — JWT required; only the `dataset.admin` scope or the `admins` group (`policies/celine/dataset.rego`); ODRL carries `ds:accessScope eq "dataspaces.query"` and `ds:consentStatus eq "active"`
+- `internal` — JWT required; services need the `dataset.query` scope, users the `platform-admin` realm role, or `managers`/`viewers` inside an organization; ODRL carries `ds:accessScope eq "dataspaces.query"`
+- `restricted` — JWT required; only the `dataset.admin` scope or the `platform-admin` realm role (`policies/celine/dataset.rego`); ODRL carries `ds:accessScope eq "dataspaces.query"` and `ds:consentStatus eq "active"`
 - `secret` — omitted from every catalogue surface; not queryable (`403 Dataset not available`, as for an unexposed dataset)
 
 An entry that states no level is `internal`, and the import stores it as such; an unknown level is refused at import.
@@ -107,7 +107,7 @@ Row-level filtering via the pluggable governance handler registry. Five built-in
 
 Further handlers can be registered through `ROW_FILTERS_MODULES` or the `celine.dataset.row_filters` entry-point group (see `celine.dataset.ext`).
 
-Users in the `admins` group bypass row filters entirely. Service accounts bypass the `rec_registry` filter when they query on their own behalf — never when a dataspace decision delegates the query to them.
+Holders of the `platform-admin` realm role bypass row filters entirely; no group does, at either level (see [Identity Model](docs/governance-security.md#identity-model)). Service accounts bypass the `rec_registry` filter when they query on their own behalf — never when a dataspace decision delegates the query to them.
 
 On a dataspace request the filter arrives from ds whole, naming the consenting subjects as `principals` and as `keys`; a filter this service cannot apply serves no rows. Specification: [docs/dataspace-row-filters.md](docs/dataspace-row-filters.md).
 
@@ -137,7 +137,7 @@ Governance overrides are supported via `governance.<app_name>.yaml` files merged
 - `POST /catalogue/search` — filtered search
 - `GET /` — HTML catalogue view
 - `POST /query` — governed SQL query; EDR-gated when `EDR_ENABLED=true`
-- `POST /admin/catalogue` — catalogue import; requires the `dataset.admin` scope or the `admins` group
+- `POST /admin/catalogue` — catalogue import; requires the `dataset.admin` scope or the `platform-admin` realm role
 - `/dps/v1/dataflows/*`, `PUT /dps/v1/controlplanes`, `DELETE /dps/v1/controlplanes/{id}`, `GET /dps/registration` — DPS signalling, when `DPS_ENABLED=true`
 - `POST /dps/public/query` — governed SQL query for a DPS pull token, when `DPS_ENABLED=true`
 - `GET /health`
