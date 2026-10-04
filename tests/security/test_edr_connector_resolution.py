@@ -336,16 +336,32 @@ async def test_a_missing_token_is_still_the_first_refusal(two_connectors, http) 
 
 
 @pytest.mark.asyncio
-async def test_something_that_is_not_a_jwt_reaches_the_default_and_fails_there(
+async def test_something_that_is_not_a_jwt_is_refused_before_any_connector_is_asked(
     one_connector, http
 ) -> None:
-    """The unverified read is best-effort: no `iss` to be had means the default
-    connector, and the verification that follows refuses it anyway."""
     with pytest.raises(HTTPException) as exc:
         await verify_edr_token("Bearer not-a-token")
     assert exc.value.status_code == 401
     assert exc.value.detail == "EDR token is not valid"
-    assert http.gets == [f"{CONNECTOR_A}/internal/edr-jwks"]
+    assert http.gets == []
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_signature_is_a_401_not_a_503_without_a_default(
+    two_connectors, http, monkeypatch
+) -> None:
+    """The doctor's probe shape: a valid header and payload naming a provider,
+    and a signature segment that is not base64. PyJWT ≥ 2.15 will not decode it
+    even unverified; that must read as a bad token, not as a missing
+    `CONNECTOR_INTERNAL_URL`."""
+    monkeypatch.setattr(get_settings(), "connector_internal_url", None)
+    token = jwt.encode({"iss": PROVIDER_A}, "k" * 32, algorithm="HS256")
+    header, payload, _ = token.split(".")
+    with pytest.raises(HTTPException) as exc:
+        await verify_edr_token(f"Bearer {header}.{payload}.not-a-signature")
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "EDR token is not valid"
+    assert http.gets == []
 
 
 @pytest.mark.asyncio

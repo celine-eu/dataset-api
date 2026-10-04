@@ -286,14 +286,17 @@ async def verify_edr_token(authorization: Optional[str]) -> VerifiedEDRToken:
 def _unverified_issuer(token: str) -> Optional[str]:
     """`iss` from the unverified token — enough to choose a key set, no more.
 
-    Best-effort: a token that is not a JWT at all yields `None`, which resolves
-    the default connector and then fails verification there, exactly as it did
-    before this function existed.
+    A token that does not decode is refused here, `401`, before any connector
+    is resolved: no key set could verify it, and letting it fall through to the
+    connector lookup turned a bad bearer into a `503` about configuration
+    whenever the default connector is unset (PyJWT ≥ 2.15 rejects a malformed
+    signature segment even with `verify_signature` off). A decodable token with
+    no `iss` still resolves the default connector.
     """
     try:
         claims = jwt.decode(token, options={"verify_signature": False})
-    except Exception:  # noqa: BLE001 — not a JWT; the verification below refuses it
-        return None
+    except Exception as exc:  # noqa: BLE001 — not a JWT
+        raise HTTPException(401, "EDR token is not valid") from exc
     issuer = claims.get("iss")
     return str(issuer) if issuer else None
 
