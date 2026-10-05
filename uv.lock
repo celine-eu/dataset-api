@@ -157,7 +157,7 @@ wheels = [
 
 [[package]]
 name = "celine-sdk"
-version = "1.21.0"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiomqtt" },
@@ -172,9 +172,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/97/8b/0bfe938d37c840f4597b5113efca5052e2f894741383b41ca70193e3daff/celine_sdk-1.21.0.tar.gz", hash = "sha256:b8c9a2a8a9919c158c380e0f37136231067cc8e05842acc3e4bfc56d45887c50", size = 367548, upload-time = "2026-09-28T12:23:57.958Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/f6/1029383ce24bd2be13a6a97bb905311266c8ebf25793201ace361aed767d/celine_sdk-2.0.0.tar.gz", hash = "sha256:4166ac7681022abeb277e068d5180d65452babc5ccd9c9ece289ae29d51781b2", size = 416028, upload-time = "2026-10-05T18:32:07.506Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/24/3b14523a2064633a0104a61c1bbee38b79cde9d2eb682986e06a500fc955/celine_sdk-1.21.0-py3-none-any.whl", hash = "sha256:111515c92a5ffb1e4cafa2e1cc185352b39c1beaa591a73d2dcadc81200e7486", size = 800250, upload-time = "2026-09-28T12:23:56.171Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/6d/d87808af433abc6eff51230510a8ba262ddd1e43e0aa420b1e5f633fbc46/celine_sdk-2.0.0-py3-none-any.whl", hash = "sha256:6aa2a452d92ede114ec0e188cd2f2b0ed7365be08488ae49509b48262a2b392a", size = 856299, upload-time = "2026-10-05T18:32:05.774Z" },
 ]
 
 [[package]]
@@ -561,7 +561,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "celine-ontologies", specifier = ">=1.8.0" },
     { name = "celine-ontologies", extras = ["mapper"], marker = "extra == 'conformance'", specifier = ">=1.10.1" },
-    { name = "celine-sdk", specifier = ">=1.21.0" },
+    { name = "celine-sdk", specifier = ">=2.0.0" },
     { name = "celine-utils", specifier = ">=2.0.0" },
     { name = "fastapi", specifier = ">=0.139.0" },
     { name = "geoalchemy2", specifier = ">=0.19.0" },
