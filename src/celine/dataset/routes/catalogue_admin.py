@@ -13,9 +13,11 @@ from celine.dataset.db.engine import get_session, get_datasets_session
 from celine.dataset.db.reflection import reflect_table_async
 from celine.dataset.schemas.catalogue_import import CatalogueImportModel
 from celine.dataset.core.datasets import physical_table
+from celine.dataset.security.audit import CATALOGUE_IMPORT, SERVICE
 from celine.dataset.security.auth import require_catalogue_admin
 from celine.dataset.security.disclosure import AccessLevel
 from celine.dataset.security.models import AuthenticatedUser
+from celine.sdk.audit import audit_route
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,11 @@ async def _cleanup_entries(
     "/admin/catalogue",
     response_model=CatalogueImportResponse,
     status_code=status.HTTP_200_OK,
+    # The import rewrites the gates every read passes; who ran it is recorded
+    # (GS-03). A caller refused by `require_catalogue_admin` is recorded there.
+    dependencies=[
+        Depends(audit_route(CATALOGUE_IMPORT, user=require_catalogue_admin, service=SERVICE))
+    ],
 )
 async def import_catalogue(
     body: CatalogueImportModel,

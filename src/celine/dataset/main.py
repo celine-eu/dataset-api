@@ -13,7 +13,10 @@ from celine.dataset.api.healthcheck import is_healthly
 from celine.dataset.core.logging import setup_logging
 from celine.dataset.core.posture import enforce_posture
 from celine.dataset.routes import register_routes
+from celine.dataset.security.audit import SERVICE
 from celine.governance import OwnersRegistry, load_owners_yaml
+from celine.sdk.audit import configure_audit
+from celine.sdk.posture import docs_urls
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -68,12 +71,16 @@ def create_app(
 
     active_lifespan = lifespan_override if lifespan_override is not None else lifespan
 
+    configure_audit(SERVICE)
+
     app = FastAPI(
         title=get_settings().app_name,
         version="0.1.0",
-        docs_url="/docs",
-        redoc_url="/redoc",
         lifespan=active_lifespan if use_lifespan else None,
+        # GS-04: Swagger UI, ReDoc and openapi.json only under CELINE_ENV=dev, or
+        # where CELINE_PUBLIC_DOCS opts in. From the settings' env, so an app
+        # built with `settings_override` answers as that posture does.
+        **docs_urls(env=get_settings().env),
     )
 
     register_routes(app, extra_routers=extra_routers)

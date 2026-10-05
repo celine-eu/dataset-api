@@ -12,6 +12,7 @@ import sqlglot.errors
 from sqlglot.optimizer.scope import traverse_scope
 
 from celine.dataset.api.dataset_query.log_safety import sql_shape
+from celine.dataset.security.audit import Refused
 
 logger = logging.getLogger(__name__)
 
@@ -279,11 +280,21 @@ class ParsedSQL:
 # -----------------------------------------------------------------------------
 
 
-def _bad_request(message: str, *, log_message: str | None = None) -> HTTPException:
+#: The audit reason of a statement the guard refuses on what it would do — a
+#: refused statement kind, function, construct or operation (GS-02).
+SQL_REFUSED = "sql_refused"
+
+
+def _bad_request(
+    message: str, *, log_message: str | None = None, refusal: str | None = None
+) -> HTTPException:
     """A 400 for the caller. `log_message` replaces `message` in the log when the
     detail quotes the caller's SQL: the caller may read their own literals back,
-    a log may not (QE-03)."""
+    a log may not (QE-03). `refusal` names the audit reason when the 400 refuses
+    what the statement would reach or do, rather than how it is written (GS-02)."""
     logger.warning("SQL validation error: %s", log_message or message)
+    if refusal is not None:
+        return Refused(400, message, reason=refusal)
     return HTTPException(status_code=400, detail=message)
 
 
@@ -316,7 +327,7 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
 
     # Reject comments
     if re.search(r"--|/\*", sql):
-        raise _bad_request("SQL comments are not allowed")
+        raise _bad_request("SQL comments are not allowed", refusal=SQL_REFUSED)
 
     try:
         ast = sqlglot.parse_one(sql)
@@ -351,6 +362,7 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
                             f"Tautological predicate in OR context is not allowed: {left_sql} = {right_sql}",
                             log_message="Tautological predicate in OR context is not "
                             f"allowed: {sql_shape(node)}",
+                            refusal=SQL_REFUSED,
                         )
                     ancestor = ancestor.parent
                 logger.warning(
@@ -362,9 +374,8 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
             fn_name = node.name.lower()
 
             if fn_name not in ALLOWED_FUNCTIONS:
-                raise HTTPException(
-                    400,
-                    f"SQL function not allowed: {node.name}",
+                raise _bad_request(
+                    f"SQL function not allowed: {node.name}", refusal=SQL_REFUSED
                 )
             continue
 
@@ -379,7 +390,9 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
             operand = node.this
             if isinstance(operand, exp.Literal) and not operand.is_string:
                 continue
-            raise _bad_request("Unary minus is allowed only on a numeric literal")
+            raise _bad_request(
+                "Unary minus is allowed only on a numeric literal", refusal=SQL_REFUSED
+            )
 
         # sqlglot parses every function it knows into a typed node, so the
         # allowlist has to be consulted here too, or it never applies to the
@@ -387,13 +400,20 @@ def _parse_sql_query_impl(sql: str) -> ParsedSQL:
         # parsed as `exp.Coalesce`.
         if isinstance(node, exp.Func):
             if ALLOWED_FUNCTIONS.isdisjoint(n.lower() for n in type(node).sql_names()):
-                raise _bad_request(f"SQL function not allowed: {node.sql_name()}")
+                raise _bad_request(
+                    f"SQL function not allowed: {node.sql_name()}", refusal=SQL_REFUSED
+                )
             continue
 
         if isinstance(node, FORBIDDEN_EXPRESSIONS):
-            raise _bad_request(f"SQL construct not allowed: {node.__class__.__name__}")
+            raise _bad_request(
+                f"SQL construct not allowed: {node.__class__.__name__}",
+                refusal=SQL_REFUSED,
+            )
 
-        raise _bad_request(f"Unsupported SQL construct: {node.__class__.__name__}")
+        raise _bad_request(
+            f"Unsupported SQL construct: {node.__class__.__name__}", refusal=SQL_REFUSED
+        )
 
     _validate_root(ast)
     _reject_disallowed_nodes(ast)
@@ -479,6 +499,7 @@ def _cte_reference_ids(ast: exp.Expression) -> Set[int]:
         raise _bad_request(
             "Query structure could not be resolved",
             log_message=f"scope resolution failed: {type(exc).__name__}",
+            refusal="scope_unresolved",
         ) from exc
     refs: Set[int] = set()
     for scope in scopes:
@@ -513,7 +534,7 @@ def _reject_statement_stacking(sql: str) -> None:
     """
     stripped = sql.strip().rstrip(";").strip()
     if _SEMICOLON_RE.search(stripped):
-        raise _bad_request("Multiple SQL statements are not allowed")
+        raise _bad_request("Multiple SQL statements are not allowed", refusal=SQL_REFUSED)
 
 
 def _validate_root(ast: exp.Expression) -> None:
@@ -522,7 +543,8 @@ def _validate_root(ast: exp.Expression) -> None:
     """
     if not isinstance(ast, _ALLOWED_ROOT_EXPRESSIONS):
         raise _bad_request(
-            f"Only SELECT statements are allowed (got {type(ast).__name__})"
+            f"Only SELECT statements are allowed (got {type(ast).__name__})",
+            refusal=SQL_REFUSED,
         )
 
 
@@ -532,7 +554,9 @@ def _reject_disallowed_nodes(ast: exp.Expression) -> None:
     """
     for node in ast.walk():
         if isinstance(node, _DISALLOWED_EXPRESSIONS):
-            raise _bad_request(f"Disallowed SQL operation: {type(node).__name__}")
+            raise _bad_request(
+                f"Disallowed SQL operation: {type(node).__name__}", refusal=SQL_REFUSED
+            )
 
 
 def _table_identifier(table: exp.Table) -> str:

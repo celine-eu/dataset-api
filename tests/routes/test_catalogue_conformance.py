@@ -9,6 +9,8 @@ and that reading rows for a report is gated exactly like reading them through
 from __future__ import annotations
 
 import importlib
+import json
+import logging
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -220,3 +222,34 @@ async def test_reading_rows_for_a_report_is_gated_like_reading_them(
     await _seed(test_session, rows=[CONFORMING_ROW], access_level="restricted")
     res = await conformance_client.post("/catalogue/kpi_defs/conformance", json={})
     assert res.status_code in (401, 403), res.text
+
+
+# @verifies GS-01
+# @verifies GS-02
+async def test_the_sample_read_is_audited(
+    conformance_client, test_session, drop_table, caplog
+):
+    """The report quotes rows, so reading the sample is recorded like a query."""
+    caplog.set_level(logging.INFO, logger="celine.audit")
+    await _seed(test_session, rows=[CONFORMING_ROW])
+    assert (
+        await conformance_client.post("/catalogue/kpi_defs/conformance", json={})
+    ).status_code == 200
+    await test_session.execute(
+        text("UPDATE dataset_api.datasets_entries SET access_level = 'restricted'")
+    )
+    await test_session.commit()
+    assert (
+        await conformance_client.post("/catalogue/kpi_defs/conformance", json={})
+    ).status_code == 401
+
+    read, refused = [
+        json.loads(r.getMessage()) for r in caplog.records if r.name == "celine.audit"
+    ]
+    assert (read["event"], read["action"], read["resource"]) == (
+        "access",
+        "dataset.conformance",
+        "kpi_defs",
+    )
+    assert read["route"] == "/catalogue/{dataset_id}/conformance"
+    assert (refused["event"], refused["reason"]) == ("denied", "auth_required")

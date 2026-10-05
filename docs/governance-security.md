@@ -238,6 +238,94 @@ Logged:
 - allow/deny decision and reason
 - validation errors (sanitized)
 
+### Access audit
+
+Who read which dataset, and who was refused, is written as an **audit record**: one
+JSON object per line on the logger `celine.audit`, in the shape every CELINE service
+shares (`celine.sdk.audit`). A log pipeline selects the trail by logger name. Every
+record carries `event` (`access` or `denied`), `service` (`dataset-api`), the caller
+(`sub`, `client_id`, `service_account`), `action`, `method`, `route` (the route
+template, never the raw path or query string), `resource`, `outcome` (`allowed`,
+`denied`, `error`), `reason`, `request_id` (`X-Request-ID` / `X-Correlation-ID`),
+`trace_id` (from `traceparent`) and `ts`. `access` records are `INFO`, `denied` ones
+`WARNING`; the audit logger stays at `INFO` whatever `LOG_LEVEL` says.
+
+The caller is named by `sub` and client id only, never by email, username or name.
+`resource` holds catalogue dataset ids, which are platform identifiers. A `reason` is
+a short code, never an error detail: a detail can quote the caller's statement.
+
+#### GS-01 — A data read is recorded with the caller and the datasets read
+
+Every request that reads rows writes **one** record, after the outcome is known:
+
+| route | `action` |
+|---|---|
+| `POST /query` | `dataset.query` |
+| `POST /dps/public/query` (DPS pull) | `dataset.query` |
+| `POST /catalogue/{id}/conformance` (the sample it reads) | `dataset.conformance` |
+
+`resource` is every catalogue id the statement resolved to, sorted and joined with
+`,` (one record for a join). On the user path the caller is the verified token's
+`sub` and `azp`; an anonymous read of an `open` dataset has no caller. On the
+dataspace path (EDR or DPS pull) the caller is the consumer participant — the
+verified token's `aud`, never a header — as both `sub` and `client_id`.
+
+A request that fails for a reason other than a refusal (GS-02) — a statement that
+does not parse, a database timeout — is `access` with `outcome: error` and
+`reason: "http <status>"`, or the exception's class name.
+
+Catalogue metadata (`/catalogue`, `/catalogue/{id}`, its schema and vocabulary, the
+HTML views) describes exposed datasets and returns no rows; it is not recorded.
+Neither is `/health`.
+
+#### GS-02 — A refusal is recorded with the caller and a reason code
+
+Every refusal writes a `denied` record carrying the caller, whenever the caller is
+known from a token that verified:
+
+| reason | refusal |
+|---|---|
+| `policy` | the policy engine denied the read (`403`) |
+| `auth_required` | the dataset, or its row filter, needs a login and none was given (`401`) |
+| `not_available` | unexposed, `secret`, or an unreadable access level (`403`) |
+| `unknown_dataset` | a table reference resolves to no catalogue entry — including a name outside the scope of the CTE it matches (QE-05) (`400`) |
+| `ambiguous_dataset` | a two-part reference matches more than one entry (`400`) |
+| `scope_unresolved` | the statement's scopes could not be resolved (QE-05) (`400`) |
+| `sql_refused` | the SQL guard refused a statement kind, function, construct or operation, a comment, stacked statements, or a tautology inside `OR` (`400`) |
+| `row_filter_unresolved` | a row filter could not be resolved for the caller (`403`) |
+| `not_offered` | dataspace: a dataset is not `dataspace_expose` (`403`) |
+| `ds_refused` | dataspace: ds refused the query (`403`) |
+| `row_filter_unenforceable` | dataspace: ds asked for a row filter this instance cannot apply (`403`) |
+| `pull_token` | DPS pull: no token, or one that is not valid or not live (`401`) |
+| `flow_not_started` | DPS pull: a live token on a flow that is not `STARTED` (`403`) |
+| `agreement_mismatch` | DPS pull: the agreement header names another agreement (`403`) |
+| `http <status>` | any other `401` or `403` |
+
+A presented bearer token that does not verify is refused before any route runs; it
+is recorded with `action: "auth.token"`, `reason: "invalid_token"` and the route it
+was sent to, and **no** caller: nothing in a token that failed verification is
+trusted. DPS signalling refusals are recorded with `action: "dps.signal"` and
+`no_token`, `invalid_token`, or `client_not_admitted` (which names the verified
+client).
+
+#### GS-03 — A catalogue import is recorded
+
+`POST /admin/catalogue` rewrites the fields every gate reads. A completed import is
+recorded as `catalogue.import`; a caller refused for lacking the `dataset.admin`
+scope and the `platform-admin` role is recorded as `denied` with
+`not_catalogue_admin` and its `sub`.
+
+Tests: `tests/routes/test_access_audit.py`, the audit cases in
+`tests/dps/test_pull.py`, `tests/dps/test_signaling_auth.py` and
+`tests/routes/test_catalogue_conformance.py`.
+
+#### GS-04 — The API documentation is served under dev only
+
+Swagger UI (`/docs`), ReDoc (`/redoc`) and `/openapi.json` are served only under
+`CELINE_ENV=dev`. Anywhere else they answer `404`, unless `CELINE_PUBLIC_DOCS` is
+`true` (also `1`, `yes`, `on`). The schema is still built in process, so tooling
+that reads `app.openapi()` is unaffected. Tests: `tests/security/test_api_docs.py`.
+
 The query engine never logs a statement's literals: wherever it logs SQL it logs the
 statement's shape, every literal replaced by `?` (QE-03 in
 [query-engine.md](query-engine.md#logging)). On a dataspace request the completed SQL is
@@ -276,3 +364,5 @@ the person's token. The order the handler decides in is in
 | `CONNECTOR_INTERNAL_URL` | unset | the ds-connector, single-connector deployments |
 | `CONNECTOR_INTERNAL_URLS` | `{}` | JSON map provider (`iss`) → ds-connector URL |
 | `CELINE_OIDC_*` | — | OIDC provider and client settings (celine-sdk) |
+| `CELINE_PUBLIC_DOCS` | unset | serve `/docs`, `/redoc`, `/openapi.json` outside dev (GS-04) |
+| `CELINE_AUDIT_PSEUDONYM_KEY` | unset | keys the pseudonym the audit writes for a personal identifier that reaches a record (celine-sdk) |

@@ -366,6 +366,11 @@ namespace or cartesian-product limit.
 
 `/query` never answers `404`: an unknown dataset is a `400`.
 
+Every `401` and `403`, and a `400` that refuses a reference or a construct, is also
+written to the access audit with the caller and a reason code; a read that succeeds
+is written with the datasets it read (GS-01, GS-02 in
+[governance-security.md](governance-security.md#access-audit)).
+
 ---
 
 ## Examples

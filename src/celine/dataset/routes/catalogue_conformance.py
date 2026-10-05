@@ -18,7 +18,7 @@ import logging
 import re
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +30,7 @@ from celine.dataset.api.dataset_query.executor import execute_query
 from celine.dataset.core.config import get_settings
 from celine.dataset.core.datasets import load_catalogue_entry
 from celine.dataset.db.engine import get_datasets_session, get_session
+from celine.dataset.security.audit import CONFORMANCE, ReadAudit, dataspace_caller
 from celine.dataset.security.auth import get_optional_user
 from celine.dataset.security.edr import (
     EDRRequestContext,
@@ -117,6 +118,7 @@ def _sample_sql(dataset_id: str) -> str:
 )
 async def dataset_conformance(
     dataset_id: str,
+    request: Request,
     body: ConformanceRequest | None = None,
     catalogue_db: AsyncSession = Depends(get_session),
     datasets_db: AsyncSession = Depends(get_datasets_session),
@@ -178,27 +180,32 @@ async def dataset_conformance(
     # `user` is `None` here, and the path never falls back to user auth on
     # failure — a fallback between two authorization regimes is a bypass with
     # extra steps.
-    edr_context: Optional[EDRRequestContext] = None
-    if dataspace_mode(edc_contract_agreement_id):
-        verified = await verify_edr_token(authorization)
-        edr_context = EDRRequestContext(
-            agreement_id=edc_contract_agreement_id,
-            consumer_id=verified.consumer_id,
-            provider_id=verified.provider_id,
-            transfer_id=edc_transfer_process_id,
-            purpose=[p.strip() for p in (edc_purpose or "").split(",") if p.strip()],
-        )
+    #
+    # The sample is a read of the dataset's rows, audited as one (GS-01).
+    with ReadAudit(CONFORMANCE, request=request, caller=user) as audit:
+        edr_context: Optional[EDRRequestContext] = None
+        if dataspace_mode(edc_contract_agreement_id):
+            verified = await verify_edr_token(authorization)
+            audit.caller = dataspace_caller(verified.consumer_id)
+            edr_context = EDRRequestContext(
+                agreement_id=edc_contract_agreement_id,
+                consumer_id=verified.consumer_id,
+                provider_id=verified.provider_id,
+                transfer_id=edc_transfer_process_id,
+                purpose=[p.strip() for p in (edc_purpose or "").split(",") if p.strip()],
+            )
 
-    result = await execute_query(
-        catalogue_db=catalogue_db,
-        datasets_db=datasets_db,
-        raw_sql=_sample_sql(entry.dataset_id),
-        limit=limit,
-        offset=0,
-        user=user,
-        edr_context=edr_context,
-        skip_count=True,
-    )
+        result = await execute_query(
+            catalogue_db=catalogue_db,
+            datasets_db=datasets_db,
+            raw_sql=_sample_sql(entry.dataset_id),
+            limit=limit,
+            offset=0,
+            user=user,
+            edr_context=edr_context,
+            skip_count=True,
+            audit=audit,
+        )
 
     try:
         report = check_conformance(

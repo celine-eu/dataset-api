@@ -8,6 +8,9 @@ filter and the SQL.
 """
 from __future__ import annotations
 
+import json
+import logging
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -253,3 +256,78 @@ async def test_a_token_from_another_data_plane_is_refused(http, readings, ds) ->
     foreign, _ = TokenIssuer(ephemeral=True).issue(issuer="did:web:provider.example.org", audience=CONSUMER)
     assert (await _pull(http, foreign)).status_code == 401
     assert ds["calls"] == []
+
+
+# ---------------------------------------------------------------------------
+# GS-01, GS-02 — a pull is audited like `/query`
+# ---------------------------------------------------------------------------
+
+
+def _audit_records(caplog) -> list[dict]:
+    return [json.loads(r.getMessage()) for r in caplog.records if r.name == "celine.audit"]
+
+
+# @verifies GS-01
+async def test_a_pull_records_the_consumer_and_the_dataset(http, readings, ds, caplog) -> None:
+    caplog.set_level(logging.INFO, logger="celine.audit")
+    token = await _start(http, "tp-pull-audit-1")
+    assert (await _pull(http, token)).status_code == 200
+
+    [record] = _audit_records(caplog)
+    assert (record["event"], record["action"], record["outcome"]) == (
+        "access",
+        "dataset.query",
+        "allowed",
+    )
+    assert record["sub"] == CONSUMER
+    assert record["route"] == "/dps/public/query"
+    assert record["resource"] == "dps_readings"
+
+
+# @verifies GS-02
+async def test_a_refused_pull_names_the_consumer_once_the_token_verified(
+    http, readings, ds, caplog
+) -> None:
+    caplog.set_level(logging.INFO, logger="celine.audit")
+    token = await _start(http, "tp-pull-audit-2")
+    assert (await _pull(http, token, dataset="dps_withheld")).status_code == 403
+    assert (await _pull(http, token, Edc_Contract_Agreement_Id="someone-elses")).status_code == 403
+    assert (await _pull(http, "not-a-jwt")).status_code == 401
+
+    withheld, mismatch, invalid = _audit_records(caplog)
+    assert (withheld["event"], withheld["reason"], withheld["sub"]) == (
+        "denied",
+        "not_offered",
+        CONSUMER,
+    )
+    assert (mismatch["event"], mismatch["reason"], mismatch["sub"]) == (
+        "denied",
+        "agreement_mismatch",
+        CONSUMER,
+    )
+    # A token that did not verify names nobody.
+    assert (invalid["event"], invalid["reason"], invalid["sub"]) == (
+        "denied",
+        "pull_token",
+        None,
+    )
+
+
+# @verifies GS-02
+async def test_a_live_token_on_a_stopped_flow_is_recorded_against_its_consumer(
+    http, readings, ds, sql_dataplane, caplog
+) -> None:
+    from celine.dataset.dps.flows import FlowState
+
+    caplog.set_level(logging.INFO, logger="celine.audit")
+    token = await _start(http, "tp-pull-audit-3")
+    async with sql_dataplane.store.locked("tp-pull-audit-3") as flow:
+        flow.state = FlowState.SUSPENDED
+    assert (await _pull(http, token)).status_code == 403
+
+    [record] = _audit_records(caplog)
+    assert (record["event"], record["reason"], record["sub"]) == (
+        "denied",
+        "flow_not_started",
+        CONSUMER,
+    )

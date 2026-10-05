@@ -3,14 +3,16 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from celine.dataset.core.config import get_settings
+from celine.dataset.security.audit import CATALOGUE_IMPORT, SERVICE, token_refused
 from celine.dataset.security.edr import dataspace_mode
 from celine.dataset.security.models import AuthenticatedUser
 
 # Use celine.sdk for JWT validation
+from celine.sdk.audit import audit_denied
 from celine.sdk.auth import JwtUser
 from celine.dataset.security.groups import (
     PLATFORM_ADMIN_ROLE,
@@ -111,9 +113,20 @@ def _normalize_user(jwt_user: JwtUser, token: Optional[str]) -> AuthenticatedUse
 # ---------------------------------------------------------------------
 
 
+async def _verified_user(token: str, request: Request | None) -> AuthenticatedUser:
+    """Validate a presented token; a refusal is audited before it is raised (GS-02)."""
+    try:
+        jwt_user = await _decode_and_validate_token(token)
+    except HTTPException as exc:
+        token_refused(request, exc)
+        raise
+    return _normalize_user(jwt_user, token=jwt_user.token)
+
+
 async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     edc_contract_agreement_id: Optional[str] = Header(default=None),
+    request: Request = None,  # type: ignore[assignment] — injected by FastAPI
 ) -> Optional[AuthenticatedUser]:
     """
     FastAPI dependency that returns authenticated user if token is present.
@@ -154,12 +167,12 @@ async def get_optional_user(
     if dataspace_mode(edc_contract_agreement_id):
         return None
 
-    jwt_user = await _decode_and_validate_token(credentials.credentials)
-    return _normalize_user(jwt_user, token=jwt_user.token)
+    return await _verified_user(credentials.credentials, request)
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+    request: Request = None,  # type: ignore[assignment] — injected by FastAPI
 ) -> AuthenticatedUser:
     """
     FastAPI dependency that requires authenticated user.
@@ -175,8 +188,7 @@ async def get_current_user(
     Raises:
         HTTPException: 401 if authentication fails
     """
-    jwt_user = await _decode_and_validate_token(credentials.credentials)
-    return _normalize_user(jwt_user, token=jwt_user.token)
+    return await _verified_user(credentials.credentials, request)
 
 
 #: What may write the catalogue: the pair the shipped Rego grants `restricted` on.
@@ -188,6 +200,7 @@ CATALOGUE_ADMIN_ROLE = PLATFORM_ADMIN_ROLE
 
 async def require_catalogue_admin(
     user: AuthenticatedUser = Depends(get_current_user),
+    request: Request = None,  # type: ignore[assignment] — injected by FastAPI
 ) -> AuthenticatedUser:
     """Admit a caller that may overwrite or delete catalogue entries.
 
@@ -200,6 +213,13 @@ async def require_catalogue_admin(
     if CATALOGUE_ADMIN_SCOPE in user.scopes or is_platform_admin(user.claims):
         return user
     logger.warning("Catalogue admin refused for %s", user.sub)
+    audit_denied(
+        CATALOGUE_IMPORT,
+        caller=user,
+        reason="not_catalogue_admin",
+        service=SERVICE,
+        request=request,
+    )
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=f"Requires the {CATALOGUE_ADMIN_SCOPE} scope or the "

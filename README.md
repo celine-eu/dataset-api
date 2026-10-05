@@ -141,7 +141,7 @@ Governance overrides are supported via `governance.<app_name>.yaml` files merged
 - `/dps/v1/dataflows/*`, `PUT /dps/v1/controlplanes`, `DELETE /dps/v1/controlplanes/{id}`, `GET /dps/registration` — DPS signalling, when `DPS_ENABLED=true`
 - `POST /dps/public/query` — governed SQL query for a DPS pull token, when `DPS_ENABLED=true`
 - `GET /health`
-- `/docs`, `/redoc` — OpenAPI UI
+- `/docs`, `/redoc`, `/openapi.json` — OpenAPI UI and schema, under `CELINE_ENV=dev` only unless `CELINE_PUBLIC_DOCS=true`
 
 ---
 

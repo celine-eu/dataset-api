@@ -1,6 +1,9 @@
 """DPS-02 — only admitted control planes may signal (the real dependency)."""
 from __future__ import annotations
 
+import json
+import logging
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -89,3 +92,22 @@ def test_the_validator_is_the_services_oidc_check(monkeypatch) -> None:
     from celine.dataset.core.config import get_settings
 
     assert seen["oidc"] is get_settings().oidc
+
+
+# @verifies GS-02
+@pytest.mark.parametrize(
+    ("headers", "reason", "client_id"),
+    [
+        ({}, "no_token", None),
+        ({"Authorization": "Bearer forged"}, "invalid_token", None),
+        ({"Authorization": "Bearer stranger"}, "client_not_admitted", "svc-other"),
+    ],
+)
+def test_a_refused_signal_is_audited(client, caplog, headers, reason, client_id) -> None:
+    caplog.set_level(logging.INFO, logger="celine.audit")
+    assert _start(client, headers) in (401, 403)
+
+    [record] = [json.loads(r.getMessage()) for r in caplog.records if r.name == "celine.audit"]
+    assert (record["event"], record["action"], record["reason"]) == ("denied", "dps.signal", reason)
+    assert record["client_id"] == client_id
+    assert record["route"] == "/dps/v1/dataflows/start"

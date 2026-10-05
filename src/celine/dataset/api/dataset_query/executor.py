@@ -17,6 +17,7 @@ from celine.dataset.schemas.dataset_query import DatasetQueryResult
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.db.reflection import reflect_table_async
 from celine.dataset.core.datasets import load_dataset_entry, physical_table
+from celine.dataset.security.audit import ReadAudit, Refused
 from celine.dataset.security.disclosure import is_available
 from celine.dataset.security.governance import (
     enforce_dataset_access,
@@ -132,6 +133,7 @@ async def execute_query(
     user: Optional[AuthenticatedUser],
     edr_context: Optional[EDRRequestContext] = None,
     skip_count: bool = False,
+    audit: ReadAudit | None = None,
 ) -> DatasetQueryResult:
     """
     Execute a validated SQL query against a dataset.
@@ -142,6 +144,9 @@ async def execute_query(
     - LIMIT/OFFSET enforced server-side, after the statement's ORDER BY (QE-04)
     - hard row cap applied
     - row-level filters applied (pluggable governance handlers)
+
+    `audit`, when given, is told which datasets the statement resolved to; the
+    caller writes the one record of the request (GS-01).
     """
     if raw_sql is None or raw_sql.strip() == "":
         raise HTTPException(400, "sql query not provided")
@@ -163,6 +168,8 @@ async def execute_query(
     datasets = await resolve_datasets_for_tables(
         db=catalogue_db, table_names=parsed.tables
     )
+    if audit is not None:
+        audit.datasets = [d.dataset_id for d in datasets.values()]
 
     tables_map: dict[str, str] = {}
     row_filter_plans = []
@@ -197,9 +204,10 @@ async def execute_query(
             # Named rather than a bare 403: the catalogue already tells this
             # consumer the dataset exists, so naming it discloses nothing, and
             # the alternative is an unactionable error for a legitimate caller.
-            raise HTTPException(
+            raise Refused(
                 403,
                 "Dataset not offered in the dataspace: " + ", ".join(withheld),
+                reason="not_offered",
             )
 
         edr_decision = await authorize_dataplane(
@@ -209,13 +217,15 @@ async def execute_query(
         if not edr_decision.allowed:
             # ds's reason names the gate, never who holds the agreement, so it
             # is safe to relay.
-            raise HTTPException(403, f"Refused by ds: {edr_decision.reason}")
+            raise Refused(
+                403, f"Refused by ds: {edr_decision.reason}", reason="ds_refused"
+            )
 
     for ref_table, ds in datasets.items():
         # Unexposed, secret, or a level nobody can read: one answer for all three.
         if not is_available(ds.expose, ds.access_level):
             logger.warning("Requested dataset %s is not available", ds.dataset_id)
-            raise HTTPException(403, "Dataset not available")
+            raise Refused(403, "Dataset not available", reason="not_available")
 
         # Every dataset is mapped, checked and filtered below — there is no path
         # that skips ahead. An entry that states no table was once left unmapped
@@ -277,11 +287,12 @@ async def execute_query(
                     ds.dataset_id,
                     exc,
                 )
-                raise HTTPException(
+                raise Refused(
                     403,
                     f"Cannot enforce row filter handler '{row_filter.handler}' "
                     f"for {ds.dataset_id}: this data plane implements no such "
                     "handler, so no rows may be served",
+                    reason="row_filter_unenforceable",
                 ) from exc
             row_filter_plans.append(plan)
             # **The subject DIDs, and neither allow-list.** Both of the others
@@ -310,9 +321,10 @@ async def execute_query(
             continue
 
         if user is None:
-            raise HTTPException(
+            raise Refused(
                 401,
                 f"Dataset {ref_table} requires authentication for row filtering",
+                reason="auth_required",
             )
 
         if is_admin_user(user):
@@ -350,9 +362,10 @@ async def execute_query(
                 )
             except httpx.HTTPError:
                 logger.error(f"Row filter resolution failed for dataset {ref_table}")
-                raise HTTPException(
+                raise Refused(
                     403,
                     f"Row filter resolution failed for dataset {ref_table}",
+                    reason="row_filter_unresolved",
                 )
             except Exception as e:
                 logger.error(f"Row filter handler failed: {e}")

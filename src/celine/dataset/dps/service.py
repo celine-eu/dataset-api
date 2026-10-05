@@ -43,10 +43,14 @@ logger = logging.getLogger(__name__)
 
 
 class PullRefused(Exception):
-    def __init__(self, status_code: int, detail: str):
+    """A refused pull. `consumer` is set once the token has verified, so the
+    refusal can be audited against the participant it was issued to."""
+
+    def __init__(self, status_code: int, detail: str, *, consumer: str | None = None):
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+        self.consumer = consumer
 
 
 class DataPlane:
@@ -200,7 +204,9 @@ class DataPlane:
             # Retired by suspend, terminate, complete or resume, or never issued.
             raise PullRefused(401, "pull token is not live")
         if flow.state is not FlowState.STARTED:
-            raise PullRefused(403, f"data flow is {flow.state.value}")
+            raise PullRefused(
+                403, f"data flow is {flow.state.value}", consumer=claims["aud"]
+            )
         if claims["aud"] != flow.counter_party_id or claims["iss"] != flow.participant_id:
             raise PullRefused(401, "pull token does not match its data flow")
         return flow, claims["aud"]

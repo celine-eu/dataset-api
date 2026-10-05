@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from celine.dataset.api.dataset_query.executor import execute_query
@@ -29,6 +29,7 @@ from celine.dataset.dps.settings import get_dps_settings
 from celine.dataset.dps.store import SqlDataFlowRepository
 from celine.dataset.dps.tokens import TokenIssuer
 from celine.dataset.schemas.dataset_query import DatasetQueryModel, DatasetQueryResult
+from celine.dataset.security.audit import QUERY, ReadAudit, Refused, dataspace_caller
 from celine.dataset.security.edr import EDRRequestContext
 
 SIGNALING_PATH = "/dps/v1/dataflows"
@@ -218,6 +219,7 @@ public_router = APIRouter(prefix=PUBLIC_PATH)
 @public_router.post("/query", response_model=DatasetQueryResult)
 async def pull_query(
     body: DatasetQueryModel,
+    request: Request,
     catalogue_db: AsyncSession = Depends(get_session),
     datasets_db: AsyncSession = Depends(get_datasets_session),
     authorization: Optional[str] = Header(default=None),
@@ -231,36 +233,48 @@ async def pull_query(
     The agreement is the signalled flow's. The consumer is the token's `aud`.
     From here on the request is the legacy EDR path: the `dataspace_expose`
     gate, ds's `/internal/dataplane/authorize`, the row filters, the audit.
+
+    Recorded like `/query`: one audit record naming the consumer and the
+    datasets read, or the refusal (GS-01, GS-02).
     """
-    try:
-        flow, consumer = await dp.resolve_pull(authorization)
-    except PullRefused as exc:
-        raise HTTPException(exc.status_code, exc.detail) from exc
+    with ReadAudit(QUERY, request=request) as audit:
+        try:
+            flow, consumer = await dp.resolve_pull(authorization)
+        except PullRefused as exc:
+            audit.caller = dataspace_caller(exc.consumer)
+            reason = "pull_token" if exc.status_code == 401 else "flow_not_started"
+            raise Refused(exc.status_code, exc.detail, reason=reason) from exc
+        audit.caller = dataspace_caller(consumer)
 
-    if edc_contract_agreement_id and edc_contract_agreement_id != flow.agreement_id:
-        raise HTTPException(403, "the agreement header does not match the data flow")
+        if edc_contract_agreement_id and edc_contract_agreement_id != flow.agreement_id:
+            raise Refused(
+                403,
+                "the agreement header does not match the data flow",
+                reason="agreement_mismatch",
+            )
 
-    context = EDRRequestContext(
-        agreement_id=flow.agreement_id,
-        consumer_id=consumer,
-        # Which control plane this pull belongs to. Better than the EDR path's
-        # `iss`: the flow is this data plane's own record of a transfer it was
-        # signalled, and `resolve_pull` has already refused a token whose `iss`
-        # disagrees with it.
-        provider_id=flow.participant_id,
-        # Client-asserted, as on the legacy path: ds checks it against the
-        # agreement. The flow id is the *provider's* transfer id, which ds's
-        # transfer check does not look up.
-        transfer_id=edc_transfer_process_id,
-        purpose=[p.strip() for p in (edc_purpose or "").split(",") if p.strip()],
-    )
-    return await execute_query(
-        catalogue_db=catalogue_db,
-        datasets_db=datasets_db,
-        raw_sql=body.sql,
-        limit=body.limit,
-        offset=body.offset,
-        user=None,  # dataspace mode never falls back to user auth
-        edr_context=context,
-        skip_count=body.skip_count,
-    )
+        context = EDRRequestContext(
+            agreement_id=flow.agreement_id,
+            consumer_id=consumer,
+            # Which control plane this pull belongs to. Better than the EDR path's
+            # `iss`: the flow is this data plane's own record of a transfer it was
+            # signalled, and `resolve_pull` has already refused a token whose `iss`
+            # disagrees with it.
+            provider_id=flow.participant_id,
+            # Client-asserted, as on the legacy path: ds checks it against the
+            # agreement. The flow id is the *provider's* transfer id, which ds's
+            # transfer check does not look up.
+            transfer_id=edc_transfer_process_id,
+            purpose=[p.strip() for p in (edc_purpose or "").split(",") if p.strip()],
+        )
+        return await execute_query(
+            catalogue_db=catalogue_db,
+            datasets_db=datasets_db,
+            raw_sql=body.sql,
+            limit=body.limit,
+            offset=body.offset,
+            user=None,  # dataspace mode never falls back to user auth
+            edr_context=context,
+            skip_count=body.skip_count,
+            audit=audit,
+        )

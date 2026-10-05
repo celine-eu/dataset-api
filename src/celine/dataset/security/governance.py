@@ -15,6 +15,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from celine.dataset.security.audit import Refused
 from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.security.models import AuthenticatedUser
@@ -149,23 +150,22 @@ async def enforce_dataset_access(
             entry.dataset_id,
             entry.access_level,
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Dataset not available",
+        raise Refused(
+            status.HTTP_403_FORBIDDEN, "Dataset not available", reason="not_available"
         ) from exc
     if level is AccessLevel.SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Dataset not available",
+        raise Refused(
+            status.HTTP_403_FORBIDDEN, "Dataset not available", reason="not_available"
         )
 
     policy = ACCESS_LEVEL_MATRIX[level]
 
     # Step 1 — Authentication check
     if policy.requires_auth and user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required for this dataset",
+        raise Refused(
+            status.HTTP_401_UNAUTHORIZED,
+            "Authentication required for this dataset",
+            reason="auth_required",
         )
 
     # Step 2 — Policy evaluation
@@ -260,9 +260,11 @@ async def enforce_dataset_access(
                         "policy": decision.policy,
                     },
                 )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=decision.reason or "Access denied by policy",
+                # The audit reason is the code, not the policy's sentence (GS-02).
+                raise Refused(
+                    status.HTTP_403_FORBIDDEN,
+                    decision.reason or "Access denied by policy",
+                    reason="policy",
                 )
 
             # Log based on cache status
@@ -361,9 +363,10 @@ async def resolve_datasets_for_tables(
             res2 = await db.execute(stmt2)
             found = res2.scalars().all()
             if len(found) > 1:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Query reference {ref} is ambiguous; use the full dataset id",
+                raise Refused(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"Query reference {ref} is ambiguous; use the full dataset id",
+                    reason="ambiguous_dataset",
                 )
             if found:
                 by_id[ref] = found[0]
@@ -374,9 +377,12 @@ async def resolve_datasets_for_tables(
             "Query references unknown datasets: %s",
             sorted(missing),
         )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Query references unknown datasets: {sorted(missing)}",
+        # A reference outside the catalogue is refused, and audited as a refusal:
+        # it is how a statement would reach a table nobody catalogued (GS-02).
+        raise Refused(
+            status.HTTP_400_BAD_REQUEST,
+            f"Query references unknown datasets: {sorted(missing)}",
+            reason="unknown_dataset",
         )
 
     return by_id
