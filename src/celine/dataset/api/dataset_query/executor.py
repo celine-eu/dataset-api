@@ -146,7 +146,7 @@ async def execute_query(
     - row-level filters applied (pluggable governance handlers)
 
     `audit`, when given, is told which datasets the statement resolved to; the
-    caller writes the one record of the request (GS-01).
+    caller writes one record per dataset (GS-01).
     """
     if raw_sql is None or raw_sql.strip() == "":
         raise HTTPException(400, "sql query not provided")

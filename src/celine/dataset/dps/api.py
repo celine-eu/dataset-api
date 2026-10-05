@@ -234,8 +234,8 @@ async def pull_query(
     From here on the request is the legacy EDR path: the `dataspace_expose`
     gate, ds's `/internal/dataplane/authorize`, the row filters, the audit.
 
-    Recorded like `/query`: one audit record naming the consumer and the
-    datasets read, or the refusal (GS-01, GS-02).
+    Recorded like `/query`: one audit record per dataset naming the consumer,
+    for the read or the refusal (GS-01, GS-02).
     """
     with ReadAudit(QUERY, request=request) as audit:
         try:

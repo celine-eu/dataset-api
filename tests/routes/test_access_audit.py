@@ -158,11 +158,54 @@ async def test_a_query_records_who_read_which_dataset(client, seeded, caplog):
 
 
 # @verifies GS-01
-async def test_a_join_is_one_record_naming_every_dataset(client, seeded, caplog):
+async def test_a_join_writes_one_record_per_dataset_under_one_request_id(
+    client, seeded, caplog
+):
     _as(client, VIEWER)
-    resp = await _query(client, f"SELECT p.id FROM {PLAIN} p JOIN {OTHER} o ON p.id = o.id")
+    resp = await _query(
+        client,
+        f"SELECT p.id FROM {PLAIN} p JOIN {OTHER} o ON p.id = o.id",
+        **{"X-Request-ID": "req-join"},
+    )
     assert resp.status_code == 200, resp.text
-    assert _only(caplog)["resource"] == ",".join(sorted([PLAIN, OTHER]))
+
+    records = _records(caplog)
+    assert len(records) == 2, records
+    assert sorted(r["resource"] for r in records) == sorted([PLAIN, OTHER])
+    assert {r["request_id"] for r in records} == {"req-join"}
+    assert {(r["event"], r["sub"]) for r in records} == {("access", VIEWER["sub"])}
+
+
+# @verifies GS-01
+async def test_without_a_request_id_the_records_of_a_join_share_a_minted_one(
+    client, seeded, caplog
+):
+    _as(client, VIEWER)
+    resp = await _query(client, f"SELECT p.id FROM {PLAIN} p, {OTHER} o")
+    assert resp.status_code == 200, resp.text
+
+    records = _records(caplog)
+    assert len(records) == 2, records
+    [request_id] = {r["request_id"] for r in records}
+    assert request_id
+
+
+# @verifies GS-02
+async def test_a_refused_join_writes_one_denied_record_per_dataset(client, seeded, caplog):
+    _as(client, ORG_ADMIN)
+    resp = await _query(
+        client,
+        f"SELECT p.id FROM {PLAIN} p, {OTHER} o",
+        **{"X-Request-ID": "req-refused-join"},
+    )
+    assert resp.status_code == 403
+
+    records = _records(caplog)
+    assert len(records) == 2, records
+    assert sorted(r["resource"] for r in records) == sorted([PLAIN, OTHER])
+    assert {(r["event"], r["reason"], r["sub"], r["request_id"]) for r in records} == {
+        ("denied", "policy", ORG_ADMIN["sub"], "req-refused-join")
+    }
 
 
 # @verifies GS-01

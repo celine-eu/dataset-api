@@ -51,7 +51,7 @@ async def query_post(
     # Dataspace mode never falls back to that path on failure: a fallback
     # between two authorization regimes is a bypass with extra steps.
     #
-    # One audit record per request, naming who read which datasets (GS-01) or
+    # One audit record per dataset, naming who read it (GS-01) or
     # who was refused and why (GS-02).
     with ReadAudit(QUERY, request=request, caller=user) as audit:
         edr_context: Optional[EDRRequestContext] = None

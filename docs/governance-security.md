@@ -254,9 +254,10 @@ The caller is named by `sub` and client id only, never by email, username or nam
 `resource` holds catalogue dataset ids, which are platform identifiers. A `reason` is
 a short code, never an error detail: a detail can quote the caller's statement.
 
-#### GS-01 — A data read is recorded with the caller and the datasets read
+#### GS-01 — A data read is recorded with the caller and each dataset read
 
-Every request that reads rows writes **one** record, after the outcome is known:
+Every request that reads rows writes **one record per dataset it read**, after the
+outcome is known:
 
 | route | `action` |
 |---|---|
@@ -264,8 +265,11 @@ Every request that reads rows writes **one** record, after the outcome is known:
 | `POST /dps/public/query` (DPS pull) | `dataset.query` |
 | `POST /catalogue/{id}/conformance` (the sample it reads) | `dataset.conformance` |
 
-`resource` is every catalogue id the statement resolved to, sorted and joined with
-`,` (one record for a join). On the user path the caller is the verified token's
+Each record's `resource` is one catalogue id: a join of three datasets writes three
+records. The records of one request share its `request_id` — the caller's
+`X-Request-ID` (or `X-Correlation-ID`) when it sent a usable one, otherwise one the
+service mints. When no dataset resolved, the request writes one record with
+`resource` null. On the user path the caller is the verified token's
 `sub` and `azp`; an anonymous read of an `open` dataset has no caller. On the
 dataspace path (EDR or DPS pull) the caller is the consumer participant — the
 verified token's `aud`, never a header — as both `sub` and `client_id`.
@@ -281,7 +285,10 @@ Neither is `/health`.
 #### GS-02 — A refusal is recorded with the caller and a reason code
 
 Every refusal writes a `denied` record carrying the caller, whenever the caller is
-known from a token that verified:
+known from a token that verified. As in GS-01, a refusal of a statement that
+resolved to several datasets writes one `denied` record per dataset, under one
+`request_id`; a refusal before any dataset resolved (`unknown_dataset`,
+`sql_refused`, …) writes one, with `resource` null:
 
 | reason | refusal |
 |---|---|

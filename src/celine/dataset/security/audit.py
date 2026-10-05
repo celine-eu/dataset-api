@@ -2,14 +2,15 @@
 
 Records are written by `celine.sdk.audit` on the `celine.audit` logger, one JSON
 line each, in the shape every CELINE service shares. This module adds what is
-particular to this service: one record per data request, naming the datasets the
-statement resolved to, and the short reason code a refusal carries.
+particular to this service: one record per dataset a request read or was refused,
+all sharing the request's `request_id`, and the short reason code a refusal carries.
 """
 from __future__ import annotations
 
+import uuid
 from typing import Any, Self
 
-from celine.sdk.audit import ERROR, audit_access, audit_denied
+from celine.sdk.audit import ERROR, audit_access, audit_denied, request_fields
 from fastapi import HTTPException
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -52,13 +53,15 @@ def dataspace_caller(consumer_id: str | None) -> dict[str, str] | None:
 
 
 class ReadAudit:
-    """One audit record for one data request (GS-01).
+    """The audit records of one data request: one per dataset read (GS-01).
 
     Used as a context manager around the request's work. The executor sets
-    `datasets` once the statement's references are resolved; the record is written
-    on exit, from the outcome:
+    `datasets` once the statement's references are resolved; the records are
+    written on exit, one per dataset with `resource` that dataset's id, all
+    carrying the same `request_id`. When no dataset resolved, one record is
+    written with no `resource`. The outcome decides the event:
 
-    - no exception: `access` / `allowed`, `resource` the datasets read
+    - no exception: `access` / `allowed`
     - a `Refused`: `denied` with its reason
     - another 401 or 403: `denied`, `http <status>`
     - any other HTTP error or exception: `access` / `error`
@@ -71,33 +74,45 @@ class ReadAudit:
         self.datasets: list[str] = []
 
     @property
-    def resource(self) -> str | None:
-        # The catalogue ids, sorted and joined: one record names every dataset a
-        # join read. Catalogue ids are platform identifiers, never personal data.
-        return ",".join(sorted(set(self.datasets))) or None
+    def resources(self) -> list[str | None]:
+        # Catalogue ids are platform identifiers, never personal data.
+        return sorted(set(self.datasets)) or [None]
+
+    def _request_id(self) -> str:
+        # The caller's `X-Request-ID` when it sent a usable one; otherwise one is
+        # minted, so the records of a join can still be told apart from another
+        # request's.
+        return request_fields(self.request)["request_id"] or uuid.uuid4().hex
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
-        kwargs = {
-            "caller": self.caller,
-            "resource": self.resource,
-            "service": SERVICE,
-            "request": self.request,
-        }
+        if exc is not None and not isinstance(exc, Exception):
+            return False
         if exc is None:
-            audit_access(self.action, **kwargs)
+            write, extra = audit_access, {}
         elif isinstance(exc, Refused):
-            audit_denied(self.action, reason=exc.reason, **kwargs)
+            write, extra = audit_denied, {"reason": exc.reason}
         elif isinstance(exc, StarletteHTTPException):
             code = f"http {exc.status_code}"
             if exc.status_code in (401, 403):
-                audit_denied(self.action, reason=code, **kwargs)
+                write, extra = audit_denied, {"reason": code}
             else:
-                audit_access(self.action, outcome=ERROR, reason=code, **kwargs)
-        elif isinstance(exc, Exception):
-            audit_access(self.action, outcome=ERROR, reason=type(exc).__name__, **kwargs)
+                write, extra = audit_access, {"outcome": ERROR, "reason": code}
+        else:
+            write, extra = audit_access, {"outcome": ERROR, "reason": type(exc).__name__}
+        request_id = self._request_id()
+        for resource in self.resources:
+            write(
+                self.action,
+                caller=self.caller,
+                resource=resource,
+                service=SERVICE,
+                request=self.request,
+                request_id=request_id,
+                **extra,
+            )
         return False
 
 
