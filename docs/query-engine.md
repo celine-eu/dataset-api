@@ -76,6 +76,15 @@ statement yields after row filters (`null` with `skip_count`); `limit` and
   `403` (*"Dataset not available"*), the same answer for all three
 - a dataset whose backend has no SQL table (`s3`, `fs`, …) is a `400` (*"not queryable"*)
 
+#### QE-05 — A table reference is a CTE only where PostgreSQL would resolve it to one
+
+Every table reference is a dataset reference — and must resolve to the catalogue — unless
+it is an unqualified name of a CTE **visible at that point**, resolved per scope as
+PostgreSQL does. So a name is physical inside the body of the non-recursive CTE it names,
+outside the subquery that defines the CTE, and in an earlier CTE that names a later one.
+The same resolution decides which references are rewritten to physical tables. A query
+whose scopes cannot be resolved is a `400`.
+
 ### Function and expression allowlist
 - only allow safe scalar functions
 - block functions that can access filesystem, network, or server internals

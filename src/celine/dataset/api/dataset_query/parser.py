@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import sqlglot
 from sqlglot import ParseError, exp
 import sqlglot.errors
+from sqlglot.optimizer.scope import traverse_scope
 
 from celine.dataset.api.dataset_query.log_safety import sql_shape
 
@@ -246,7 +247,11 @@ class ParsedSQL:
         if not tables_map:
             return ast
 
+        ctes = _cte_reference_ids(ast)
         for table in ast.find_all(exp.Table):
+            # A CTE reference is not a dataset, whatever it is called.
+            if id(table) in ctes:
+                continue
             logical = _table_identifier(table)
 
             if logical not in tables_map:
@@ -456,36 +461,50 @@ def _reject_top_level_pagination(ast: exp.Expression) -> None:
             raise _bad_request("OFFSET not allowed in top-level query")
 
 
+def _cte_reference_ids(ast: exp.Expression) -> Set[int]:
+    """The `exp.Table` nodes (by `id`) that name a CTE **visible where they stand**.
+
+    Resolved per scope, the way PostgreSQL resolves them, not by name alone. A
+    name match is not enough: a non-recursive CTE's body cannot see the CTE
+    itself, a CTE defined in a subquery is invisible outside it, and a later CTE
+    is invisible to an earlier one. In each of those places the name is a
+    *physical* table, and it has to reach the dataset gate as one (QE-05).
+
+    Only an unqualified name can be a CTE reference. Fails closed: a query whose
+    scopes cannot be resolved is refused.
+    """
+    try:
+        scopes = traverse_scope(ast)
+    except Exception as exc:  # noqa: BLE001 — unresolvable scopes are refused
+        raise _bad_request(
+            "Query structure could not be resolved",
+            log_message=f"scope resolution failed: {type(exc).__name__}",
+        ) from exc
+    refs: Set[int] = set()
+    for scope in scopes:
+        for table in scope.tables:
+            if table.args.get("db") or table.args.get("catalog"):
+                continue
+            if table.name in scope.cte_sources:
+                refs.add(id(table))
+    return refs
+
+
 def _collect_physical_tables(ast: exp.Expression) -> Set[str]:
     """
     Collect physical table names referenced by the query.
 
-    - Excludes CTE names
-    - Includes tables in joins, subqueries, nested selects
+    Every table reference counts unless scope resolution proves it names a
+    visible CTE (`_cte_reference_ids`) — joins, subqueries, nested selects and
+    CTE bodies included. What is collected must then resolve to a catalogue
+    dataset, or the query is refused (`resolve_datasets_for_tables`).
     """
-
-    # 1. Collect CTE names
-    cte_names: Set[str] = set()
-
-    for with_expr in ast.find_all(exp.With):
-        for cte in with_expr.expressions:
-            # cte.alias is the exposed name
-            cte_names.add(cte.alias)
-
-    # 2. Collect all table references
-    tables: Set[str] = set()
-
-    for table in ast.find_all(exp.Table):
-        # allow dot based identifiers
-        logical_name = _table_identifier(table)
-
-        # Skip references to CTEs
-        if logical_name in cte_names:
-            continue
-
-        tables.add(logical_name)
-
-    return tables
+    ctes = _cte_reference_ids(ast)
+    return {
+        _table_identifier(table)
+        for table in ast.find_all(exp.Table)
+        if id(table) not in ctes
+    }
 
 
 def _reject_statement_stacking(sql: str) -> None:
