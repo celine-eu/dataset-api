@@ -185,6 +185,8 @@ async def execute_query(
     # of them is refused, so asking per table would let a partial answer through.
     edr_decision = None
     if edr_context is not None:
+        if audit is not None:
+            audit.agreement_id = edr_context.agreement_id
         # Is this dataset offered into the dataspace at all? Checked before ds is
         # asked, because the two answer different questions: ds decides whether
         # *this consumer* holds a valid agreement, while `dataspace_expose` says
@@ -214,6 +216,10 @@ async def execute_query(
             context=edr_context,
             dataset_ids=[d.dataset_id for d in datasets.values()],
         )
+        if audit is not None:
+            # The release link (`security/audit.py`): only an allow has a
+            # reference, and it is the connector's, carried as received.
+            audit.decision_ref = edr_decision.decision_ref if edr_decision.allowed else None
         if not edr_decision.allowed:
             # ds's reason names the gate, never who holds the agreement, so it
             # is safe to relay.
@@ -491,6 +497,8 @@ async def execute_query(
                 authorized_subject_ids=subject_dids,
                 # The connector that decided is the connector that is told.
                 provider_id=edr_context.provider_id,
+                # The release link: the decision this disclosure was served under.
+                decision_ref=edr_decision.decision_ref if edr_decision else None,
             )
 
     return DatasetQueryResult(

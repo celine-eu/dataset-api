@@ -4,13 +4,28 @@ Records are written by `celine.sdk.audit` on the `celine.audit` logger, one JSON
 line each, in the shape every CELINE service shares. This module adds what is
 particular to this service: one record per dataset a request read or was refused,
 all sharing the request's `request_id`, and the short reason code a refusal carries.
+
+A dataspace read also carries its **release link**: the `agreement_id` it was
+served under and the connector's `decision_ref` for the decision that served it
+— the same pair the `QueryExecuted` event carries, so a log line and a provenance
+event can be matched without either naming a person.
 """
 from __future__ import annotations
 
+import json
+import logging
+import re
 import uuid
+from contextvars import ContextVar
 from typing import Any, Self
 
-from celine.sdk.audit import ERROR, audit_access, audit_denied, request_fields
+from celine.sdk.audit import (
+    AUDIT_LOGGER,
+    ERROR,
+    audit_access,
+    audit_denied,
+    request_fields,
+)
 from fastapi import HTTPException
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -26,6 +41,56 @@ CATALOGUE_IMPORT = "catalogue.import"
 AUTHENTICATE = "auth.token"
 #: Control-plane signalling on the DPS data plane.
 DPS_SIGNAL = "dps.signal"
+
+
+#: The release link of the records being written, for `_ReleaseLink`. A context
+#: variable rather than a module global: each request (task, or thread) sees only
+#: its own, so a record written by another request at the same moment is never
+#: stamped with this one's agreement.
+_LINK: ContextVar[dict[str, str | None] | None] = ContextVar(
+    "dataset_api_audit_release_link", default=None
+)
+
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_MAX_LEN = 256
+
+
+def _link_value(value: str | None) -> str | None:
+    """A link field as it may appear in a record: text, no control characters,
+    bounded. The agreement id is client-asserted on the EDR path."""
+    if value is None:
+        return None
+    text = _CONTROL.sub("", str(value)).strip()
+    return text[:_MAX_LEN] or None
+
+
+class _ReleaseLink(logging.Filter):
+    """Adds `agreement_id` and `decision_ref` to a `celine.audit` record.
+
+    `celine.sdk.audit` writes a fixed set of fields and offers no way to add one,
+    so the two are added on the way out: the record's JSON message and its
+    `audit` attribute both carry them, and nothing else changes. Only records
+    written while `_LINK` is set — inside `ReadAudit.__exit__` — are touched.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        link = _LINK.get()
+        audit = getattr(record, "audit", None)
+        if link and isinstance(audit, dict):
+            audit = {**audit, **link}
+            record.audit = audit
+            record.msg = json.dumps(audit, separators=(",", ":"))
+            record.args = None
+        return True
+
+
+def _install_release_link() -> None:
+    logger = logging.getLogger(AUDIT_LOGGER)
+    if not any(isinstance(f, _ReleaseLink) for f in logger.filters):
+        logger.addFilter(_ReleaseLink())
+
+
+_install_release_link()
 
 
 class Refused(HTTPException):
@@ -65,6 +130,12 @@ class ReadAudit:
     - a `Refused`: `denied` with its reason
     - another 401 or 403: `denied`, `http <status>`
     - any other HTTP error or exception: `access` / `error`
+
+    On the dataspace path the caller also sets `agreement_id` (as soon as the
+    agreement is known) and `decision_ref` (the connector's reference for an
+    allow, opaque here). Every record of the request then carries both fields,
+    `decision_ref` `null` when there was no allow or the connector sent none. A
+    request off the dataspace path carries neither field.
     """
 
     def __init__(self, action: str, *, request: Any = None, caller: Any = None) -> None:
@@ -72,6 +143,8 @@ class ReadAudit:
         self.request = request
         self.caller = caller
         self.datasets: list[str] = []
+        self.agreement_id: str | None = None
+        self.decision_ref: str | None = None
 
     @property
     def resources(self) -> list[str | None]:
@@ -103,16 +176,26 @@ class ReadAudit:
         else:
             write, extra = audit_access, {"outcome": ERROR, "reason": type(exc).__name__}
         request_id = self._request_id()
-        for resource in self.resources:
-            write(
-                self.action,
-                caller=self.caller,
-                resource=resource,
-                service=SERVICE,
-                request=self.request,
-                request_id=request_id,
-                **extra,
-            )
+        link = None
+        if self.agreement_id is not None:
+            link = {
+                "agreement_id": _link_value(self.agreement_id),
+                "decision_ref": _link_value(self.decision_ref),
+            }
+        token = _LINK.set(link)
+        try:
+            for resource in self.resources:
+                write(
+                    self.action,
+                    caller=self.caller,
+                    resource=resource,
+                    service=SERVICE,
+                    request=self.request,
+                    request_id=request_id,
+                    **extra,
+                )
+        finally:
+            _LINK.reset(token)
         return False
 
 

@@ -331,3 +331,59 @@ async def test_a_live_token_on_a_stopped_flow_is_recorded_against_its_consumer(
         "flow_not_started",
         CONSUMER,
     )
+
+
+#: The connector's reference for an allow: opaque here, 64 hex characters.
+DECISION_REF = "0f" * 32
+
+
+# @verifies GS-05
+async def test_a_pull_carries_the_release_link_to_the_record_and_the_disclosure(
+    http, readings, ds, caplog
+) -> None:
+    caplog.set_level(logging.INFO, logger="celine.audit")
+    ds["decision"] = DataPlaneDecision(
+        allowed=True,
+        datasets=[{"dataset_id": "dps_readings", "decision": "allow", "row_filter": None}],
+        decision_ref=DECISION_REF,
+    )
+    token = await _start(http, "tp-pull-link-1")
+    assert (await _pull(http, token)).status_code == 200
+
+    [record] = _audit_records(caplog)
+    assert (record["agreement_id"], record["decision_ref"]) == ("agreement-1", DECISION_REF)
+    [disclosure] = ds["audits"]
+    assert (disclosure["agreement_id"], disclosure["decision_ref"]) == (
+        "agreement-1",
+        DECISION_REF,
+    )
+
+
+# @verifies GS-05
+async def test_a_pull_under_a_connector_without_decision_ref_is_served_as_before(
+    http, readings, ds, caplog
+) -> None:
+    caplog.set_level(logging.INFO, logger="celine.audit")
+    token = await _start(http, "tp-pull-link-2")
+    assert (await _pull(http, token)).status_code == 200
+
+    [record] = _audit_records(caplog)
+    assert (record["agreement_id"], record["decision_ref"]) == ("agreement-1", None)
+    assert ds["audits"][0]["decision_ref"] is None
+
+
+# @verifies GS-05
+async def test_a_refused_pull_names_the_flows_agreement_and_no_decision(
+    http, readings, ds, caplog
+) -> None:
+    caplog.set_level(logging.INFO, logger="celine.audit")
+    ds["decision"] = DataPlaneDecision(
+        allowed=False, reason="consent_missing", decision_ref=DECISION_REF
+    )
+    token = await _start(http, "tp-pull-link-3")
+    assert (await _pull(http, token)).status_code == 403
+
+    [record] = _audit_records(caplog)
+    assert (record["event"], record["reason"]) == ("denied", "ds_refused")
+    # Only an allow has a reference, whatever the connector sent with a deny.
+    assert (record["agreement_id"], record["decision_ref"]) == ("agreement-1", None)

@@ -158,12 +158,21 @@ class DataplaneRowFilter(BaseModel):
 
 @dataclass
 class DataPlaneDecision:
-    """ds's answer: whether rows may flow, and which."""
+    """ds's answer: whether rows may flow, and which.
+
+    `decision_ref` is the connector's reference for an allow — the release link
+    this data plane echoes in its `celine.audit` record and in `QueryExecuted`,
+    so the read can be matched to the decision that served it. **Opaque here**:
+    never parsed, never recomputed, never invented. A connector older than the
+    field sends none, and that is `None`, not a refusal — the field decides no
+    rows, so the data plane can be rolled out first (as for `subject_dids`).
+    """
 
     allowed: bool
     reason: Optional[str] = None
     datasets: list[dict[str, Any]] = field(default_factory=list)
     cache_ttl: Optional[int] = None
+    decision_ref: str | None = None
 
     def row_filter_for(self, dataset_id: str) -> Optional[DataplaneRowFilter]:
         """This dataset's filter, parsed — or `None` if it carries none.
@@ -388,7 +397,23 @@ async def authorize_dataplane(
         reason=body.get("reason"),
         datasets=body.get("datasets") or [],
         cache_ttl=(body.get("cache") or {}).get("ttl_seconds"),
+        decision_ref=_decision_ref(body.get("decision_ref")),
     )
+
+
+def _decision_ref(value: Any) -> str | None:
+    """The connector's `decision_ref`, as received — or `None`.
+
+    Absent or `null` (an older connector, or a deny) is `None`. Anything that is
+    not a non-empty string is dropped with a warning rather than coerced: a
+    reference this end made up would link the read to nothing.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip():
+        return value
+    logger.warning("ds-connector sent an unusable decision_ref; recorded as none")
+    return None
 
 
 def _connector_base(participant_id: Optional[str] = None) -> str:
@@ -463,6 +488,7 @@ async def audit_query(
     authorized_subject_ids: Optional[list[str]] = None,
     subject_id: Optional[str] = None,
     provider_id: Optional[str] = None,
+    decision_ref: str | None = None,
 ) -> None:
     """Record a `QueryExecuted` disclosure with ds — the accountability half.
 
@@ -492,8 +518,15 @@ async def audit_query(
     only forwards the DIDs ds decided on — it never builds one.
 
     **Best-effort.** A failure here must not fail a query the control plane
-    already authorised and served, but it is logged: a silently dropped
-    disclosure is the worst outcome for an accountability record.
+    already authorised and served, but it is logged at `ERROR`: a silently
+    dropped disclosure is the worst outcome for an accountability record, and a
+    warning is the level nobody pages on.
+
+    `decision_ref` and `agreement_id` are the release link: the same pair this
+    read's `celine.audit` record carries. `decision_ref` is sent only when the
+    connector gave one (`authorize_dataplane`) — never invented, and left out of
+    the payload rather than sent as `null`, so a connector older than the field
+    sees the request it always saw.
 
     `provider_id` names the connector that gets the record — the same one that
     gave the decision. A disclosure filed with the wrong control plane is not a
@@ -510,6 +543,8 @@ async def audit_query(
         "row_count": row_count,
         "authorized_subject_ids": authorized_subject_ids,
     }
+    if decision_ref is not None:
+        payload["decision_ref"] = decision_ref
     try:
         base = _connector_base(provider_id)
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -520,6 +555,6 @@ async def audit_query(
             )
         response.raise_for_status()
     except (httpx.HTTPError, HTTPException) as exc:
-        logger.warning(
+        logger.error(
             "QueryExecuted disclosure not recorded for %s: %s", dataset_id, exc
         )

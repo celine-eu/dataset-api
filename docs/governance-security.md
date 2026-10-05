@@ -224,6 +224,9 @@ dataspace request, and the ordinary path is never a fallback for it:
 - the disclosure is recorded with `POST /internal/audit/query`, naming the
   consenting subjects by DID, never by principal or key (RF-10 in
   [dataspace-row-filters.md](dataspace-row-filters.md))
+- the read's audit record and that disclosure both carry the agreement id and the
+  connector's `decision_ref` (GS-05); a disclosure that cannot be posted is logged at
+  `ERROR` and does not fail the read
 
 Calls to ds authenticate with this service's OIDC client-credentials token. The DPS
 pull path reuses the same enforcement; see [dps-data-plane.md](dps-data-plane.md).
@@ -332,6 +335,27 @@ Swagger UI (`/docs`), ReDoc (`/redoc`) and `/openapi.json` are served only under
 `CELINE_ENV=dev`. Anywhere else they answer `404`, unless `CELINE_PUBLIC_DOCS` is
 `true` (also `1`, `yes`, `on`). The schema is still built in process, so tooling
 that reads `app.openapi()` is unaffected. Tests: `tests/security/test_api_docs.py`.
+
+#### GS-05 — A dataspace read carries its release link
+
+On the dataspace path (EDR or DPS pull) every record of the request also carries
+`agreement_id` and `decision_ref`, and the `QueryExecuted` disclosure posted to the
+connector (`POST /internal/audit/query`) carries the same pair, so the log line and
+the provenance event of one read can be matched:
+
+- `agreement_id` is the agreement the request was judged under: the
+  `Edc-Contract-Agreement-Id` header on the EDR path, the signalled flow's agreement
+  on a DPS pull (from the moment the flow is known, a refusal included).
+- `decision_ref` is the connector's reference for the allow that served the read,
+  read from the `POST /internal/dataplane/authorize` response and **opaque** here:
+  never parsed, recomputed or invented. It is `null` on a refusal, and when the
+  connector sent none — a connector older than the field is served as before, with
+  no failure. The disclosure sends it only when it was received.
+
+A record off the dataspace path carries neither field. A disclosure that cannot be
+posted does not fail the read; it is logged at `ERROR`.
+
+Tests: `tests/security/test_release_link.py`.
 
 The query engine never logs a statement's literals: wherever it logs SQL it logs the
 statement's shape, every literal replaced by `?` (QE-03 in

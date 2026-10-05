@@ -235,7 +235,9 @@ async def pull_query(
     gate, ds's `/internal/dataplane/authorize`, the row filters, the audit.
 
     Recorded like `/query`: one audit record per dataset naming the consumer,
-    for the read or the refusal (GS-01, GS-02).
+    for the read or the refusal (GS-01, GS-02), with the flow's `agreement_id`
+    and the connector's `decision_ref` — the release link `QueryExecuted`
+    carries too.
     """
     with ReadAudit(QUERY, request=request) as audit:
         try:
@@ -245,6 +247,10 @@ async def pull_query(
             reason = "pull_token" if exc.status_code == 401 else "flow_not_started"
             raise Refused(exc.status_code, exc.detail, reason=reason) from exc
         audit.caller = dataspace_caller(consumer)
+        # The flow's agreement is this data plane's own record, so every record
+        # of the pull carries it from here on, a refusal below included; the
+        # executor adds the connector's `decision_ref` on an allow.
+        audit.agreement_id = flow.agreement_id
 
         if edc_contract_agreement_id and edc_contract_agreement_id != flow.agreement_id:
             raise Refused(
