@@ -170,7 +170,7 @@ The `export governance` command reads `governance.yaml` files (plus `governance.
 
 ## governance.yaml integration
 
-Dataset-api reads governance rules resolved by `celine.governance.GovernanceResolver` (from `celine-utils>=2.0`). The following extended blocks are supported:
+Dataset-api reads governance rules resolved by `celine.governance.GovernanceResolver` (from `celine-utils>=2.6`, which carries `row_filters[].binds`). The following extended blocks are supported:
 
 `dcat:` block — DCAT-AP metadata:
 - `publisher_uri` — overrides the settings-level fallback
