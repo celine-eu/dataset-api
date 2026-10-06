@@ -47,7 +47,8 @@ normalizes its claims into an authenticated user:
 - `username` (`preferred_username`, falling back to `email`) and `email`
 - `roles`: the realm roles (`realm_access.roles`), the platform level
 - `groups`: the groups the caller holds inside its organizations
-  (`organization.<alias>.groups`), the organization level
+  (`organization.<alias>.groups`), the organization level — which organization
+  each is held in stays in the raw claims, where the row filter reads it
 - `scopes`
 - `issuer`, `audiences`, and the raw `claims`
 
@@ -66,11 +67,12 @@ A person's grants come from exactly two places, read apart
 - **Platform.** The realm role `platform-admin` is the only platform-wide grant.
   Its holder skips every row filter, reads `restricted` datasets and may write the
   catalogue.
-- **Organization.** `managers` and `viewers` held inside an organization read
-  `internal` datasets, and row filters still apply. An organization's `admins` and
-  `editors` grant nothing here. The organization is not matched against the
-  dataset yet: a `viewers` membership in any organization reads every `internal`
-  dataset, narrowed only by row filters.
+- **Organization.** `admins`, `managers` and `viewers` held inside an organization
+  read `internal` datasets (an organization's `admins` reads what its `managers`
+  read; `editors` grants nothing here), and only rows that belong to that
+  organization: the dataset's row filter decides which (GS-06), and an `internal`
+  dataset that declares no row filter is not readable through an organization at
+  all (GS-07).
 
 **A realm group grants nothing.** The top-level `groups` claim is not read, so a
 token that still carries `/admins` there is not an administrator. Neither are the
@@ -120,7 +122,8 @@ Decisions are cached in memory when `POLICIES_CACHE_ENABLED` is true (the defaul
       "access_level": "internal",
       "backend_type": "postgres",
       "namespace": "gold",
-      "governance": {"…": "lineage governance facet, _-prefixed keys dropped"}
+      "governance": {"…": "lineage governance facet, _-prefixed keys dropped"},
+      "row_scoped": true
     }
   },
   "action": {"name": "read", "context": {}},
@@ -130,7 +133,10 @@ Decisions are cached in memory when `POLICIES_CACHE_ENABLED` is true (the defaul
 
 `subject.type` is `user`, `service` or `anonymous` (`id: "anonymous"`).
 `subject.roles` carries the realm roles and `subject.groups` the organization
-groups; neither ever carries a realm group. A policy reads the platform level as
+groups; neither ever carries a realm group. `subject.groups` says *which* groups,
+not *where*: it is the coarse gate, and the row filter scopes by organization.
+`resource.attributes.row_scoped` is true when the dataset declares any row
+filter (`member_wide` included). A policy reads the platform level as
 `"platform-admin" in input.subject.roles` and never from `groups` or `claims`.
 Tags are not sent.
 
@@ -141,7 +147,7 @@ Tags are not sent.
 | Access level | Service (by scope) | User |
 |---|---|---|
 | `open` | never reaches the policy | never reaches the policy |
-| `internal` | `dataset.query` | the `platform-admin` role, or `managers` or `viewers` in an organization |
+| `internal` | `dataset.query` | the `platform-admin` role; or `admins`, `managers` or `viewers` in an organization, when the dataset is `row_scoped` |
 | `restricted` | `dataset.admin` | the `platform-admin` role |
 
 Scopes use `.` as separator; `dataset.admin` matches every `dataset.*` scope.
@@ -357,6 +363,58 @@ posted does not fail the read; it is logged at `ERROR`.
 
 Tests: `tests/security/test_release_link.py`.
 
+#### GS-06 — An organization's reader reads only its own organization's rows
+
+A person reads an `internal` dataset through an organization when they hold
+`admins`, `managers` or `viewers` inside it. Which rows is the dataset's row
+filter (`binds: organization`, GS-08): `organization_match` with `column` serves the rows whose column holds the
+alias of an organization the caller reads in, and nothing else. The column holds
+organization aliases **by convention** (a REC's `rec_id` is its organization's
+alias); no mapping is applied, so a value in another vocabulary matches nobody.
+With `org_type` alone it serves every row to a reader in any organization of that
+type (`dso`), and with both it does both. A caller who reads in no matching
+organization gets no rows. A caller in two organizations reads both; a token still
+naming an organization the person has left reads it until the token is reissued,
+and a reissued token is never answered from the previous token's cached plan.
+
+The platform administrator and a service admitted by scope are not narrowed by
+`organization_match`. A dataspace (delegated) request is refused by it: an
+organization is not a consenting subject.
+
+Tests: `tests/routes/test_organization_scoping.py`,
+`tests/routes/test_platform_admin_role.py`.
+
+#### GS-07 — An `internal` dataset that declares no row filter is closed to organizations
+
+An `internal` dataset whose governance declares no row filter is readable by the
+`platform-admin` role and by a service holding the scope, and by no organization's
+group: nobody decided whose rows it holds. The refusal is `403` with reason
+`internal dataset without a row filter - platform-admin or services only`
+(audited as `policy`). A dataset meant for every member of every organization —
+weather, public building data — says so in governance with the `member_wide` row
+filter (`binds: organization`), which narrows nothing.
+
+Tests: `tests/routes/test_organization_scoping.py`,
+`tests/routes/test_platform_admin_role.py`.
+
+#### GS-08 — A row filter's `binds` agrees with its handler
+
+Every governance row filter says what it narrows rows to (celine-utils REQ-0010):
+`binds: person` (the default when absent) or `binds: organization`. Each built-in
+handler declares the one it is (`HANDLER_BINDS`): `direct_user_match`,
+`rec_registry`, `subject_key_match`, `http_in_list` and `table_pointer` bind a
+person; `organization_match` and `member_wide` bind an organization.
+`POST /admin/catalogue` refuses with `422`, naming the dataset and the filter, a
+`binds` that contradicts its handler or that is not one of the two values. A handler
+from another package is checked for a readable value only.
+
+It matters outside this service: ds gates a dataset on consent only for a filter
+binding a person, and puts only that filter on the wire with the consenting
+subjects. A person filter marked `organization` would un-gate personal data; an
+organization filter left unmarked over-gates a contract-only dataset.
+
+Tests: `tests/routes/test_import_row_filter_binds.py`.
+
 The query engine never logs a statement's literals: wherever it logs SQL it logs the
 statement's shape, every literal replaced by `?` (QE-03 in
 [query-engine.md](query-engine.md#logging)). On a dataspace request the completed SQL is
@@ -374,7 +432,10 @@ in it, and this service applies it or serves nothing. That path has its own
 specification, with clauses and tests:
 [dataspace-row-filters.md](dataspace-row-filters.md).
 
-**A service account is not narrowed by `rec_registry`** on the normal API path: it
+Whose rows an organization's reader gets is GS-06; an `internal` dataset with no
+row filter at all is GS-07; what a filter binds is GS-08.
+
+**A service account is not narrowed by `rec_registry`** or `organization_match` on the normal API path: it
 is not a registry member, and once the policy has admitted it the whole table is
 served. A service that relays such rows to a person narrows them itself or forwards
 the person's token. The order the handler decides in is in

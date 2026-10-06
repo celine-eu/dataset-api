@@ -65,8 +65,8 @@ def _user(claims: dict):
 
 #: Reads `internal` datasets.
 VIEWER = _claims("4b1e0c7a-0000-4000-8000-000000000001", groups=["/viewers"])
-#: An organization's `admins` grants no read here.
-ORG_ADMIN = _claims("4b1e0c7a-0000-4000-8000-000000000002", groups=["/admins"])
+#: An organization's `editors` grants no read here.
+ORG_EDITOR = _claims("4b1e0c7a-0000-4000-8000-000000000002", groups=["/editors"])
 
 
 def _as(client, claims: dict) -> None:
@@ -117,6 +117,11 @@ async def seeded(test_session):
                 expose=True,
                 dataspace_expose=offered,
                 access_level="internal",
+                # Readable by any organization's reader on purpose: these tests
+                # are about the audit record, not about whose rows (GS-07).
+                lineage={
+                    "facets": {"governance": {"rowFilters": [{"handler": "member_wide", "binds": "organization"}]}}
+                },
             )
         )
     await test_session.commit()
@@ -192,7 +197,7 @@ async def test_without_a_request_id_the_records_of_a_join_share_a_minted_one(
 
 # @verifies GS-02
 async def test_a_refused_join_writes_one_denied_record_per_dataset(client, seeded, caplog):
-    _as(client, ORG_ADMIN)
+    _as(client, ORG_EDITOR)
     resp = await _query(
         client,
         f"SELECT p.id FROM {PLAIN} p, {OTHER} o",
@@ -204,7 +209,7 @@ async def test_a_refused_join_writes_one_denied_record_per_dataset(client, seede
     assert len(records) == 2, records
     assert sorted(r["resource"] for r in records) == sorted([PLAIN, OTHER])
     assert {(r["event"], r["reason"], r["sub"], r["request_id"]) for r in records} == {
-        ("denied", "policy", ORG_ADMIN["sub"], "req-refused-join")
+        ("denied", "policy", ORG_EDITOR["sub"], "req-refused-join")
     }
 
 
@@ -271,7 +276,7 @@ async def test_a_statement_that_does_not_parse_is_an_error_not_a_refusal(
 
 # @verifies GS-02
 async def test_a_policy_denial_names_the_caller(client, seeded, caplog):
-    _as(client, ORG_ADMIN)
+    _as(client, ORG_EDITOR)
     resp = await _query(client, f"SELECT id FROM {PLAIN}")
     assert resp.status_code == 403
 
@@ -279,7 +284,7 @@ async def test_a_policy_denial_names_the_caller(client, seeded, caplog):
     assert record["event"] == "denied"
     assert record["outcome"] == "denied"
     assert record["reason"] == "policy"
-    assert record["sub"] == ORG_ADMIN["sub"]
+    assert record["sub"] == ORG_EDITOR["sub"]
     assert record["resource"] == PLAIN
     _no_personal_data(caplog)
     warning = next(r for r in caplog.records if r.name == AUDIT)
@@ -446,7 +451,7 @@ def _import_payload() -> dict:
 
 # @verifies GS-03
 async def test_a_refused_import_names_the_caller(client, seeded, caplog):
-    _as(client, ORG_ADMIN)
+    _as(client, ORG_EDITOR)
     resp = await client.post("/admin/catalogue", json=_import_payload())
     assert resp.status_code == 403
 
@@ -455,7 +460,7 @@ async def test_a_refused_import_names_the_caller(client, seeded, caplog):
         "denied",
         "catalogue.import",
         "not_catalogue_admin",
-        ORG_ADMIN["sub"],
+        ORG_EDITOR["sub"],
     )
     assert record["route"] == "/admin/catalogue"
     _no_personal_data(caplog)

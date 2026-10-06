@@ -21,6 +21,8 @@ class TablePointerHandler:
     """
 
     name = "table_pointer"
+    #: What this filter narrows rows to (celine-utils REQ-0010).
+    binds = "person"
 
     async def resolve(
         self,

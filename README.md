@@ -30,7 +30,7 @@ SQL `SELECT` queries over exposed datasets with strict validation, server-side p
 - Enforces `LIMIT`/`OFFSET` server-side, after the statement's top-level `ORDER BY` (carried onto the page query where its keys name selected columns; see QE-04 in the query engine docs)
 - Configurable query timeout via `QUERY_STATEMENT_TIMEOUT_MS` (default 5000ms)
 - `skip_count: true` skips the `COUNT(*)` query to avoid full table scans
-- Applies row-level filter plans from governance handlers (`direct_user_match`, `rec_registry`, `subject_key_match`, `http_in_list`, `table_pointer`)
+- Applies row-level filter plans from governance handlers (`direct_user_match`, `rec_registry`, `subject_key_match`, `http_in_list`, `table_pointer`, `organization_match`, `member_wide`)
 
 ### EDR-gated query path (dataspace integration)
 
@@ -92,22 +92,26 @@ Flows are stored in the catalogue database, so any worker can serve a pull and f
 
 Access levels:
 - `open` — no authentication required; `downloadURL` exposed in DCAT
-- `internal` — JWT required; services need the `dataset.query` scope, users the `platform-admin` realm role, or `managers`/`viewers` inside an organization; ODRL carries `ds:accessScope eq "dataspaces.query"`
+- `internal` — JWT required; services need the `dataset.query` scope, users the `platform-admin` realm role, or `admins`/`managers`/`viewers` inside an organization — and then only a dataset that declares a row filter, and only that organization's rows (GS-06, GS-07); ODRL carries `ds:accessScope eq "dataspaces.query"`
 - `restricted` — JWT required; only the `dataset.admin` scope or the `platform-admin` realm role (`policies/celine/dataset.rego`); ODRL carries `ds:accessScope eq "dataspaces.query"` and `ds:consentStatus eq "active"`
 - `secret` — omitted from every catalogue surface; not queryable (`403 Dataset not available`, as for an unexposed dataset)
 
 An entry that states no level is `internal`, and the import stores it as such; an unknown level is refused at import.
 
-Row-level filtering via the pluggable governance handler registry. Five built-in handlers are supported:
+Row-level filtering via the pluggable governance handler registry. Seven built-in handlers are supported:
 - `direct_user_match` — filter by user column
 - `rec_registry` — lookup via REC registry
 - `subject_key_match` — filter by the typed data keys (`pod:…`) the consent carried, for a holder whose rows are keyed by something only the organisation that collected the consent can name
 - `http_in_list` — HTTP-based allow list
 - `table_pointer` — table-based lookup
+- `organization_match` — the rows of the caller's organizations: `column` holds organization aliases; `org_type` limits to one type (`dso`). Declared `binds: organization`
+- `member_wide` — every row, declared on purpose for data meant for every member of every organization. Declared `binds: organization`
+
+Each filter's `binds` (`person` by default, or `organization`) must agree with its handler; the catalogue import refuses one that does not (GS-08)
 
 Further handlers can be registered through `ROW_FILTERS_MODULES` or the `celine.dataset.row_filters` entry-point group (see `celine.dataset.ext`).
 
-Holders of the `platform-admin` realm role bypass row filters entirely; no group does, at either level (see [Identity Model](docs/governance-security.md#identity-model)). Service accounts bypass the `rec_registry` filter when they query on their own behalf — never when a dataspace decision delegates the query to them.
+Holders of the `platform-admin` realm role bypass row filters entirely; no group does, at either level (see [Identity Model](docs/governance-security.md#identity-model)). Service accounts bypass the `rec_registry` and `organization_match` filters when they query on their own behalf — never when a dataspace decision delegates the query to them.
 
 On a dataspace request the filter arrives from ds whole, naming the consenting subjects as `principals` and as `keys`; a filter this service cannot apply serves no rows. Specification: [docs/dataspace-row-filters.md](docs/dataspace-row-filters.md).
 

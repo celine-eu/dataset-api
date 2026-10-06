@@ -39,3 +39,4 @@ edited to say something else.
 | ADR | Decision |
 |---|---|
 | [ADR-0001](ADR-0001-a-platform-administrator-is-a-realm-role.md) | A platform administrator is the realm role `platform-admin`; organization groups count only from `organization.<alias>.groups`; a realm group grants nothing |
+| [ADR-0002](ADR-0002-an-organization-reads-only-its-own-rows.md) | An organization reads only its own rows, through a row filter (`organization_match`); its `admins` read like `managers`; an `internal` dataset with no row filter is closed to organizations unless declared `member_wide` |

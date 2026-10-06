@@ -71,6 +71,8 @@ def _names_no_code(body: object) -> bool:
 
 class RecRegistryHandler:
     name = "rec_registry"
+    #: What this filter narrows rows to (celine-utils REQ-0010).
+    binds = "person"
 
     async def resolve(
         self,

@@ -1,7 +1,7 @@
 # dataset/catalogue/schema.py
 from __future__ import annotations
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 
 class BackendConfig(BaseModel):
@@ -102,6 +102,42 @@ class DatasetEntryModel(BaseModel):
                 f"access_level must be one of {sorted(ACCESS_LEVELS)}, got '{v}'"
             )
         return level
+
+    @model_validator(mode="after")
+    def check_row_filter_binds(self):
+        """A row filter's `binds` must be readable and agree with its handler (GS-08).
+
+        Refused at import, naming the dataset and the filter: a wrong `binds` is
+        a statement about whether the rows are people's, and ds gates consent on
+        it. A built-in handler knows what it binds; a handler from another
+        package is checked for a readable value only.
+        """
+        from celine.dataset.api.dataset_query.row_filters.handlers import HANDLER_BINDS
+        from celine.governance import row_filter_binds
+
+        facets = (self.lineage.facets if self.lineage else None) or {}
+        governance = facets.get("governance") or {}
+        filters = governance.get("rowFilters") or governance.get("row_filters") or []
+        if not isinstance(filters, list):
+            return self
+        for index, spec in enumerate(filters):
+            if not isinstance(spec, dict):
+                continue
+            handler = spec.get("handler")
+            try:
+                declared = row_filter_binds(spec)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{self.dataset_id}: rowFilters[{index}] ({handler}): {exc}"
+                ) from exc
+            expected = HANDLER_BINDS.get(handler)
+            if expected is not None and declared != expected:
+                raise ValueError(
+                    f"{self.dataset_id}: rowFilters[{index}] ({handler}) declares "
+                    f"binds: {declared}, but {handler} binds {expected} — set "
+                    f"`binds: {expected}`"
+                )
+        return self
 
     @field_validator("backend_type")
     def check_backend_type(cls, v):

@@ -17,14 +17,19 @@ import rego.v1
 #       input.subject.roles   realm roles; "platform-admin" is the only
 #                             platform-wide grant
 #       input.subject.groups  groups held inside the caller's organizations
-#                             (never a realm group); "managers" and "viewers"
-#                             read internal datasets. An organization's
-#                             "admins" grants nothing here.
+#                             (never a realm group); "admins", "managers" and
+#                             "viewers" read internal datasets. Which
+#                             organization's rows is not decided here: the
+#                             dataset's row filter decides (organization_match).
+#
+# Resource:
+#   input.resource.attributes.row_scoped  the dataset declares a row filter,
+#                             member_wide included (GS-07)
 #
 # Access levels:
 #   - open: any authenticated subject can read
-#   - internal: services need scope; users need platform-admin, or managers or
-#     viewers in an organization (row filters still apply)
+#   - internal: services need scope; users need platform-admin, or a reading
+#     group in an organization AND a dataset that declares a row filter
 #   - restricted: requires the dataset.admin scope or the platform-admin role
 #
 # =============================================================================
@@ -195,36 +200,34 @@ reason := "internal dataset - platform-admin role granted" if {
     is_platform_admin
 }
 
-# Organization managers and viewers can read. Which organization is not
-# checked: whether an organization's group should reach only its own
-# organization's datasets is not decided yet; row filters narrow the rows.
+# An organization's reading group: admins read what managers read. Held in any
+# organization — the row filter, never this gate, decides whose rows (GS-06).
+reading_group := {"admins", "managers", "viewers"}
+
+is_organization_reader if {
+    is_user
+    some group in input.subject.groups
+    group in reading_group
+}
+
+# The dataset says whose rows it holds. Without that, nobody decided which
+# organization may read them, so no organization may (GS-07).
+is_row_scoped if {
+    input.resource.attributes.row_scoped == true
+}
+
 allow if {
     is_internal
-    is_user
-    "managers" in input.subject.groups
+    is_organization_reader
+    is_row_scoped
     input.action.name in ["query", "read"]
 }
 
-allow if {
-    is_internal
-    is_user
-    "viewers" in input.subject.groups
-    input.action.name in ["query", "read"]
-}
-
-reason := "internal dataset - manager group granted" if {
+reason := "internal dataset - organization group granted" if {
     allow
     is_internal
     not is_platform_admin
-    "managers" in input.subject.groups
-}
-
-reason := "internal dataset - viewer group granted" if {
-    allow
-    is_internal
-    not is_platform_admin
-    not "managers" in input.subject.groups
-    "viewers" in input.subject.groups
+    is_organization_reader
 }
 
 # =============================================================================
@@ -247,8 +250,16 @@ reason := "missing required scope" if {
     is_internal
 }
 
+reason := "internal dataset without a row filter - platform-admin or services only" if {
+    not allow
+    is_internal
+    is_organization_reader
+    not is_row_scoped
+}
+
 reason := "user not in authorized group" if {
     not allow
     is_user
     is_internal
+    not is_organization_reader
 }

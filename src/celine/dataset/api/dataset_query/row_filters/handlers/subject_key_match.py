@@ -33,6 +33,8 @@ class SubjectKeyMatchHandler:
     """
 
     name = "subject_key_match"
+    #: What this filter narrows rows to (celine-utils REQ-0010).
+    binds = "person"
 
     async def resolve(
         self,

@@ -39,6 +39,8 @@ Each clause below names its tests.
 | `subject_key_match` | `keys` | nothing — the column holds a data key, and `args.key_type` names which type | `column`, `key_type` |
 | `http_in_list` | — | the caller's own rows; refuses a delegated request | `column`, `url`; `method` (`GET`), `headers`, `params`, `json`, `response_path` (`$`), `timeout_seconds` (5), `max_items` (2000), `empty_means_deny` (true), `forward_token` (false) |
 | `table_pointer` | — | the caller's own rows; refuses a delegated request | `column`, `pointer_table`, `pointer_key_column`; `pointer_subject_column` (`user_id`) |
+| `organization_match` | — | the rows of the caller's organizations (GS-06 in [governance-security.md](governance-security.md)); refuses a delegated request; ds never sends it (`binds: organization`) | `column` or `org_type`, at least one |
+| `member_wide` | — | nothing — every row, declared on purpose (GS-07); refuses a delegated request; ds never sends it (`binds: organization`) | — |
 
 Args before a `;` are required. `http_in_list` formats its string args with
 `{sub}`, `{username}`, `{email}` and `{token}`.

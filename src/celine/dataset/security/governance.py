@@ -15,6 +15,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from celine.dataset.api.dataset_query.row_filters.specs import get_row_filter_specs
 from celine.dataset.security.audit import Refused
 from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
@@ -104,8 +105,9 @@ def _build_subject_from_user(user: Optional[AuthenticatedUser]) -> Subject:
 
     # Two levels, never one list: the platform level is the realm roles
     # (`input.subject.roles`, emitted by celine-sdk's engine), the organization
-    # level the groups held inside organizations. The top-level `groups` claim
-    # is not read, so a realm group grants nothing.
+    # level the groups held inside organizations — the policy's coarse gate
+    # only; which organization's rows is the row filter's (GS-06). The
+    # top-level `groups` claim is not read, so a realm group grants nothing.
     roles = platform_roles(user.claims)
     groups = organization_groups_held(user.claims)
 
@@ -219,6 +221,12 @@ async def enforce_dataset_access(
                 resource_attributes["governance"] = {
                     k: v for k, v in governance.items() if not k.startswith("_")
                 }
+
+        # Whether the dataset says whose rows it holds: any declared row filter,
+        # `member_wide` included. An organization's reader is admitted to an
+        # `internal` dataset only when it does (GS-07); its row filter then
+        # decides which organization's rows (GS-06).
+        resource_attributes["row_scoped"] = bool(get_row_filter_specs(entry))
 
         # Build subject
         subject = _build_subject_from_user(user)

@@ -4,9 +4,9 @@ Two levels, never mixed:
 
 - the realm role `platform-admin` (`realm_access.roles`) skips every row filter,
   reads `restricted` datasets and writes the catalogue;
-- an organization's own groups count only as organization groups: `managers`
-  and `viewers` read `internal` datasets, row-filtered; its `admins` grants
-  nothing here.
+- an organization's own groups count only as organization groups: `admins`,
+  `managers` and `viewers` read `internal` datasets, row-filtered, and only
+  datasets that declare a row filter (GS-07).
 
 A realm group (`groups: ["/admins"]`) or one of the retired realm roles
 (`admin`, `manager`, `viewer`) still present in a token grants nothing.
@@ -239,23 +239,49 @@ async def test_only_the_platform_admin_reads_a_restricted_dataset(client, test_s
     assert status == 403
 
 
-async def test_an_organization_admin_alone_grants_no_internal_read(client, test_session):
-    """`admins` inside an organization is not even a viewer here."""
+# @verifies GS-06
+async def test_an_organization_admin_alone_reads_like_a_manager(client, test_session):
+    """`admins` inside an organization reads what its `managers` read: row-filtered."""
     await _seed(test_session)
     _as(client, ORG_ADMIN)
+    # Its own rows only; `org-admin` has none here.
+    assert await _ids(client, f"SELECT id FROM {DATASET}") == (200, [])
+
+
+# @verifies GS-07
+@pytest.mark.parametrize(
+    "claims", [OPERATOR_A, ORG_ADMIN, ORG_VIEWER], ids=["org admins+viewers", "org admins", "org viewers"]
+)
+async def test_no_organization_reads_an_internal_dataset_without_a_row_filter(
+    client, test_session, claims
+):
+    await _seed(test_session)
+    _as(client, claims)
     status, _ = await _ids(client, f"SELECT id FROM {PLAIN}")
     assert status == 403
 
 
 @pytest.mark.parametrize(
     "claims",
-    [LEGACY_REALM_ADMIN, LEGACY_REALM_MANAGER, LEGACY_REALM_VIEWER],
-    ids=["realm /admins", "realm /managers", "realm /viewers"],
+    [LEGACY_REALM_MANAGER, LEGACY_REALM_VIEWER],
+    ids=["realm /managers", "realm /viewers"],
 )
 async def test_a_realm_group_grants_no_internal_read(client, test_session, claims):
     await _seed(test_session)
     _as(client, claims)
     for dataset in (PLAIN, DATASET):
+        status, _ = await _ids(client, f"SELECT id FROM {dataset}")
+        assert status == 403, dataset
+
+
+async def test_a_realm_admins_group_adds_nothing_to_an_organization_admins(
+    client, test_session
+):
+    """The legacy token's org `admins` reads its own rows; its realm `/admins` nothing more."""
+    await _seed(test_session)
+    _as(client, LEGACY_REALM_ADMIN)
+    assert await _ids(client, f"SELECT id FROM {DATASET}") == (200, [])
+    for dataset in (PLAIN, RESTRICTED):
         status, _ = await _ids(client, f"SELECT id FROM {dataset}")
         assert status == 403, dataset
 

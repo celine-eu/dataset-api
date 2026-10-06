@@ -9,6 +9,7 @@ from importlib.metadata import entry_points
 from typing import Any, Awaitable, Callable, Dict, Optional, Protocol
 
 from celine.dataset.core.config import get_settings
+from celine.sdk.auth import Grants
 from celine.dataset.security.models import AuthenticatedUser
 from celine.dataset.api.dataset_query.row_filters.cache import TTLCache
 from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
@@ -115,6 +116,7 @@ class RowFilterRegistry:
                 handler_name,
                 table,
                 sub,
+                self._organizations_key(user),
                 self._allow_list_key(principals, keys),
                 args_key,
             ]
@@ -162,6 +164,23 @@ class RowFilterRegistry:
 
         self.cache.set(key, plan, ttl_seconds=int(ttl))
         return plan
+
+    @staticmethod
+    def _organizations_key(user: AuthenticatedUser | None) -> str:
+        """The caller's organizations and the groups held in them, as a digest.
+
+        A plan from `organization_match` is the caller's organizations, not its
+        `sub`: a member released from a community gets a token without it, and a
+        plan cached from the previous token must not answer for the new one.
+        """
+        if user is None:
+            return "orgs:-"
+        grants = Grants.from_claims(dict(user.claims))
+        flat = "\x00".join(
+            f"{alias}\x01{','.join(sorted(grants.in_org(alias)))}"
+            for alias in grants.aliases
+        )
+        return "orgs:" + hashlib.sha256(flat.encode("utf-8")).hexdigest()[:16]
 
     @staticmethod
     def _allow_list_key(
@@ -247,6 +266,8 @@ def get_row_filter_registry() -> RowFilterRegistry:
     from celine.dataset.api.dataset_query.row_filters.handlers import (
         DirectUserMatchHandler,
         HttpInListHandler,
+        MemberWideHandler,
+        OrganizationMatchHandler,
         SubjectKeyMatchHandler,
         TablePointerHandler,
         RecRegistryHandler,
@@ -262,6 +283,8 @@ def get_row_filter_registry() -> RowFilterRegistry:
     reg.register(SubjectKeyMatchHandler())
     reg.register(TablePointerHandler())
     reg.register(RecRegistryHandler())
+    reg.register(OrganizationMatchHandler())
+    reg.register(MemberWideHandler())
 
     # Assign before loading external modules so they can call
     # get_row_filter_registry() to register their own handlers.
