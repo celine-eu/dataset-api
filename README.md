@@ -236,7 +236,9 @@ The suite refuses to run destructive setup against any database whose name does 
 in `_test`, or which is the one `DATABASE_URL` or `DATASETS_DATABASE_URL` points at
 (`tests/testdb.py`). The SQL parser tests need no database. The process e2e in
 `tests/e2e` runs with `DATASET_API_E2E=1` and creates, then drops, two more `*_test`
-databases on the same server.
+databases on the same server. `tests/e2e/test_organization_matrix_live.py` instead reads a
+running instance with real tokens, and skips until its `ORG_E2E_*` variables name them (see
+its docstring); it writes nothing.
 
 **One test database per server, so run one suite at a time.** Every run on a server uses
 the same `*_test` database and its fixtures drop and recreate the catalogue schema on every

@@ -382,7 +382,8 @@ The platform administrator and a service admitted by scope are not narrowed by
 organization is not a consenting subject.
 
 Tests: `tests/routes/test_organization_scoping.py`,
-`tests/routes/test_platform_admin_role.py`.
+`tests/routes/test_platform_admin_role.py`; against a running stack with two
+communities and real tokens, `tests/e2e/test_organization_matrix_live.py`.
 
 #### GS-07 — An `internal` dataset that declares no row filter is closed to organizations
 

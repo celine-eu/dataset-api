@@ -247,6 +247,8 @@ Tests: `tests/api/dataset_query/test_rec_registry_self_service.py` — a caller
 with no assets, and a caller whose only assets have no sensor id, each answered
 with a deny that renders no `IN` and executes to no rows; metered assets still
 narrow to their sensor ids; no answer and a registry failure stay errors.
+Against a running stack, `tests/e2e/test_organization_matrix_live.py`: an organization
+viewer or manager who owns no meter reads no row of any device-grain dataset.
 
 ### RF-12 — A caller who is no registry member gets no rows
 
