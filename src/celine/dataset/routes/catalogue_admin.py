@@ -43,6 +43,35 @@ async def postgres_table_exists_via_reflection(
         return False
 
 
+def _row_filters(ds) -> list:
+    """The governance row filters an entry declares, as the query path reads them."""
+    facets = (ds.lineage.facets if ds.lineage else None) or {}
+    governance = facets.get("governance") or {}
+    filters = governance.get("rowFilters") or governance.get("row_filters") or []
+    return filters if isinstance(filters, list) else []
+
+
+def _missing_filter_columns(ds, table) -> list[str]:
+    """A refusal per row filter whose `args.column` the physical table lacks (GS-09).
+
+    Such a filter would answer 400 at query time, and only to the callers it narrows
+    (an organization's reader, a person); services and the platform administrator
+    emit no predicate and stay green. A filter that names no column is not checked.
+    """
+    columns = {c.name for c in table.columns}
+    refusals = []
+    for index, spec in enumerate(_row_filters(ds)):
+        if not isinstance(spec, dict):
+            continue
+        column = (spec.get("args") or {}).get("column")
+        if column and column not in columns:
+            refusals.append(
+                f"{ds.dataset_id}: rowFilters[{index}] ({spec.get('handler')}) names "
+                f"column '{column}', which {table.schema}.{table.name} does not have"
+            )
+    return refusals
+
+
 async def _cleanup_entries(
     db: AsyncSession,
     *,
@@ -112,6 +141,10 @@ async def import_catalogue(
     updated = 0
     validated_tables: set[str] = set()
 
+    # Every entry is checked before anything is written: a refused import changes
+    # nothing — no create, no update, no stale-entry removal (GS-09).
+    accepted = []
+    refusals: list[str] = []
     for ds in body.datasets:
 
         # The table the entry would be queried through, stated or derived from
@@ -122,14 +155,27 @@ async def import_catalogue(
             ds.backend_config.model_dump() if ds.backend_config else None,
         )
         if table is not None:
-            if not await postgres_table_exists_via_reflection(datasets_db, table):
+            try:
+                reflected = await reflect_table_async(datasets_db, table)
+            except Exception:
                 logger.info(
                     "Skipping dataset %s: postgres table %s does not exist",
                     ds.dataset_id,
                     table,
                 )
                 continue
+            refusals.extend(_missing_filter_columns(ds, reflected))
             validated_tables.add(table)
+        accepted.append(ds)
+
+    if refusals:
+        logger.warning("Catalogue import refused: %s", "; ".join(refusals))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=refusals,
+        )
+
+    for ds in accepted:
 
         # An entry that states no level is `internal`, stored as such, so the
         # catalogue, its search and the query path all read the same level.

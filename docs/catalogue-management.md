@@ -98,6 +98,11 @@ path would use. A dataset whose table does not exist is skipped (logged server-s
 reported in the response). Column schema is not stored: `GET
 /catalogue/{id}/schema` reflects it on request.
 
+Every row filter's `args.column` must be a column of that table: an import naming a
+column the table lacks is refused with `422`, listing each such filter, and changes
+nothing — no create, update or cleanup ([GS-09](governance-security.md)). A filter's
+`binds` must agree with its handler (GS-08).
+
 ---
 
 ## Selection & Filters
@@ -185,7 +190,8 @@ and refusing".
 
 An audit, on request. It is deliberately **not**:
 
-- a **gate** — `POST /admin/catalogue` does not validate and does not refuse an import;
+- a **gate** — `POST /admin/catalogue` does not check conformance and does not refuse an
+  import over it;
 - a **filter** — no row is ever dropped from `/query` because of a violation. A result
   that depended on shape conformance would be indistinguishable, to the consumer, from
   a small one;

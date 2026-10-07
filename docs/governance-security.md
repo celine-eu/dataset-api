@@ -369,7 +369,7 @@ A person reads an `internal` dataset through an organization when they hold
 `admins`, `managers` or `viewers` inside it. Which rows is the dataset's row
 filter (`binds: organization`, GS-08): `organization_match` with `column` serves the rows whose column holds the
 alias of an organization the caller reads in, and nothing else. The column holds
-organization aliases **by convention** (a REC's `rec_id` is its organization's
+organization aliases **by convention** (a REC's `community_id` is its organization's
 alias); no mapping is applied, so a value in another vocabulary matches nobody.
 With `org_type` alone it serves every row to a reader in any organization of that
 type (`dso`), and with both it does both. A caller who reads in no matching
@@ -415,6 +415,25 @@ organization filter left unmarked over-gates a contract-only dataset.
 
 Tests: `tests/routes/test_import_row_filter_binds.py`.
 
+#### GS-09 — A row filter names a column its table has
+
+`POST /admin/catalogue` refuses with `422` a row filter whose `args.column` is not a
+column of the dataset's physical table, naming the dataset, the filter, the column and
+the table; every such filter of the import is named at once. A filter that names no
+column (`member_wide`, `organization_match` with `org_type` alone) is not checked, and
+neither is an entry whose table does not exist (it is skipped, as before).
+
+A refused import changes nothing: no entry is created or updated, and no stale entry is
+removed. Every entry is checked before the first write.
+
+Without it, a filter on a missing column answers `400` at query time, and only to the
+callers it narrows: a service and the platform administrator emit no predicate, so the
+service paths stay green while every organization reader or person is refused. A
+governance release that renames a filter column must therefore reach the catalogue in
+the same step as the table's migration, and the import is what holds that order.
+
+Tests: `tests/routes/test_import_row_filter_column.py`.
+
 The query engine never logs a statement's literals: wherever it logs SQL it logs the
 statement's shape, every literal replaced by `?` (QE-03 in
 [query-engine.md](query-engine.md#logging)). On a dataspace request the completed SQL is
@@ -433,7 +452,7 @@ specification, with clauses and tests:
 [dataspace-row-filters.md](dataspace-row-filters.md).
 
 Whose rows an organization's reader gets is GS-06; an `internal` dataset with no
-row filter at all is GS-07; what a filter binds is GS-08.
+row filter at all is GS-07; what a filter binds is GS-08; the column it names is GS-09.
 
 **A service account is not narrowed by `rec_registry`** or `organization_match` on the normal API path: it
 is not a registry member, and once the policy has admitted it the whole table is

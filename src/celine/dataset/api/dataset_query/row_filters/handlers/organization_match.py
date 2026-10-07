@@ -19,7 +19,7 @@ class OrganizationMatchHandler:
     Governance args (at least one):
       - column: str — the column holding the organization a row belongs to. Its
         values **are** Keycloak organization aliases, by convention: a REC's
-        `rec_id` is its organization's alias, as rec-registry's community key is.
+        `community_id` is its organization's alias, as rec-registry's community key is.
         No mapping is applied, so a column in another vocabulary narrows to
         nothing rather than to the wrong organization.
       - org_type: str — only organizations of this type (`dso`, `rec`) count.

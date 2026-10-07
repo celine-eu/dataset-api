@@ -107,7 +107,7 @@ Row-level filtering via the pluggable governance handler registry. Seven built-i
 - `organization_match` — the rows of the caller's organizations: `column` holds organization aliases; `org_type` limits to one type (`dso`). Declared `binds: organization`
 - `member_wide` — every row, declared on purpose for data meant for every member of every organization. Declared `binds: organization`
 
-Each filter's `binds` (`person` by default, or `organization`) must agree with its handler; the catalogue import refuses one that does not (GS-08)
+Each filter's `binds` (`person` by default, or `organization`) must agree with its handler; the catalogue import refuses one that does not (GS-08), and a filter whose `column` its table lacks (GS-09)
 
 Further handlers can be registered through `ROW_FILTERS_MODULES` or the `celine.dataset.row_filters` entry-point group (see `celine.dataset.ext`).
 

@@ -38,7 +38,10 @@ async def _import(client, entry: dict):
 
 @pytest.fixture
 async def table(test_session):
-    await test_session.execute(text("CREATE TABLE dataset_api.gs08 (id INTEGER)"))
+    # Every column a filter below names: a missing one is refused by GS-09.
+    await test_session.execute(
+        text("CREATE TABLE dataset_api.gs08 (id INTEGER, device_id TEXT, community_id TEXT, u TEXT, d TEXT)")
+    )
     await test_session.commit()
 
 
@@ -60,7 +63,7 @@ def test_every_built_in_handler_declares_what_it_binds():
     [
         {"handler": "rec_registry", "args": {"column": "device_id"}},
         {"handler": "rec_registry", "binds": "person", "args": {"column": "device_id"}},
-        {"handler": "organization_match", "binds": "organization", "args": {"column": "rec_id"}},
+        {"handler": "organization_match", "binds": "organization", "args": {"column": "community_id"}},
         {"handler": "member_wide", "binds": "organization"},
         # Another package's handler: only a readable value is required.
         {"handler": "plugin_handler", "binds": "organization", "args": {}},
@@ -77,7 +80,7 @@ async def test_a_binds_that_agrees_with_its_handler_imports(client, table, row_f
     "row_filter, expected",
     [
         # The flag forgotten on an organization filter: read as person.
-        ({"handler": "organization_match", "args": {"column": "rec_id"}}, "organization"),
+        ({"handler": "organization_match", "args": {"column": "community_id"}}, "organization"),
         ({"handler": "member_wide"}, "organization"),
         # A person filter marked as an organization's: would un-gate personal data.
         ({"handler": "rec_registry", "binds": "organization", "args": {"column": "d"}}, "person"),
