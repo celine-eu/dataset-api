@@ -2,6 +2,80 @@
 
 <!-- version list -->
 
+## v1.10.0 (2026-10-08)
+
+### Bug Fixes
+
+- Add alembic shim
+  ([`84d8512`](https://github.com/celine-eu/dataset-api/commit/84d85126e37f6d58f68d3eb8bf8f6b6ebc64ea50))
+
+- Correct DID comments
+  ([`4513dcc`](https://github.com/celine-eu/dataset-api/commit/4513dccef5a4e5f72d4f7e2276749e36b6a0e371))
+
+- Extend filtering words, fix aggregation construct bug
+  ([`2a0e0a6`](https://github.com/celine-eu/dataset-api/commit/2a0e0a622dc7300d8d8e4b7a5d76b81ab7650d3e))
+
+- Improve docs, fix error return codes
+  ([`ccb8d12`](https://github.com/celine-eu/dataset-api/commit/ccb8d1208002d328cd92f1fc92c17c4970889918))
+
+- Resolve table references per scope in the query parser
+  ([`66c0292`](https://github.com/celine-eu/dataset-api/commit/66c02929a0c414434f174a9bf6f2fa788d5ae5cb))
+
+- Write one audit record per dataset read
+  ([`d059870`](https://github.com/celine-eu/dataset-api/commit/d059870cb02c26a9b982cd890596d1ad6cf880f7))
+
+### Chores
+
+- Upgrade celine-sdk to 2.0.0
+  ([`efc6381`](https://github.com/celine-eu/dataset-api/commit/efc6381d31f40f06ad69b1e22f70eb310b04ded0))
+
+### Documentation
+
+- Up readme
+  ([`56abfdc`](https://github.com/celine-eu/dataset-api/commit/56abfdc7277917020d51616c535b28933156a0e0))
+
+- Update code docs
+  ([`f4ab05a`](https://github.com/celine-eu/dataset-api/commit/f4ab05a958c72606f42d9fd0d50ef9e30824da5c))
+
+### Features
+
+- Add EDS layer
+  ([`24ebdc8`](https://github.com/celine-eu/dataset-api/commit/24ebdc876d1e47eb5a9f5a5f6be540170416a0ea))
+
+- An organization reads only its own rows; an unscoped internal dataset is closed to organizations
+  ([`3a34bcc`](https://github.com/celine-eu/dataset-api/commit/3a34bcc72d3e277969836f71e30acb50d2c3c2a8))
+
+- Audit dataset reads and refusals, serve api docs in dev only
+  ([`7089f50`](https://github.com/celine-eu/dataset-api/commit/7089f50b20e4dea15adaa60e9e0ddbab69bf4678))
+
+- Carry the connector's decision_ref into the audit record and QueryExecuted
+  ([`8f33d71`](https://github.com/celine-eu/dataset-api/commit/8f33d71c0feb5e7f093a681c61adbc623825f923))
+
+- Improve row filter, review allowlist funcitons
+  ([`a1e5b9a`](https://github.com/celine-eu/dataset-api/commit/a1e5b9aea495d1d71180b9a08a0469b38521c640))
+
+- Review auth on EDS
+  ([`bc665b5`](https://github.com/celine-eu/dataset-api/commit/bc665b523e838a58c5185fdcb35621a8316e22c9))
+
+- Review governance
+  ([`b6a5506`](https://github.com/celine-eu/dataset-api/commit/b6a550636cdf5e264a0756c8f6013b29aae9bd3d))
+
+- The catalogue import refuses a row filter naming a column its table lacks, and a refused import
+  changes nothing
+  ([`9dc1f4c`](https://github.com/celine-eu/dataset-api/commit/9dc1f4c9861cda5726d035bfe75a8e92cd4aab99))
+
+### Testing
+
+- Accept any celine-sdk floor from 1.21.0 up, and drop the release TODOs now that 2.0.0 ships them
+  ([`c1b4875`](https://github.com/celine-eu/dataset-api/commit/c1b48750aede6167cff0b1e0422159b57ed16c36))
+
+- Add multi instance tests
+  ([`e799e04`](https://github.com/celine-eu/dataset-api/commit/e799e04e526b99c5949f430075c67ae3f2fb7fc2))
+
+- The organization matrix against a running instance, two communities and real tokens
+  ([`dbe9fb6`](https://github.com/celine-eu/dataset-api/commit/dbe9fb69748eacfd6c03089864261ff39405803f))
+
+
 ## v1.9.0 (2026-09-09)
 
 ### Bug Fixes
