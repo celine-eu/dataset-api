@@ -121,3 +121,20 @@ def test_a_dry_run_needs_no_token(
     result = _run(catalogue, "--dry-run")
     assert result.exit_code == 0, result.output
     assert recorder.headers == []
+
+
+def test_a_refusal_prints_the_response_body(
+    catalogue: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    detail = '{"detail":["datasets.ds_dev_gold.thing: rowFilters[0] names column \'x\'"]}'
+
+    class _Refusing(_Recorder):
+        def raise_for_status(self) -> None:
+            request = mod.httpx.Request("POST", "http://catalogue.invalid/admin/catalogue")
+            response = mod.httpx.Response(422, text=detail, request=request)
+            raise mod.httpx.HTTPStatusError("422", request=request, response=response)
+
+    monkeypatch.setattr(mod.httpx, "Client", _Refusing())
+    result = _run(catalogue, "--token", "tok")
+    assert result.exit_code == 1
+    assert detail in result.output

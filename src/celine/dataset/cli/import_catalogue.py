@@ -350,6 +350,12 @@ def import_catalogue(
                 url, json=payload, headers={"Authorization": f"Bearer {bearer}"}
             )
             resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # The body says which dataset was refused and why (a 422 names each one);
+        # the status line alone does not.
+        typer.echo(f"Error importing catalogue: {exc}", err=True)
+        typer.echo(exc.response.text, err=True)
+        raise typer.Exit(code=1)
     except Exception as exc:
         typer.echo(f"Error importing catalogue: {exc}", err=True)
         raise typer.Exit(code=1)
