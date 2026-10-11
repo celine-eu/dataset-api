@@ -26,8 +26,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 import yaml
 from typer.testing import CliRunner
@@ -84,7 +86,13 @@ class _Recorder:
 @pytest.fixture()
 def posted(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     store: list[dict] = []
-    monkeypatch.setattr(mod.httpx, "Client", _Recorder(store))
+    # The module's own `httpx` name, not the shared `httpx.Client`: patching the
+    # real module breaks whatever imports httpx later in the run.
+    monkeypatch.setattr(
+        mod,
+        "httpx",
+        SimpleNamespace(Client=_Recorder(store), HTTPStatusError=httpx.HTTPStatusError),
+    )
     return store
 
 

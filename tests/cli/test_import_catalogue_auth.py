@@ -6,8 +6,10 @@ token for this service's own OIDC client. With neither, nothing is sent.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 import yaml
 from typer.testing import CliRunner
@@ -39,10 +41,19 @@ class _Recorder:
         return None
 
 
+def _stub_httpx(monkeypatch: pytest.MonkeyPatch, client: Any) -> None:
+    # The module's own `httpx` name, not the shared `httpx.Client`: patching the
+    # real module breaks whatever imports httpx later in the run (celine-sdk's
+    # generated clients evaluate `httpx.Client | None` at import).
+    monkeypatch.setattr(
+        mod, "httpx", SimpleNamespace(Client=client, HTTPStatusError=httpx.HTTPStatusError)
+    )
+
+
 @pytest.fixture()
 def recorder(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
     rec = _Recorder()
-    monkeypatch.setattr(mod.httpx, "Client", rec)
+    _stub_httpx(monkeypatch, rec)
     monkeypatch.delenv("DATASET_API_TOKEN", raising=False)
     return rec
 
@@ -130,11 +141,11 @@ def test_a_refusal_prints_the_response_body(
 
     class _Refusing(_Recorder):
         def raise_for_status(self) -> None:
-            request = mod.httpx.Request("POST", "http://catalogue.invalid/admin/catalogue")
-            response = mod.httpx.Response(422, text=detail, request=request)
-            raise mod.httpx.HTTPStatusError("422", request=request, response=response)
+            request = httpx.Request("POST", "http://catalogue.invalid/admin/catalogue")
+            response = httpx.Response(422, text=detail, request=request)
+            raise httpx.HTTPStatusError("422", request=request, response=response)
 
-    monkeypatch.setattr(mod.httpx, "Client", _Refusing())
+    _stub_httpx(monkeypatch, _Refusing())
     result = _run(catalogue, "--token", "tok")
     assert result.exit_code == 1
     assert detail in result.output
