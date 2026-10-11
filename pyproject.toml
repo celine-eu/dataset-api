@@ -36,7 +36,7 @@ dependencies = [
     # all of which 2.0.0 introduces; every 1.x fails that import or drops
     # input.subject.roles. 2.0.0 also ships celine.sdk.audit and
     # celine.sdk.posture.docs_urls (security/audit.py, main.py import both).
-    "celine-sdk>=2.0.0",
+    "celine-sdk>=2.0.1",
     "fastapi>=0.139.0",
     "geoalchemy2>=0.19.0",
     "httpx>=0.28.1",
@@ -47,8 +47,8 @@ dependencies = [
     "rdflib>=7.5.0",
     "sqlalchemy>=2.0.44",
     "sqlglot>=30.6.0",
-    "sqlmodel>=0.0.27",
-    "typer>=0.20.0",
+    "sqlmodel>=0.0.48",
+    "typer>=0.27.3",
     # Imported directly: the EDR token check (`security/edr.py`) and the DPS
     # pull token (`dps/tokens.py`, ES256). It used to arrive only through
     # celine-sdk.
