@@ -87,8 +87,8 @@ You should avoid “god tokens” unless policy explicitly supports it.
 
 The Dataset API is the Policy Enforcement Point. Policies are evaluated
 **in-process** by the celine-sdk policy engine (regorus); there is no OPA server.
-The engine loads every `.rego` file under `POLICIES_DIR` (default `./policies`,
-optional data in `POLICIES_DATA_DIR`) once per process, so a policy change needs a
+The engine loads every `.rego` file under `CELINE_POLICIES_DIR` (default `./policies`,
+optional data in `CELINE_POLICIES_DATA_DIR`) once per process, so a policy change needs a
 restart.
 
 ### Decision flow
@@ -101,7 +101,7 @@ restart.
 5. API enforces the result: a deny is `403` with the policy's `reason`; an engine
    that cannot load or evaluate is `503`
 
-Decisions are cached in memory when `POLICIES_CACHE_ENABLED` is true (the default).
+Decisions are cached in memory when `CELINE_POLICIES_CACHE_ENABLED` is true (the default).
 
 ### Policy input shape
 
@@ -468,10 +468,10 @@ the person's token. The order the handler decides in is in
 | Variable | Default | Purpose |
 |---|---|---|
 | `POLICIES_CHECK_ENABLED` | `true` | evaluate policies; `false` admits any authenticated caller |
-| `POLICIES_DIR` | `./policies` | `.rego` files loaded at start |
-| `POLICIES_DATA_DIR` | unset | policy data |
+| `CELINE_POLICIES_DIR` | `./policies` | `.rego` files loaded at start |
+| `CELINE_POLICIES_DATA_DIR` | unset | policy data |
 | `POLICIES_PACKAGE` | `celine.dataset` | package whose `allow`/`reason` are evaluated |
-| `POLICIES_CACHE_ENABLED` | `true` | cache decisions in memory |
+| `CELINE_POLICIES_CACHE_ENABLED` | `true` | cache decisions in memory |
 | `EDR_ENABLED` | `false` | accept dataspace (EDR) requests |
 | `CONNECTOR_INTERNAL_URL` | unset | the ds-connector, single-connector deployments |
 | `CONNECTOR_INTERNAL_URLS` | `{}` | JSON map provider (`iss`) → ds-connector URL |

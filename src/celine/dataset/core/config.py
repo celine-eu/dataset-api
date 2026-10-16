@@ -11,7 +11,7 @@ from pydantic import AnyUrl, HttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from celine.sdk.posture import DEV, current_env
-from celine.sdk.settings.models import OidcSettings
+from celine.sdk.settings.models import OidcSettings, PoliciesSettings
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,11 @@ def _oidc_settings() -> OidcSettings:
     if not oidc.audience:
         oidc = oidc.model_copy(update={"audience": DEFAULT_OIDC_AUDIENCE})
     return oidc
+
+
+def _policies_settings() -> PoliciesSettings:
+    # `.env` too, for the reason `_oidc_settings` gives.
+    return PoliciesSettings(_env_file=".env", _env_file_encoding="utf-8")
 
 
 def _without_posture(source):
@@ -138,24 +143,14 @@ class Settings(BaseSettings):
         default=True, description="Enable policy-based authorization"
     )
 
-    # Policy engine settings (replaces api_url + "/policies")
-    policies_dir: Path = Field(
-        default=Path("./policies"),
-        description="Directory containing .rego policy files",
-    )
-    policies_data_dir: Path | None = Field(
-        default=None, description="Optional directory containing policy data JSON files"
-    )
+    # The bundle and its decision cache: the platform's CELINE_POLICIES_DIR,
+    # _DATA_DIR and _CACHE_*, read by the SDK as every other service reads them.
+    policies: PoliciesSettings = Field(default_factory=lambda: _policies_settings())
 
     # Policy package to evaluate
     policies_package: str = Field(
         default="celine.dataset",
         description="Policy package to evaluate for dataset authorization",
-    )
-
-    # Cache settings
-    policies_cache_enabled: bool = Field(
-        default=True, description="Enable in-memory decision caching"
     )
 
     # =============================================================================

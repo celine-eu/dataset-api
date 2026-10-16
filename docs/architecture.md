@@ -33,7 +33,7 @@ The API is not an ingestion tool. Pipelines produce data; the Dataset API govern
 
 - **Physical storage**: PostgreSQL — a catalogue database (`DATABASE_URL`, schema
   `dataset_api`) and the warehouse the datasets live in (`DATASETS_DATABASE_URL`)
-- **Authorization**: Rego policies in `POLICIES_DIR`, evaluated in-process
+- **Authorization**: Rego policies in `CELINE_POLICIES_DIR`, evaluated in-process
   (celine-sdk policy engine)
 - **Identity provider**: OIDC, issues JWTs (users + service accounts)
 - **Lineage backend**: Marquez, read by the CLI (`export openlineage`)

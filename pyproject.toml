@@ -36,7 +36,7 @@ dependencies = [
     # all of which 2.0.0 introduces; every 1.x fails that import or drops
     # input.subject.roles. 2.0.0 also ships celine.sdk.audit and
     # celine.sdk.posture.docs_urls (security/audit.py, main.py import both).
-    "celine-sdk>=2.0.0",
+    "celine-sdk>=2.1.1",
     "fastapi>=0.139.0",
     "geoalchemy2>=0.19.0",
     "httpx>=0.28.1",

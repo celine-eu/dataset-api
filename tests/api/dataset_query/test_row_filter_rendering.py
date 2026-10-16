@@ -90,3 +90,67 @@ def test_a_plan_for_another_table_does_not_filter():
     )
 
     assert sqlglot.parse_one(rendered, read="postgres").find(exp.Where) is None
+
+
+
+# A deny empties the whole statement, whichever SELECT the denied table is in.
+# Only the first SELECT used to get the FALSE. The parser forbids set operations,
+# so today that first SELECT encloses everything and the statement was empty all
+# the same; under a UNION it is the left branch, and the denied table in the
+# right branch was served in full. The UNION cases build the AST directly for
+# that reason: they guard the applier, not the parser (RF-05).
+
+OTHER_LOGICAL = "datasets.ds_dev_gold.weather_15m"
+OTHER_PHYSICAL = "ds_dev_gold.weather_15m"
+
+
+def _deny(table: str = PHYSICAL) -> RowFilterPlan:
+    return RowFilterPlan(table=table, kind="deny")
+
+
+def _every_select_is_false(ast: exp.Expression) -> bool:
+    selects = list(ast.find_all(exp.Select))
+    return bool(selects) and all(
+        isinstance(s.args.get("where"), exp.Where)
+        and any(b.this is False for b in s.args["where"].find_all(exp.Boolean))
+        for s in selects
+    )
+
+
+def _denied_raw(sql: str) -> exp.Expression:
+    ast = sqlglot.parse_one(sql, read="postgres")
+    rendered = apply_row_filter_plans(ast, [_deny()]).sql(dialect="postgres")
+    return sqlglot.parse_one(rendered, read="postgres")
+
+
+def _denied(sql: str) -> exp.Expression:
+    parsed = parse_sql_query(sql)
+    mapped = parsed.to_ast(tables_map={LOGICAL: PHYSICAL, OTHER_LOGICAL: OTHER_PHYSICAL})
+    rendered = apply_row_filter_plans(mapped, [_deny()]).sql(dialect="postgres")
+    return sqlglot.parse_one(rendered, read="postgres")
+
+
+def test_a_deny_reaches_the_second_branch_of_a_union():
+    ast = _denied_raw(
+        f"SELECT ts FROM {OTHER_PHYSICAL} UNION ALL SELECT ts FROM {PHYSICAL}"
+    )
+
+    assert _every_select_is_false(ast)
+
+
+def test_a_deny_reaches_a_union_inside_a_cte():
+    ast = _denied_raw(
+        f"WITH u AS (SELECT ts FROM {OTHER_PHYSICAL} UNION SELECT ts FROM {PHYSICAL}) "
+        "SELECT COUNT(*) FROM u"
+    )
+
+    assert _every_select_is_false(ast)
+
+
+def test_a_deny_reaches_every_select_of_an_admitted_query():
+    ast = _denied(
+        f"WITH d AS (SELECT ts FROM {LOGICAL}) "
+        f"SELECT o.ts FROM {OTHER_LOGICAL} o WHERE o.ts IN (SELECT ts FROM d)"
+    )
+
+    assert _every_select_is_false(ast)

@@ -150,8 +150,14 @@ nobody). Reading `[]` as self-service is how a decision that named no member
 came to be answered with every row in the table, through `rec_registry`'s
 service-account bypass. ds can send that shape now, because a decision may name
 its subjects by key alone.
+
+A plan that narrows to nothing is a `deny`, and a `deny` empties the **whole
+statement**: `FALSE` goes into every `SELECT` in it, not only the outermost. The
+parser forbids set operations today, so the outermost one encloses everything;
+under a `UNION` it would be one branch of several.
 Tests: `tests/api/dataset_query/test_delegated_allow_lists.py`,
-`tests/api/dataset_query/test_subject_key_match.py`.
+`tests/api/dataset_query/test_subject_key_match.py`,
+`tests/api/dataset_query/test_row_filter_rendering.py`.
 
 ### RF-06 — A handler this data plane cannot apply refuses the request
 

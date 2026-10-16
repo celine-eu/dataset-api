@@ -58,15 +58,15 @@ def _get_policy_engine() -> Optional[CachedPolicyEngine]:
         try:
             # Create base engine
             engine = PolicyEngine(
-                policies_dir=get_settings().policies_dir,
-                data_dir=get_settings().policies_data_dir,
+                policies_dir=get_settings().policies.policies_dir,
+                data_dir=get_settings().policies.policies_data_dir,
             )
             engine.load()
 
             # Wrap with cache
             _policy_engine = CachedPolicyEngine(
                 engine=engine,
-                enabled=get_settings().policies_cache_enabled,
+                enabled=get_settings().policies.policies_cache_enabled,
             )
 
             logger.info(

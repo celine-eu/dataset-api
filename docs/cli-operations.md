@@ -10,7 +10,7 @@ The Dataset API is immutable from the perspective of clients.
 All changes happen through controlled workflows:
 - pipelines change physical data
 - CLI imports catalogue metadata and reconciles state
-- policies are `.rego` files in `POLICIES_DIR`, loaded at start (restart to apply
+- policies are `.rego` files in `CELINE_POLICIES_DIR`, loaded at start (restart to apply
   changes)
 
 This prevents “clickops” drift.

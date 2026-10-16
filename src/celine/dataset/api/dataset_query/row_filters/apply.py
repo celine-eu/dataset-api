@@ -61,15 +61,14 @@ def apply_row_filter_plans(ast: exp.Expression, plans: Iterable[RowFilterPlan]) 
 
     out = ast.copy()
 
-    # If any plan is deny -> inject FALSE predicate at top-level
-    for ps in plans_by_table.values():
-        for p in ps:
-            if p.kind == "deny":
-                top = out.find(exp.Select)
-                if top is None:
-                    return out
-                _add_where(top, exp.Boolean(this=False))
-                return out
+    # Any deny empties the whole statement: FALSE goes into **every** SELECT.
+    # Only the first one used to get it, and under a UNION that is the left
+    # branch — `SELECT … FROM a WHERE FALSE UNION ALL SELECT … FROM b` served
+    # all of the denied `b`.
+    if any(p.kind == "deny" for ps in plans_by_table.values() for p in ps):
+        for select in list(out.find_all(exp.Select)):
+            _add_where(select, exp.Boolean(this=False))
+        return out
 
     for select in out.find_all(exp.Select):
         tables = _tables_in_select(select)
