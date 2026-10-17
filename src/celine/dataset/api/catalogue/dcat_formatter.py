@@ -91,19 +91,38 @@ def _build_agent_node(
     return {"@id": uri}
 
 
+def _narrows_by_person(gov: dict[str, Any]) -> bool:
+    from celine.governance import LAYER_HANDLERS, row_filter_binds
+
+    filters = gov.get("rowFilters") or gov.get("row_filters") or []
+    if not isinstance(filters, list):
+        return False
+    for spec in filters:
+        if not isinstance(spec, dict) or spec.get("handler") in LAYER_HANDLERS:
+            continue
+        try:
+            if row_filter_binds(spec) == "person":
+                return True
+        except ValueError:
+            # Unreadable: the import refuses it (GS-08); advertise the stricter offer.
+            return True
+    return False
+
+
 def _build_odrl_offer(entry_uri: str, entry: DatasetEntry) -> dict[str, Any]:
     """Build a minimal ODRL Offer derived from access_level + governance facet.
 
     - open:       no constraints
     - internal:   ds:accessScope eq dataspaces.query
     - restricted: ds:accessScope eq dataspaces.query + ds:consentStatus eq active
-    consent_required also adds ds:consentStatus when set via governance facet.
+    consent_required also adds ds:consentStatus when set via governance facet,
+    and so does a row filter binding a person — other than `allow_all`/`deny_all`,
+    which name nobody. An organization filter is not a consent signal: it used to
+    add the constraint too, advertising consent ds never asked for (GS-10).
     """
     level = entry.access_level or "internal"
     gov = _gov_facet(entry)
-    consent_required = bool(
-        gov.get("rowFilters") or gov.get("consentRequired")
-    )
+    consent_required = bool(_narrows_by_person(gov) or gov.get("consentRequired"))
 
     constraints: list[dict[str, Any]] = []
     if level in ("internal", "restricted"):

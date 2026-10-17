@@ -18,7 +18,7 @@ from celine.dataset.db.models.dataset_entry import DatasetEntry
 from celine.dataset.db.reflection import reflect_table_async
 from celine.dataset.core.datasets import load_dataset_entry, physical_table
 from celine.dataset.security.audit import ReadAudit, Refused
-from celine.dataset.security.disclosure import is_available
+from celine.dataset.security.disclosure import AccessLevel, is_available
 from celine.dataset.security.governance import (
     enforce_dataset_access,
     resolve_datasets_for_tables,
@@ -35,13 +35,16 @@ from celine.dataset.api.dataset_query.pagination import (
     paginated_sql as build_paginated_sql,
 )
 from celine.dataset.api.dataset_query.row_filters import (
+    RowFilterSpecError,
     apply_row_filter_plans,
     get_row_filter_registry,
     get_row_filter_specs,
+    split_layers,
 )
 from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
 from celine.dataset.api.dataset_query.row_filters.utils import is_admin_user
 from celine.dataset.core.config import get_settings
+from celine.governance import ALLOW_ALL, DENY_ALL
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +65,58 @@ def _clamp_limit(limit: int) -> int:
     if limit <= 0:
         return DEFAULT_LIMIT
     return min(limit, MAX_LIMIT)
+
+
+def _check_row_policy(
+    ds: DatasetEntry,
+    ref_table: str,
+    layers: Dict[str, List[dict]],
+    audit: ReadAudit | None,
+) -> None:
+    """The row policy's two layers, before any handler runs (GS-10).
+
+    A layer carrying `deny_all` refuses the dataset: `403 row_policy_denied`. A
+    layer with nothing declared admits every row on an `open` dataset and is
+    otherwise `ROW_FILTERS_DEFAULT`: `deny` refuses with
+    `403 row_policy_undeclared`; `allow` serves it, and says so in the log and
+    the audit record under the same reason — the report-only mode.
+    """
+    for layer, specs in layers.items():
+        if any(spec["handler"] == DENY_ALL for spec in specs):
+            raise Refused(
+                403,
+                f"Dataset {ref_table}: its {layer} row policy admits no row",
+                reason="row_policy_denied",
+            )
+
+    try:
+        is_open = AccessLevel.from_value(ds.access_level) is AccessLevel.OPEN
+    except ValueError:
+        is_open = False  # unreachable: `enforce_dataset_access` refused it
+    undeclared = [layer for layer, specs in layers.items() if not specs]
+    if not undeclared or is_open:
+        return
+
+    what = " and ".join(undeclared)
+    if get_settings().row_filters_default == "deny":
+        logger.warning(
+            "Dataset %s declares no %s row policy — refused (ROW_FILTERS_DEFAULT=deny)",
+            ds.dataset_id,
+            what,
+        )
+        raise Refused(
+            403,
+            f"Dataset {ref_table} declares no {what} row policy",
+            reason="row_policy_undeclared",
+        )
+    logger.warning(
+        "Dataset %s declares no %s row policy — served whole "
+        "(ROW_FILTERS_DEFAULT=allow, row_policy_undeclared)",
+        ds.dataset_id,
+        what,
+    )
+    if audit is not None:
+        audit.reasons[ds.dataset_id] = "row_policy_undeclared"
 
 
 # ---------------------------------------------------------------------------
@@ -322,33 +377,39 @@ async def execute_query(
         # ------------------------------------------------------------------
         await enforce_dataset_access(entry=ds, user=user)
 
-        specs = get_row_filter_specs(ds)
-        if not specs:
-            continue
+        try:
+            layers = split_layers(ds, get_row_filter_specs(ds))
+        except RowFilterSpecError as exc:
+            # GS-11: an unreadable declaration is refused, never read as none.
+            logger.error("Unreadable row filters: %s", exc)
+            raise Refused(
+                403,
+                f"Row filters of {ref_table} cannot be read, so no rows may be served",
+                reason="row_filter_unenforceable",
+            ) from exc
 
         if user is None:
+            # `enforce_dataset_access` refuses an anonymous caller on every level
+            # (GS-12); this is the backstop, never the gate.
             raise Refused(
                 401,
-                f"Dataset {ref_table} requires authentication for row filtering",
+                f"Dataset {ref_table} requires authentication",
                 reason="auth_required",
             )
 
+        # The platform administrator reads every row, the row policy included
+        # (D2); placed before the default so `deny` never denies the bypass.
         if is_admin_user(user):
             continue
 
-        for spec in specs:
-            handler_name = spec.get("handler")
+        _check_row_policy(ds, ref_table, layers, audit)
+
+        for spec in (s for layer in layers.values() for s in layer):
+            handler_name = spec["handler"]
             args = spec.get("args") or {}
-            if not isinstance(handler_name, str) or not handler_name:
-                raise HTTPException(
-                    500,
-                    f"Invalid row filter spec for dataset {ref_table}: missing handler",
-                )
-            if not isinstance(args, dict):
-                raise HTTPException(
-                    500,
-                    f"Invalid row filter spec for dataset {ref_table}: args must be object",
-                )
+            if handler_name == ALLOW_ALL:
+                # States the layer; narrows nothing.
+                continue
 
             try:
                 plan = await registry.resolve_with_cache(
@@ -359,12 +420,17 @@ async def execute_query(
                     request_context={},
                 )
             except KeyError:
+                # GS-11: a handler this service does not implement has not said
+                # "every row" — it is an instruction nobody can carry out.
                 logger.error(
                     f"Unknown row filter handler '{handler_name}' for dataset {ref_table}"
                 )
-                raise HTTPException(
-                    500,
-                    f"Unknown row filter handler '{handler_name}' for dataset {ref_table}",
+                raise Refused(
+                    403,
+                    f"Cannot enforce row filter handler '{handler_name}' for "
+                    f"{ref_table}: this service implements no such handler, so no "
+                    "rows may be served",
+                    reason="row_filter_unenforceable",
                 )
             except httpx.HTTPError:
                 logger.error(f"Row filter resolution failed for dataset {ref_table}")

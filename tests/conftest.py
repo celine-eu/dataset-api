@@ -120,3 +120,41 @@ async def client(test_session):
         yield c
 
     app.dependency_overrides.clear()
+
+
+#: A person who signed in and holds nothing else: no organization, no realm role.
+#: `open` datasets are served to any authenticated caller and to nobody anonymous
+#: (GS-12), so a test reading open data reads it as this caller.
+MEMBER_CLAIMS = {
+    "sub": "0c2f6d1e-0000-4000-8000-0000000000aa",
+    "azp": "oauth2_proxy",
+    "preferred_username": "example.member",
+    "realm_access": {"roles": ["default-roles-celine"]},
+}
+
+
+def member_user():
+    from types import SimpleNamespace
+
+    from celine.dataset.security.auth import _normalize_user
+
+    jwt_user = SimpleNamespace(
+        claims=MEMBER_CLAIMS,
+        sub=MEMBER_CLAIMS["sub"],
+        preferred_username=MEMBER_CLAIMS["preferred_username"],
+        email=None,
+        iss="https://auth.example.org/realms/celine",
+    )
+    return _normalize_user(jwt_user, token=None)
+
+
+@pytest.fixture
+def as_member(client):
+    """The test's requests carry a signed-in member (GS-12)."""
+    from celine.dataset.security.auth import get_current_user, get_optional_user
+
+    user = member_user()
+    app = client._transport.app
+    app.dependency_overrides[get_optional_user] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
+    yield user

@@ -89,6 +89,35 @@ def load_governance_with_override(
     ).config
 
 
+#: Findings that leave an exported entry wrong. `row-policy` is not one: the
+#: entry is right, and the serving default refuses the dataset (GS-10).
+_FATAL_RULES = frozenset({"parse", "schema", "handler", "layer-verdict", "consent-coherence", "input"})
+
+
+def _check_governance(paths: list[str]) -> list[str]:
+    """Run `celine.governance.check` over the matched files; echo every finding.
+
+    Returns the fatal ones. Handlers are this service's own — built-ins and the
+    plugins it loads — so a plugin a deployment registered is known here too.
+    """
+    from celine.governance.check import ERROR, check_governance
+
+    from celine.dataset.api.dataset_query.row_filters import get_row_filter_registry
+
+    report = check_governance(
+        paths, handlers=list(get_row_filter_registry().handlers)
+    )
+    fatal: list[str] = []
+    for f in report.findings:
+        where = f"{f.source} [{f.dataset}]" if f.dataset else f.source
+        is_fatal = f.severity == ERROR and f.rule in _FATAL_RULES
+        label = "ERROR" if is_fatal else f.severity.upper()
+        typer.echo(f"  {label} {f.rule} {where}: {f.detail}", err=is_fatal or f.severity != "info")
+        if is_fatal:
+            fatal.append(f"{where}: {f.detail}")
+    return fatal
+
+
 def resolve_rule(config: GovernanceConfig, dataset_name: str) -> GovernanceRule:
     """Resolve a dataset against a config: exact match → longest glob → defaults."""
     return GovernanceResolver(config).resolve(dataset_name)
@@ -257,11 +286,15 @@ def export_governance_cmd(
     # Load owners registry — explicit flag > ./owners.yaml beside each governance file
     _global_owners: OwnersRegistry | None = None
     if owners_path is not None:
+        # Strict, and fatal: a registry that does not validate resolves fewer
+        # owners and the export still "succeeds" (celine-policies `sync-orgs`
+        # model, celine-utils REQ-0014).
         try:
-            _global_owners = load_owners_yaml(owners_path)
-            typer.echo(f"Loaded {len(_global_owners)} owner(s) from {owners_path}")
+            _global_owners = load_owners_yaml(owners_path, validate=True)
         except Exception as exc:
-            typer.echo(f"WARNING: could not load owners registry at {owners_path}: {exc}", err=True)
+            typer.echo(f"ERROR: owners registry {owners_path}: {exc}", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"Loaded {len(_global_owners)} owner(s) from {owners_path}")
 
     # Sorted for a stable report and stable output names; de-duplicated because a
     # pattern such as `a/**/**/governance.yaml` matches the same path more than
@@ -272,11 +305,27 @@ def export_governance_cmd(
         raise typer.Exit(1)
 
     typer.echo(f"Found {len(matched)} governance.yaml file(s)")
+
+    # The governance checks, on the same files merged with the same overlays,
+    # before anything is written. What would make an exported entry wrong stops
+    # the export; a missing row-policy layer is reported only — the serving
+    # instance's `ROW_FILTERS_DEFAULT` refuses that one dataset at query time
+    # (GS-10), and the strict gate is `celine-governance validate` in the
+    # deployment's own task.
+    governance_errors = _check_governance(matched)
+    if governance_errors:
+        typer.echo(
+            f"\n{len(governance_errors)} governance error(s); nothing was exported.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
     out_dir.mkdir(parents=True, exist_ok=True)
 
     total_datasets = 0
     ontology_errors: list[str] = []
     exposure_errors: list[str] = []
+    load_errors: list[str] = []
     #: Output stems this run has already written — see the naming block below.
     written_stems: set[str] = set()
 
@@ -290,15 +339,20 @@ def export_governance_cmd(
             sibling = gov_path.parent / "owners.yaml"
             if sibling.is_file():
                 try:
-                    file_owners = load_owners_yaml(sibling)
+                    file_owners = load_owners_yaml(sibling, validate=True)
                     logger.debug("Using sibling owners.yaml at %s", sibling)
                 except Exception as exc:
-                    logger.warning("Could not load %s: %s", sibling, exc)
+                    typer.echo(f"  ERROR owners registry {sibling}: {exc}", err=True)
+                    load_errors.append(f"{sibling}: {exc}")
+                    continue
 
         try:
             config = load_governance_with_override(gov_path)
         except Exception as exc:
+            # Fatal at the end: a file that does not load used to be skipped
+            # with the run exiting 0, and the catalogue lost its datasets.
             typer.echo(f"  ERROR loading {gov_path}: {exc}", err=True)
+            load_errors.append(f"{gov_path}: {exc}")
             continue
 
         if not config.sources:
@@ -384,9 +438,16 @@ def export_governance_cmd(
             err=True,
         )
 
-    # One exit for both. Keeping it inside the ontology branch would have let an
+    if load_errors:
+        typer.echo(
+            f"\n{len(load_errors)} file(s) could not be loaded and were omitted from "
+            "the export.",
+            err=True,
+        )
+
+    # One exit for all. Keeping it inside the ontology branch would have let an
     # export that dropped datasets for exposure conflicts still return 0, and
     # this command runs unattended in `task import:dataset-sync` — a zero exit
     # there means the catalogue was synced, not that some of it was skipped.
-    if exposure_errors or ontology_errors:
+    if exposure_errors or ontology_errors or load_errors:
         raise typer.Exit(1)

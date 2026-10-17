@@ -26,7 +26,9 @@ dependencies = [
     # Keycloak to parse a file, which an API container cannot take. 2.0 moved all
     # of that behind extras; do NOT add [all] or [pipelines] here, and see the
     # `governance-thin` job in celine-utils for what keeps the core thin.
-    "celine-utils>=2.6.0",
+    # 2.7.0: `allow_all`/`deny_all` and `celine.governance.check`, which the
+    # two-layer row policy (GS-10) and the export's validation stand on.
+    "celine-utils>=2.7.0",
 
     # 1.21.0 carries RecRegistryApiError from get_my_assets (celine-sdk
     # REQ-0132/0133), which RF-12 reads; 1.20.0 raises UnexpectedStatus there and

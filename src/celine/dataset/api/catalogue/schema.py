@@ -113,17 +113,39 @@ class DatasetEntryModel(BaseModel):
         package is checked for a readable value only.
         """
         from celine.dataset.api.dataset_query.row_filters.handlers import HANDLER_BINDS
-        from celine.governance import row_filter_binds
+        from celine.governance import LAYER_HANDLERS, row_filter_binds
 
         facets = (self.lineage.facets if self.lineage else None) or {}
         governance = facets.get("governance") or {}
-        filters = governance.get("rowFilters") or governance.get("row_filters") or []
-        if not isinstance(filters, list):
-            return self
-        for index, spec in enumerate(filters):
+        filters = governance.get("rowFilters")
+        if filters is None:
+            filters = governance.get("row_filters")
+        # GS-11: a declaration that cannot be read is refused here, not read as
+        # none at query time.
+        if filters is not None and not isinstance(filters, list):
+            raise ValueError(
+                f"{self.dataset_id}: rowFilters is a {type(filters).__name__}, not a list"
+            )
+        for index, spec in enumerate(filters or []):
             if not isinstance(spec, dict):
-                continue
+                raise ValueError(
+                    f"{self.dataset_id}: rowFilters[{index}] is a "
+                    f"{type(spec).__name__}, not a mapping"
+                )
             handler = spec.get("handler")
+            if not isinstance(handler, str) or not handler:
+                raise ValueError(f"{self.dataset_id}: rowFilters[{index}] names no handler")
+            if spec.get("args") is not None and not isinstance(spec.get("args"), dict):
+                raise ValueError(
+                    f"{self.dataset_id}: rowFilters[{index}] ({handler}) args is not a mapping"
+                )
+            if handler in LAYER_HANDLERS and spec.get("binds") is None:
+                # GS-10: the layer verdict decides a whole layer; only `binds`
+                # says which.
+                raise ValueError(
+                    f"{self.dataset_id}: rowFilters[{index}] ({handler}) must state "
+                    "binds: person or organization"
+                )
             try:
                 declared = row_filter_binds(spec)
             except ValueError as exc:

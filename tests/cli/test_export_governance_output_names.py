@@ -29,7 +29,8 @@ runner = CliRunner()
 def _app(root: Path, name: str, title: str = "Thing") -> Path:
     d = root / name
     d.mkdir(parents=True)
-    block = {"sources": {"datasets.ds_dev_gold.thing": {"title": title}}}
+    # `defaults` is required by the published schema, which the export checks.
+    block = {"defaults": {}, "sources": {"datasets.ds_dev_gold.thing": {"title": title}}}
     (d / "governance.yaml").write_text(yaml.safe_dump(block, sort_keys=False))
     return d
 

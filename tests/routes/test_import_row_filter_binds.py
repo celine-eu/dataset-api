@@ -54,7 +54,18 @@ def test_every_built_in_handler_declares_what_it_binds():
         "rec_registry": "person",
         "organization_match": "organization",
         "member_wide": "organization",
+        # Either layer: their own `binds` names it (GS-10).
+        "allow_all": None,
+        "deny_all": None,
     }
+
+
+# @verifies GS-08
+def test_the_built_ins_are_the_ones_the_governance_validator_knows():
+    """celine-utils checks handler names before an import; the two lists are one."""
+    from celine.governance import BUILTIN_ROW_FILTER_HANDLERS
+
+    assert HANDLER_BINDS == BUILTIN_ROW_FILTER_HANDLERS
 
 
 # @verifies GS-08

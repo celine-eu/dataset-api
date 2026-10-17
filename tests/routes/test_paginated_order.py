@@ -17,6 +17,9 @@ from sqlalchemy import text
 
 from celine.dataset.db.models.dataset_entry import DatasetEntry
 
+# `open` is served to any signed-in caller, never anonymously (GS-12).
+pytestmark = pytest.mark.usefixtures("as_member")
+
 READINGS = "ds_readings"
 READINGS_TABLE = "dataset_api.qe04_readings"
 DEVICES = "ds_devices"

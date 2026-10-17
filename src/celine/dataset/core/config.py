@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import yaml
 from pydantic import AnyUrl, HttpUrl, Field
@@ -141,6 +141,14 @@ class Settings(BaseSettings):
     # Policy Settings
     policies_check_enabled: bool = Field(
         default=True, description="Enable policy-based authorization"
+    )
+
+    # What a row-policy layer nobody declared does (GS-10). `deny` refuses the
+    # dataset; `allow` serves it and logs and audits `row_policy_undeclared`, the
+    # report-only mode a deployment runs before it denies. Fail-closed by default.
+    row_filters_default: Literal["deny", "allow"] = Field(
+        default="deny",
+        description="Undeclared row-policy layer on a non-open dataset: deny | allow",
     )
 
     # The bundle and its decision cache: the platform's CELINE_POLICIES_DIR,

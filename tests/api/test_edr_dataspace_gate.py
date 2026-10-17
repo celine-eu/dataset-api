@@ -15,6 +15,8 @@ statements about catalogue visibility, not about dataspace consent.
 from __future__ import annotations
 
 import pytest
+
+from tests.conftest import member_user
 from fastapi import HTTPException
 
 from celine.dataset.api.dataset_query import executor as executor_mod
@@ -65,7 +67,9 @@ async def _run(session, dataset_id: str, edr):
         raw_sql=f"SELECT * FROM {dataset_id}",
         limit=10,
         offset=0,
-        user=None,
+        # Off the dataspace path an `open` dataset still needs a signed-in caller
+        # (GS-12); on it the EDR context is the identity and `user` is unused.
+        user=None if edr is not None else member_user(),
         edr_context=edr,
     )
 

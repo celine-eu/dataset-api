@@ -118,9 +118,17 @@ async def seeded(test_session):
                 dataspace_expose=offered,
                 access_level="internal",
                 # Readable by any organization's reader on purpose: these tests
-                # are about the audit record, not about whose rows (GS-07).
+                # are about the audit record, not about whose rows (GS-07, both
+                # layers stated per GS-10).
                 lineage={
-                    "facets": {"governance": {"rowFilters": [{"handler": "member_wide", "binds": "organization"}]}}
+                    "facets": {
+                        "governance": {
+                            "rowFilters": [
+                                {"handler": "member_wide", "binds": "organization"},
+                                {"handler": "allow_all", "binds": "person"},
+                            ]
+                        }
+                    }
                 },
             )
         )
@@ -214,7 +222,11 @@ async def test_a_refused_join_writes_one_denied_record_per_dataset(client, seede
 
 
 # @verifies GS-01
-async def test_an_anonymous_read_is_recorded_without_a_caller(client, test_session, caplog):
+# @verifies GS-12
+async def test_an_anonymous_request_is_recorded_without_a_caller(
+    client, test_session, caplog
+):
+    """Anonymous is refused even on `open` (GS-12), and the refusal names nobody."""
     await test_session.execute(text("CREATE TABLE dataset_api.audit_open (id INTEGER)"))
     test_session.add(
         DatasetEntry(
@@ -229,12 +241,13 @@ async def test_an_anonymous_read_is_recorded_without_a_caller(client, test_sessi
     await test_session.commit()
 
     resp = await _query(client, "SELECT id FROM datasets.dataset_api.audit_open")
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 401, resp.text
     record = _only(caplog)
-    assert (record["event"], record["sub"], record["resource"]) == (
-        "access",
+    assert (record["event"], record["sub"], record["resource"], record["reason"]) == (
+        "denied",
         None,
         "datasets.dataset_api.audit_open",
+        "auth_required",
     )
 
 

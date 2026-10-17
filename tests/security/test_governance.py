@@ -65,14 +65,19 @@ def test_disclosure_matrix_is_exhaustive():
 # ----------------------------------------------------------------------
 
 
+# @verifies GS-12
 @pytest.mark.asyncio
-async def test_open_allows_anonymous(anon_user):
+async def test_open_refuses_anonymous(anon_user):
+    """`open` is open to the registered user base, not to anyone (GS-12)."""
     from tests.security.conftest import make_entry
 
     entry = make_entry(disclosure=AccessLevel.OPEN)
-    await gov.enforce_dataset_access(entry=entry, user=anon_user)
+    with pytest.raises(HTTPException) as exc:
+        await gov.enforce_dataset_access(entry=entry, user=anon_user)
+    assert exc.value.status_code == 401
 
 
+# @verifies GS-12
 @pytest.mark.asyncio
 async def test_open_allows_authenticated(user):
     from tests.security.conftest import make_entry

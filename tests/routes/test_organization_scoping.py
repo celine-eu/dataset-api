@@ -115,6 +115,10 @@ async def _seed(test_session) -> None:
         await test_session.execute(text(f"INSERT INTO {table} VALUES (1), (2)"))
 
     def entry(dataset_id: str, table: str, row_filters: list | None) -> DatasetEntry:
+        # The organization layer is what these tests are about; the person layer
+        # is stated as admitting every row, so the default never decides (GS-10).
+        if row_filters is not None:
+            row_filters = [*row_filters, {"handler": "allow_all", "binds": "person"}]
         governance = {"rowFilters": row_filters} if row_filters is not None else {}
         return DatasetEntry(
             dataset_id=dataset_id,
@@ -267,13 +271,24 @@ async def test_an_unscoped_internal_dataset_refuses_every_organization(
 
 
 # @verifies GS-07
-@pytest.mark.parametrize("claims", [PLATFORM_ADMIN, SERVICE], ids=["platform-admin", "service"])
-async def test_an_unscoped_internal_dataset_stays_readable_by_platform_and_services(
-    client, test_session, claims
+async def test_an_unscoped_internal_dataset_stays_readable_by_the_platform_admin(
+    client, test_session
 ):
     await _seed(test_session)
-    _as(client, claims)
+    _as(client, PLATFORM_ADMIN)
     assert await _ids(client, PLAIN) == (200, [1, 2])
+
+
+# @verifies GS-10
+async def test_an_unscoped_internal_dataset_refuses_a_service_under_the_deny_default(
+    client, test_session
+):
+    """It used to be served whole to any service holding the scope (GS-07)."""
+    await _seed(test_session)
+    _as(client, SERVICE)
+    resp = await client.post("/query", json={"sql": f"SELECT id FROM {PLAIN}"})
+    assert resp.status_code == 403, resp.text
+    assert "declares no person and organization row policy" in resp.json()["detail"]
 
 
 # @verifies GS-07

@@ -39,8 +39,10 @@ Each clause below names its tests.
 | `subject_key_match` | `keys` | nothing — the column holds a data key, and `args.key_type` names which type | `column`, `key_type` |
 | `http_in_list` | — | the caller's own rows; refuses a delegated request | `column`, `url`; `method` (`GET`), `headers`, `params`, `json`, `response_path` (`$`), `timeout_seconds` (5), `max_items` (2000), `empty_means_deny` (true), `forward_token` (false) |
 | `table_pointer` | — | the caller's own rows; refuses a delegated request | `column`, `pointer_table`, `pointer_key_column`; `pointer_subject_column` (`user_id`) |
-| `organization_match` | — | the rows of the caller's organizations (GS-06 in [governance-security.md](governance-security.md)); refuses a delegated request; ds never sends it (`binds: organization`) | `column` or `org_type`, at least one |
-| `member_wide` | — | nothing — every row, declared on purpose (GS-07); refuses a delegated request; ds never sends it (`binds: organization`) | — |
+| `organization_match` | — | the rows of the caller's organizations (GS-06 in [governance-security.md](governance-security.md)); refuses a delegated request (`binds: organization`). ds sends it, naming nobody, for a dataset that is not consent-gated (ds rule X-17), so such a dataset serves no rows through an agreement | `column` or `org_type`, at least one |
+| `member_wide` | — | nothing — every row, declared on purpose (GS-07); refuses a delegated request (`binds: organization`); sent by ds like `organization_match` | — |
+| `allow_all` | — | nothing — the layer its `binds` names admits every row (GS-10) | — (`binds` required) |
+| `deny_all` | — | no row; on the normal path the dataset is refused `403 row_policy_denied` before any handler runs (GS-10) | — (`binds` required) |
 
 Args before a `;` are required. `http_in_list` formats its string args with
 `{sub}`, `{username}`, `{email}` and `{token}`.
@@ -54,7 +56,9 @@ file, which the connector reads and this service must recognise.
 The same handler serves requests that do not come through the dataspace, where
 `principals` is absent. Before any handler runs, the normal path answers an
 unauthenticated caller with `401` and skips row filters for holders of the
-`platform-admin` realm role. The handler then decides by who the caller is, in this order:
+`platform-admin` realm role; it then applies the two-layer row policy, where a
+`deny_all` or an undeclared layer refuses the dataset (GS-10). On the dataspace path
+that policy is not yet read: the filter is ds's, as this page describes. The handler then decides by who the caller is, in this order:
 
 1. **`principals` present** (dataspace path only), even empty: a delegated
    request, resolved for the named members on this service's identity (RF-05).

@@ -70,7 +70,7 @@ def resolve_dataset_id_filters(
 
 
 def validate_catalogue_payload(
-    raw_entries: Dict[str, Dict[str, Any]], strict: bool = False
+    raw_entries: Dict[str, Dict[str, Any]], strict: bool = True
 ) -> List[DatasetEntryModel]:
     dataset_models: List[DatasetEntryModel] = []
 
@@ -177,8 +177,13 @@ def import_catalogue(
     ),
     api_url: str = typer.Option(..., "--api-url", help="Dataset API base URL"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
+    # Strict by default: an invalid entry used to be skipped with a warning, so a
+    # typo'd row filter left a dataset out of the catalogue — or, before GS-11,
+    # in it with no filter. `--no-strict` keeps the old skip for a one-off.
     strict: bool = typer.Option(
-        False, "--strict", help="Fail on first validation error."
+        True,
+        "--strict/--no-strict",
+        help="Fail on the first invalid entry (default); --no-strict skips it.",
     ),
     dry_run: bool = typer.Option(
         False,

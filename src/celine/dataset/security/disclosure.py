@@ -36,7 +36,9 @@ ACCESS_LEVELS = frozenset(level.value for level in AccessLevel)
 
 
 ACCESS_LEVEL_MATRIX: dict[AccessLevel, AccessLevelPolicy] = {
-    AccessLevel.OPEN: AccessLevelPolicy(False, False),
+    # `open` is open to the registered user base, not to the internet: any
+    # authenticated caller, no policy (GS-12). Anonymous is refused everywhere.
+    AccessLevel.OPEN: AccessLevelPolicy(True, False),
     AccessLevel.INTERNAL: AccessLevelPolicy(True, True),
     AccessLevel.RESTRICTED: AccessLevelPolicy(True, True),
     # Never reached: `is_available` refuses a secret dataset before any policy.

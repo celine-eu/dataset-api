@@ -15,7 +15,10 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from celine.dataset.api.dataset_query.row_filters.specs import get_row_filter_specs
+from celine.dataset.api.dataset_query.row_filters.specs import (
+    RowFilterSpecError,
+    get_row_filter_specs,
+)
 from celine.dataset.security.audit import Refused
 from celine.dataset.security.disclosure import AccessLevel, ACCESS_LEVEL_MATRIX
 from celine.dataset.db.models.dataset_entry import DatasetEntry
@@ -226,7 +229,17 @@ async def enforce_dataset_access(
         # `member_wide` included. An organization's reader is admitted to an
         # `internal` dataset only when it does (GS-07); its row filter then
         # decides which organization's rows (GS-06).
-        resource_attributes["row_scoped"] = bool(get_row_filter_specs(entry))
+        try:
+            resource_attributes["row_scoped"] = bool(get_row_filter_specs(entry))
+        except RowFilterSpecError as exc:
+            # A declaration that cannot be read decides nothing: refused, never
+            # read as "no filter" (GS-11).
+            logger.error("Unreadable row filters on %s: %s", entry.dataset_id, exc)
+            raise Refused(
+                status.HTTP_403_FORBIDDEN,
+                f"Row filters of {entry.dataset_id} cannot be read",
+                reason="row_filter_unenforceable",
+            ) from exc
 
         # Build subject
         subject = _build_subject_from_user(user)

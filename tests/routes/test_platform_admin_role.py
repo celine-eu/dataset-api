@@ -148,7 +148,10 @@ async def _seed(test_session) -> None:
                 "facets": {
                     "governance": {
                         "rowFilters": [
-                            {"handler": "direct_user_match", "args": {"column": "user_id"}}
+                            {"handler": "direct_user_match", "args": {"column": "user_id"}},
+                            # Per person; every organization's reader may read
+                            # through it, so the organization layer admits all (GS-10).
+                            {"handler": "allow_all", "binds": "organization"},
                         ]
                     }
                 }

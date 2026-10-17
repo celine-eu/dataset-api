@@ -91,7 +91,7 @@ Flows are stored in the catalogue database, so any worker can serve a pull and f
 ### Governance and disclosure model
 
 Access levels:
-- `open` — no authentication required; `downloadURL` exposed in DCAT
+- `open` — any signed-in caller, no policy; anonymous is refused (GS-12); `downloadURL` exposed in DCAT
 - `internal` — JWT required; services need the `dataset.query` scope, users the `platform-admin` realm role, or `admins`/`managers`/`viewers` inside an organization — and then only a dataset that declares a row filter, and only that organization's rows (GS-06, GS-07); ODRL carries `ds:accessScope eq "dataspaces.query"`
 - `restricted` — JWT required; only the `dataset.admin` scope or the `platform-admin` realm role (`policies/celine/dataset.rego`); ODRL carries `ds:accessScope eq "dataspaces.query"` and `ds:consentStatus eq "active"`
 - `secret` — omitted from every catalogue surface; not queryable (`403 Dataset not available`, as for an unexposed dataset)
@@ -110,6 +110,8 @@ Row-level filtering via the pluggable governance handler registry. Seven built-i
 Each filter's `binds` (`person` by default, or `organization`) must agree with its handler; the catalogue import refuses one that does not (GS-08), and a filter whose `column` its table lacks (GS-09)
 
 Further handlers can be registered through `ROW_FILTERS_MODULES` or the `celine.dataset.row_filters` entry-point group (see `celine.dataset.ext`).
+
+**Every non-`open` dataset states two row-policy layers** — a filter's `binds` is its layer, `person` or `organization` — and `allow_all` / `deny_all` state one without narrowing by a column. A layer left undeclared follows `ROW_FILTERS_DEFAULT`: `deny` (the default) refuses the dataset with `403 row_policy_undeclared`, `allow` serves it and reports it. A declaration that cannot be read, or names a handler this service lacks, is refused, never read as none ([GS-10, GS-11](docs/governance-security.md#row-level-filtering)).
 
 Holders of the `platform-admin` realm role bypass row filters entirely; no group does, at either level (see [Identity Model](docs/governance-security.md#identity-model)). Service accounts bypass the `rec_registry` and `organization_match` filters when they query on their own behalf — never when a dataspace decision delegates the query to them.
 
@@ -170,7 +172,7 @@ The `export governance` command reads `governance.yaml` files (plus `governance.
 
 ## governance.yaml integration
 
-Dataset-api reads governance rules resolved by `celine.governance.GovernanceResolver` (from `celine-utils>=2.6`, which carries `row_filters[].binds`). The following extended blocks are supported:
+Dataset-api reads governance rules resolved by `celine.governance.GovernanceResolver` (from `celine-utils>=2.7`, which carries `row_filters[].binds`, `allow_all`/`deny_all` and the governance checks). The following extended blocks are supported:
 
 `dcat:` block — DCAT-AP metadata:
 - `publisher_uri` — overrides the settings-level fallback
@@ -183,7 +185,7 @@ Dataset-api reads governance rules resolved by `celine.governance.GovernanceReso
 
 `dataspace:` block — access control and ODRL hints:
 - `expose` — offer the dataset to dataspace consumers
-- `consent_required` (or any `row_filters`) — adds `ds:consentStatus eq active` constraint
+- `consent_required` (or a row filter binding a person, other than `allow_all`/`deny_all`) — adds `ds:consentStatus eq active` constraint
 - `contract_required`, `odrl_action`, `purpose` — carried in the governance facet for dataspace consumers; not rendered into the ODRL offer, which always uses `odrl:use`
 - `medallion` — data quality level (inferred from the name when unset)
 

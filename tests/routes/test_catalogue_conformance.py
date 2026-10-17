@@ -13,6 +13,9 @@ import json
 import logging
 
 import pytest
+
+from celine.dataset.security.auth import get_current_user, get_optional_user
+from tests.conftest import member_user
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
@@ -86,6 +89,11 @@ async def conformance_client(test_session):
     app = create_app(use_lifespan=False)
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_datasets_session] = override_get_session
+    # The sample is read through `execute_query`, so it needs a signed-in caller
+    # even for an `open` dataset (GS-12).
+    user = member_user()
+    app.dependency_overrides[get_optional_user] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -224,6 +232,41 @@ async def test_reading_rows_for_a_report_is_gated_like_reading_them(
     assert res.status_code in (401, 403), res.text
 
 
+# @verifies GS-10
+async def test_the_sample_follows_the_row_policy_default(
+    conformance_client, test_session, drop_table
+):
+    """An `internal` dataset declaring no row policy refuses the sample read too:
+    the report quotes rows, so it may not be a way around the default."""
+    from types import SimpleNamespace
+
+    from celine.dataset.security.auth import _normalize_user
+
+    await _seed(test_session, rows=[CONFORMING_ROW], access_level="internal")
+    claims = {
+        "sub": "svc-x",
+        "azp": "svc-x",
+        "preferred_username": "service-account-svc-x",
+        "scope": "dataset.query",
+    }
+    service = _normalize_user(
+        SimpleNamespace(
+            claims=claims,
+            sub="svc-x",
+            preferred_username=claims["preferred_username"],
+            email=None,
+            iss="https://auth.example.org/realms/celine",
+        ),
+        token=None,
+    )
+    conformance_client._transport.app.dependency_overrides[get_optional_user] = (
+        lambda: service
+    )
+    res = await conformance_client.post("/catalogue/kpi_defs/conformance", json={})
+    assert res.status_code == 403, res.text
+    assert "declares no person and organization row policy" in res.json()["detail"]
+
+
 # @verifies GS-01
 # @verifies GS-02
 async def test_the_sample_read_is_audited(
@@ -235,10 +278,10 @@ async def test_the_sample_read_is_audited(
     assert (
         await conformance_client.post("/catalogue/kpi_defs/conformance", json={})
     ).status_code == 200
-    await test_session.execute(
-        text("UPDATE dataset_api.datasets_entries SET access_level = 'restricted'")
-    )
-    await test_session.commit()
+    # The refusal half: the same check, anonymous.
+    overrides = conformance_client._transport.app.dependency_overrides
+    overrides.pop(get_optional_user)
+    overrides.pop(get_current_user)
     assert (
         await conformance_client.post("/catalogue/kpi_defs/conformance", json={})
     ).status_code == 401

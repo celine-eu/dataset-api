@@ -264,6 +264,8 @@ def get_row_filter_registry() -> RowFilterRegistry:
         return _registry
 
     from celine.dataset.api.dataset_query.row_filters.handlers import (
+        AllowAllHandler,
+        DenyAllHandler,
         DirectUserMatchHandler,
         HttpInListHandler,
         MemberWideHandler,
@@ -285,6 +287,8 @@ def get_row_filter_registry() -> RowFilterRegistry:
     reg.register(RecRegistryHandler())
     reg.register(OrganizationMatchHandler())
     reg.register(MemberWideHandler())
+    reg.register(AllowAllHandler())
+    reg.register(DenyAllHandler())
 
     # Assign before loading external modules so they can call
     # get_row_filter_registry() to register their own handlers.

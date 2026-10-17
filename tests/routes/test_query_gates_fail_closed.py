@@ -46,7 +46,7 @@ async def _query(client, sql: str):
 
 
 async def test_an_entry_without_a_table_is_queried_through_the_table_its_id_names(
-    client, test_session
+    client, test_session, as_member
 ):
     await _table(test_session, "dataset_api.no_table_open")
     await _entry(test_session, "datasets.dataset_api.no_table_open")
@@ -166,7 +166,7 @@ async def test_an_underscore_in_a_reference_is_not_a_wildcard(client, test_sessi
     assert "unknown datasets" in resp.json()["detail"]
 
 
-async def test_the_literal_suffix_still_resolves(client, test_session):
+async def test_the_literal_suffix_still_resolves(client, test_session, as_member):
     await _table(test_session, "dataset_api.suffix_ok")
     await _entry(
         test_session,

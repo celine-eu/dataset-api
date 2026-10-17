@@ -145,6 +145,10 @@ class ReadAudit:
         self.datasets: list[str] = []
         self.agreement_id: str | None = None
         self.decision_ref: str | None = None
+        #: A reason carried on an *allowed* record, per dataset: a read served
+        #: under the report-only row default says why it would be refused
+        #: (`row_policy_undeclared`, GS-10).
+        self.reasons: dict[str, str] = {}
 
     @property
     def resources(self) -> list[str | None]:
@@ -185,6 +189,9 @@ class ReadAudit:
         token = _LINK.set(link)
         try:
             for resource in self.resources:
+                noted = {}
+                if exc is None and resource in self.reasons:
+                    noted = {"reason": self.reasons[resource]}
                 write(
                     self.action,
                     caller=self.caller,
@@ -193,6 +200,7 @@ class ReadAudit:
                     request=self.request,
                     request_id=request_id,
                     **extra,
+                    **noted,
                 )
         finally:
             _LINK.reset(token)

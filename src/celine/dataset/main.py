@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("System failed health check at startup")
 
     try:
-        app.state.owners = load_owners_yaml(s.owners_yaml_path)
+        app.state.owners = load_owners_yaml(s.owners_yaml_path, validate=True)
         logger.info(
             "Loaded %d owner(s) from %s", len(app.state.owners), s.owners_yaml_path
         )
@@ -51,7 +51,9 @@ async def lifespan(app: FastAPI):
         )
         app.state.owners = None
     except Exception as exc:
-        logger.warning("Could not load owners registry: %s — continuing without it", exc)
+        # Validated, so a mistyped key is an error rather than a smaller registry;
+        # not fatal, because the registry only enriches DCAT publisher metadata.
+        logger.error("Owners registry invalid: %s — publisher enrichment disabled", exc)
         app.state.owners = None
 
     yield
