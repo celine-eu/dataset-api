@@ -65,6 +65,18 @@ async def readings(test_session):
             expose=True,
             dataspace_expose=True,
             access_level="restricted",
+            # Both row-policy layers stated as admitting every row: the person
+            # layer is narrowed by ds's consent filter when it sends one (GS-13).
+            lineage={
+                "facets": {
+                    "governance": {
+                        "rowFilters": [
+                            {"handler": "allow_all", "binds": "person"},
+                            {"handler": "allow_all", "binds": "organization"},
+                        ]
+                    }
+                }
+            },
         )
     )
     await test_session.commit()

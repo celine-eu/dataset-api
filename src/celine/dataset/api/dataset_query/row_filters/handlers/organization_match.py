@@ -34,9 +34,15 @@ class OrganizationMatchHandler:
     belongs to no organization. A service relaying rows to a person forwards the
     person's token or narrows them itself — as with `rec_registry`.
 
-    **Delegated requests are refused.** A dataspace decision names consenting
-    subjects; which organization a caller belongs to says nothing about them, so
-    the filter cannot be enforced and the executor serves no rows.
+    **On a dataspace request it filters by the consumer's organizations**
+    (GS-13): the list ds carries in its verdict, established from the credential
+    the consumer presented, never the caller's token. That branch comes before
+    the service bypass, so the bypass cannot be reached through an agreement. An
+    empty list — no organization established — is no rows. With `org_type` alone,
+    ds has already checked the type, so a non-empty list reads every row.
+
+    A delegation naming consenting subjects instead (`principals`/`keys`) is still
+    refused: which organization someone belongs to says nothing about them.
     """
 
     name = "organization_match"
@@ -52,8 +58,9 @@ class OrganizationMatchHandler:
         request_context: dict[str, Any] | None = None,
         principals: list[str] | None = None,
         keys: list[str] | None = None,
+        organizations: list[str] | None = None,
     ) -> RowFilterPlan:
-        if principals is not None or keys:
+        if organizations is None and (principals is not None or keys):
             # Refused like `table_pointer`, before the args are read: the
             # executor turns this into "serve no rows".
             raise NotImplementedError(
@@ -72,6 +79,20 @@ class OrganizationMatchHandler:
             # every row to any organization's reader.
             raise ValueError("organization_match requires args.column or args.org_type")
 
+        if organizations is not None:
+            # The consumer's organizations, from ds's verdict (GS-13). Before the
+            # service bypass on purpose: a dataspace request is never a service
+            # reading for itself.
+            aliases = sorted(set(organizations))
+            if not aliases:
+                logger.info(
+                    "organization_match: no consumer organization established — "
+                    "no rows from %s",
+                    table,
+                )
+                return RowFilterPlan(table=table, kind="deny", meta={"delegated": True})
+            return _plan(table, column, aliases, delegated=True)
+
         if is_service_account(user.claims):
             return RowFilterPlan(table=table, kind="predicate", meta={"service": True})
 
@@ -84,19 +105,27 @@ class OrganizationMatchHandler:
             )
             return RowFilterPlan(table=table, kind="deny")
 
-        if column is None:
-            # Any organization of the type reads every row.
-            return RowFilterPlan(
-                table=table, kind="predicate", meta={"organizations": len(aliases)}
-            )
+        return _plan(table, column, aliases)
 
-        predicate = exp.In(
-            this=exp.Column(this=exp.Identifier(this=column, quoted=False)),
-            expressions=[exp.Literal.string(a) for a in aliases],
-        )
-        return RowFilterPlan(
-            table=table,
-            kind="predicate",
-            predicate_template=predicate,
-            meta={"organizations": len(aliases)},
-        )
+
+def _plan(
+    table: str, column: str | None, aliases: list[str], *, delegated: bool = False
+) -> RowFilterPlan:
+    """The rows of `aliases`, or every row when no column names whose they are."""
+    meta: dict[str, Any] = {"organizations": len(aliases)}
+    if delegated:
+        meta["delegated"] = True
+    if column is None:
+        # Any organization of the type reads every row.
+        return RowFilterPlan(table=table, kind="predicate", meta=meta)
+
+    predicate = exp.In(
+        this=exp.Column(this=exp.Identifier(this=column, quoted=False)),
+        expressions=[exp.Literal.string(a) for a in aliases],
+    )
+    return RowFilterPlan(
+        table=table,
+        kind="predicate",
+        predicate_template=predicate,
+        meta=meta,
+    )

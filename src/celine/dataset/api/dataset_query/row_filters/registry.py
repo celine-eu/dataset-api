@@ -95,6 +95,7 @@ class RowFilterRegistry:
         request_context: dict[str, Any] | None = None,
         principals: list[str] | None = None,
         keys: list[str] | None = None,
+        organizations: list[str] | None = None,
         ttl_override: int | None = None,
     ) -> RowFilterPlan:
         handler = self.get(handler_name)
@@ -118,6 +119,11 @@ class RowFilterRegistry:
                 sub,
                 self._organizations_key(user),
                 self._allow_list_key(principals, keys),
+                # The consumer's organizations on a dataspace request (GS-13):
+                # two agreements for two organizations must never share a plan.
+                "consumer_orgs:-"
+                if organizations is None
+                else "consumer_orgs:" + ",".join(sorted(organizations)),
                 args_key,
             ]
         )
@@ -133,6 +139,14 @@ class RowFilterRegistry:
             "request_context": request_context,
             "principals": principals,
         }
+        if organizations is not None:
+            if self._accepts(handler, "organizations"):
+                call["organizations"] = organizations
+            else:
+                # A handler that cannot read the consumer's organizations is
+                # asked as a delegation naming nobody, which every handler
+                # refuses or narrows to nothing — never served as the caller.
+                call["principals"] = []
         if self._accepts_keys(handler):
             call["keys"] = keys
         elif keys:
@@ -215,6 +229,21 @@ class RowFilterRegistry:
             ).hexdigest()
             scope += f"|keys:{digest}"
         return scope
+
+    def _accepts(self, handler: RowFilterHandler, name: str) -> bool:
+        """Whether this handler's `resolve` declares `name` — see `_accepts_keys`."""
+        cache_key = f"{handler.name}\x00{name}"
+        cached = self._keys_support.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            parameters = inspect.signature(handler.resolve).parameters
+        except (TypeError, ValueError):
+            accepts = False
+        else:
+            accepts = name in parameters
+        self._keys_support[cache_key] = accepts
+        return accepts
 
     def _accepts_keys(self, handler: RowFilterHandler) -> bool:
         """Whether this handler's `resolve` declares `keys`.

@@ -39,7 +39,7 @@ Each clause below names its tests.
 | `subject_key_match` | `keys` | nothing — the column holds a data key, and `args.key_type` names which type | `column`, `key_type` |
 | `http_in_list` | — | the caller's own rows; refuses a delegated request | `column`, `url`; `method` (`GET`), `headers`, `params`, `json`, `response_path` (`$`), `timeout_seconds` (5), `max_items` (2000), `empty_means_deny` (true), `forward_token` (false) |
 | `table_pointer` | — | the caller's own rows; refuses a delegated request | `column`, `pointer_table`, `pointer_key_column`; `pointer_subject_column` (`user_id`) |
-| `organization_match` | — | the rows of the caller's organizations (GS-06 in [governance-security.md](governance-security.md)); refuses a delegated request (`binds: organization`). ds sends it, naming nobody, for a dataset that is not consent-gated (ds rule X-17), so such a dataset serves no rows through an agreement | `column` or `org_type`, at least one |
+| `organization_match` | `organizations` | the rows of the caller's organizations (GS-06 in [governance-security.md](governance-security.md)); on a dataspace request, of the consumer's organizations from the decision, none → no rows (GS-13); refuses a delegation naming subjects (`binds: organization`). ds also sends it, naming nobody, for a dataset that is not consent-gated (ds rule X-17); that copy is not read as the person layer | `column` or `org_type`, at least one |
 | `member_wide` | — | nothing — every row, declared on purpose (GS-07); refuses a delegated request (`binds: organization`); sent by ds like `organization_match` | — |
 | `allow_all` | — | nothing — the layer its `binds` names admits every row (GS-10) | — (`binds` required) |
 | `deny_all` | — | no row; on the normal path the dataset is refused `403 row_policy_denied` before any handler runs (GS-10) | — (`binds` required) |
@@ -58,7 +58,9 @@ The same handler serves requests that do not come through the dataspace, where
 unauthenticated caller with `401` and skips row filters for holders of the
 `platform-admin` realm role; it then applies the two-layer row policy, where a
 `deny_all` or an undeclared layer refuses the dataset (GS-10). On the dataspace path
-that policy is not yet read: the filter is ds's, as this page describes. The handler then decides by who the caller is, in this order:
+the same policy is read: the filter on this page is its person layer, and the
+organization layer is applied to the consumer's organizations the decision carries
+beside it (`organizations`, GS-13 in [governance-security.md](governance-security.md)). The handler then decides by who the caller is, in this order:
 
 1. **`principals` present** (dataspace path only), even empty: a delegated
    request, resolved for the named members on this service's identity (RF-05).
@@ -90,9 +92,13 @@ A verdict's `row_filter` carries `handler`, `args`, `principals`, `keys` and
 would force this service to assume a handler, and assuming the wrong one injects
 a predicate that matches by coincidence or not at all.
 
-A verdict with no `row_filter` is an allow with no filter: the dataset carries no
-data subject and every row may leave. That is never how a filter that could not
-be built is reported — the two would be indistinguishable here.
+A verdict with no `row_filter` names no consenting subject: the dataset's person
+layer must then admit every row by this service's own declaration, and its
+organization layer still applies (GS-13 in [governance-security.md](governance-security.md)).
+It is never how a filter that could not be built is reported — the two would be
+indistinguishable here. Beside `row_filter`, a verdict entry may carry
+`organizations`, the consumer's organizations; it is optional, like `subject_dids`, so
+this service is deployed before ds sends it.
 Tests: `tests/security/test_dataplane_row_filter_contract.py`.
 
 ### RF-02 — An unknown field in the filter refuses the request

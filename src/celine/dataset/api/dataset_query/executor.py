@@ -42,6 +42,7 @@ from celine.dataset.api.dataset_query.row_filters import (
     split_layers,
 )
 from celine.dataset.api.dataset_query.row_filters.models import RowFilterPlan
+from celine.dataset.api.dataset_query.row_filters.handlers import HANDLER_BINDS
 from celine.dataset.api.dataset_query.row_filters.utils import is_admin_user
 from celine.dataset.core.config import get_settings
 from celine.governance import ALLOW_ALL, DENY_ALL
@@ -317,9 +318,79 @@ async def execute_query(
             # to assume one of them, which is how the previous version came to
             # inject nothing at all.
             row_filter = edr_decision.row_filter_for(ds.dataset_id)
+            if row_filter is not None and HANDLER_BINDS.get(row_filter.handler) == "organization":
+                # ds sends an organization filter naming nobody for a dataset
+                # that is not consent-gated (ds X-17). The organization layer is
+                # this service's own declaration, applied below to the verdict's
+                # `organizations` (GS-13); ds's copy of it is not the person layer.
+                row_filter = None
+
+            # The local declaration, both layers (GS-13): ds's verdict supplies
+            # the person layer (the consenting subjects) and the consumer's
+            # organizations; which filters exist is this service's catalogue.
+            # A dataset the verdict does not list falls through the same path
+            # with neither (D11).
+            try:
+                layers = split_layers(ds, get_row_filter_specs(ds))
+            except RowFilterSpecError as exc:
+                logger.error("Unreadable row filters: %s", exc)
+                raise Refused(
+                    403,
+                    f"Row filters of {ref_table} cannot be read, so no rows may be served",
+                    reason="row_filter_unenforceable",
+                ) from exc
+            person_stated = row_filter is not None or any(
+                spec["handler"] != ALLOW_ALL for spec in layers["person"]
+            )
+            if row_filter is None and person_stated:
+                # The dataset narrows per person here and ds named nobody: the
+                # two ends disagree, and this end cannot apply a person filter
+                # without the consenting subjects.
+                raise Refused(
+                    403,
+                    f"Dataset {ref_table} declares a person row filter but the "
+                    "dataspace decision carries none, so no rows may be served",
+                    reason="row_filter_unenforceable",
+                )
+            if row_filter is not None and not layers["person"]:
+                # ds's filter states the person layer for this end.
+                layers["person"] = [{"handler": row_filter.handler, "binds": "person"}]
+            _check_row_policy(ds, ref_table, layers, audit)
+
+            organizations = edr_decision.organizations_for(ds.dataset_id)
+            for spec in layers["organization"]:
+                if spec["handler"] == ALLOW_ALL:
+                    continue
+                try:
+                    plan = await registry.resolve_with_cache(
+                        handler_name=spec["handler"],
+                        table=phy_table_name,
+                        user=user,
+                        args=spec.get("args") or {},
+                        request_context={"agreement_id": edr_context.agreement_id},
+                        organizations=organizations or [],
+                        ttl_override=edr_decision.cache_ttl,
+                    )
+                except (KeyError, NotImplementedError) as exc:
+                    logger.error(
+                        "Cannot enforce organization filter %r for %s: %s",
+                        spec["handler"],
+                        ds.dataset_id,
+                        exc,
+                    )
+                    raise Refused(
+                        403,
+                        f"Cannot enforce row filter handler '{spec['handler']}' "
+                        f"for {ds.dataset_id} on a dataspace request, so no rows "
+                        "may be served",
+                        reason="row_filter_unenforceable",
+                    ) from exc
+                row_filter_plans.append(plan)
+
             if row_filter is None:
-                # Allowed with no filter: the dataset carries no data subject,
-                # and the agreement gated it. Still a disclosure — record it.
+                # No person behind these rows, or every row admitted on purpose;
+                # the organization layer, if any, is applied above. Still a
+                # disclosure — record it.
                 edr_disclosures.append((ds.dataset_id, None))
                 continue
 

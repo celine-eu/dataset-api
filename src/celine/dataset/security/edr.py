@@ -209,6 +209,38 @@ class DataPlaneDecision:
                 ) from exc
         return None
 
+    def organizations_for(self, dataset_id: str) -> Optional[list[str]]:
+        """The consumer's organizations for this dataset, or `None` (GS-13).
+
+        Carried **beside** `row_filter`, not inside it: the person layer is ds's
+        consent filter, the organization layer is this service's own declaration
+        applied to these organizations. `None` — an older ds, or a dataset the
+        verdict does not list — means none was established, and an organization
+        filter then serves no rows. `[]` says the same thing explicitly.
+
+        Optional for the same reason as `subject_dids`: the data plane accepts the
+        field before ds sends it (PEP before PDP).
+        """
+        for entry in self.datasets:
+            if entry.get("dataset_id") != dataset_id:
+                continue
+            raw = entry.get("organizations")
+            if raw is None:
+                return None
+            if not isinstance(raw, list) or not all(
+                isinstance(o, str) and o for o in raw
+            ):
+                logger.error(
+                    "ds sent organizations this data plane cannot read for %s", dataset_id
+                )
+                raise HTTPException(
+                    502,
+                    "ds-connector sent organizations this data plane cannot apply "
+                    f"for {dataset_id}",
+                )
+            return list(raw)
+        return None
+
     def reason_for(self, dataset_id: str) -> Optional[str]:
         for entry in self.datasets:
             if entry.get("dataset_id") == dataset_id:

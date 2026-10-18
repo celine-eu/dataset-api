@@ -230,7 +230,10 @@ dataspace request, and the ordinary path is never a fallback for it:
 - one `POST /internal/dataplane/authorize` covers the whole query; a deny is `403`
   (*"Refused by ds: …"*), ds unreachable or erroring is `502`
 - the row filter arrives in ds's decision and is applied here or nothing is served
-  ([dataspace-row-filters.md](dataspace-row-filters.md))
+  ([dataspace-row-filters.md](dataspace-row-filters.md)); this service's own row
+  policy is read too: ds's filter is the person layer, and the organization layer is
+  the local declaration applied to the consumer's organizations the decision carries
+  (GS-13)
 - the disclosure is recorded with `POST /internal/audit/query`, naming the
   consenting subjects by DID, never by principal or key (RF-10 in
   [dataspace-row-filters.md](dataspace-row-filters.md))
@@ -504,6 +507,36 @@ arriving through the dataspace carries its identity in the EDR and is not affect
 
 Tests: `tests/routes/test_row_policy.py`, `tests/security/test_governance.py`,
 `tests/routes/test_access_audit.py`.
+
+#### GS-13 — Through an agreement, the consumer's organization reads its own rows only
+
+On a dataspace request the dataset's own row policy is evaluated, both layers (GS-10):
+
+- **Person layer:** ds's filter, naming the consenting subjects, when the decision
+  carries one. When it carries none, the local person layer must admit every row
+  (`allow_all`, or undeclared on an `open` dataset — otherwise the default applies); a
+  local person filter with no subjects from ds is refused, `403
+  row_filter_unenforceable`: the two ends disagree. A filter ds sends whose handler
+  binds an organization (ds rule X-17) is not read as the person layer.
+- **Organization layer:** the local declaration, applied to the decision's
+  `organizations` for the dataset — the consumer's organizations, which ds establishes
+  from the credential the consumer presented. `organization_match` serves the rows
+  whose column holds one of them, before any service bypass; with `org_type` alone, a
+  non-empty list reads every row (ds checked the type). No list, or an empty one, is
+  no rows. `member_wide` and any handler that cannot read the list refuse, `403
+  row_filter_unenforceable`. A list that is not a list of non-empty strings is `502`.
+- `deny_all` in either layer is `403 row_policy_denied`; an undeclared layer follows
+  `ROW_FILTERS_DEFAULT`.
+- A dataset the decision does not list is evaluated the same way, with no subjects and
+  no organizations.
+- The list is part of the plan-cache key: two agreements for two organizations never
+  share a plan.
+
+The field is optional on the wire, so this service is deployed before ds sends it;
+until ds does, an organization-bound dataset serves no rows through an agreement.
+
+Tests: `tests/api/test_edr_organization_layer.py`,
+`tests/api/test_edr_subject_key_filter.py`, `tests/dps/test_pull.py`.
 
 The query engine never logs a statement's literals: wherever it logs SQL it logs the
 statement's shape, every literal replaced by `?` (QE-03 in
