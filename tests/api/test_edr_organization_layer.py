@@ -178,7 +178,7 @@ async def test_ds_s_organization_filter_naming_nobody_is_not_the_person_layer(
 async def test_an_unlisted_dataset_follows_its_local_declaration(
     test_session, catalogue, ds, fresh_registry
 ):
-    """D11: not in the verdict → the local declaration, with no organization."""
+    """Not in the verdict → the local declaration, with no organization."""
     await catalogue([ORG_MATCH, PERSON_ALL])
     ds["listed"] = False
     assert await _ids(test_session) == []

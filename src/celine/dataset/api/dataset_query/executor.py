@@ -329,7 +329,7 @@ async def execute_query(
             # the person layer (the consenting subjects) and the consumer's
             # organizations; which filters exist is this service's catalogue.
             # A dataset the verdict does not list falls through the same path
-            # with neither (D11).
+            # with neither.
             try:
                 layers = split_layers(ds, get_row_filter_specs(ds))
             except RowFilterSpecError as exc:
@@ -469,7 +469,7 @@ async def execute_query(
             )
 
         # The platform administrator reads every row, the row policy included
-        # (D2); placed before the default so `deny` never denies the bypass.
+        # (kept as is); placed before the default so `deny` never denies the bypass.
         if is_admin_user(user):
             continue
 

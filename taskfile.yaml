@@ -30,17 +30,35 @@ tasks:
     cmds:
       - mkdir -p ./data/openlineage
       - uv run dataset-cli export openlineage --ns '*' -o ./data/openlineage --expose
+  # The governance gate. Strict: a warning — an unknown key included — fails. `APPS`,
+  # `OVERLAY_DIR` and `OWNERS` select a deployment's inputs; pass one owners registry only,
+  # the one the overlays belong to (two claim the same aliases, and the first would win).
+  governance:validate:
+    desc: "Validate governance strictly (APPS, OVERLAY_DIR, OWNERS select the inputs)"
+    vars:
+      APPS: '{{.APPS | default "../celine-pipelines/apps"}}'
+    cmds:
+      - >-
+        uv run celine-governance validate --strict {{.APPS}}
+        {{if .OVERLAY_DIR}}--overlay-dir "{{.OVERLAY_DIR}}"{{end}}
+        {{if .OWNERS}}--owners "{{.OWNERS}}"{{end}}
+
   cli:export:governance:
-    desc: Export from governance.yaml
+    desc: Export from governance.yaml (after `governance:validate` over the same input)
     vars:
       GOV_OVERRIDES: ../../../demo3.deployment/recs/governance
+      APPS: ../celine-pipelines/apps ../../../demo3/pipelines/apps
     cmds:
+      - task: governance:validate
+        vars:
+          APPS: "{{.APPS}}"
+          OVERLAY_DIR: "{{.GOV_OVERRIDES}}"
       - mkdir -p ./data/governance
       - |
         TMPDIR=$(mktemp -d)
         trap "rm -rf $TMPDIR" EXIT
 
-        for f in $(find ../celine-pipelines/apps ../../../demo3/pipelines/apps -name "governance.yaml" 2>/dev/null); do
+        for f in $(find {{.APPS}} -name "governance.yaml" 2>/dev/null); do
           app=$(basename "$(dirname "$f")")
           mkdir -p "$TMPDIR/$app"
           cp "$f" "$TMPDIR/$app/governance.yaml"
