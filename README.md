@@ -30,7 +30,7 @@ SQL `SELECT` queries over exposed datasets with strict validation, server-side p
 - Enforces `LIMIT`/`OFFSET` server-side, after the statement's top-level `ORDER BY` (carried onto the page query where its keys name selected columns; see QE-04 in the query engine docs)
 - Configurable query timeout via `QUERY_STATEMENT_TIMEOUT_MS` (default 5000ms)
 - `skip_count: true` skips the `COUNT(*)` query to avoid full table scans
-- Applies row-level filter plans from governance handlers (`direct_user_match`, `rec_registry`, `subject_key_match`, `http_in_list`, `table_pointer`, `organization_match`, `member_wide`)
+- Applies row-level filter plans from governance handlers (`direct_user_match`, `rec_registry`, `subject_key_match`, `http_in_list`, `table_pointer`, `organization_match`, `member_wide`) and the layer verdicts `allow_all` / `deny_all`, in two row-policy layers (person and organization)
 
 ### EDR-gated query path (dataspace integration)
 
@@ -49,8 +49,8 @@ EDR query flow:
 3. Verifies the EDR token's signature against the key set ds publishes at `GET /internal/edr-jwks`. **This service is the EDR endpoint** — upstream EDC removed the data-plane proxy, so nothing validated the token before it arrived
 4. Takes the consumer from the verified `aud` and the provider from the verified `iss`; neither comes from a header
 5. Refuses the whole query (403) if any referenced dataset is not offered to the dataspace (`dataspace.expose` in governance → `dataspace_expose`); the dataset must also be `expose: true`
-6. Calls `ds-connector POST /internal/dataplane/authorize` once for the whole query — agreement validity, the agreement↔consumer binding, purpose and the consented subjects are all ds's to answer, and it returns the verdict *and* the row-filter spec
-7. Applies that spec through the row-filter handlers, then records the disclosure with `POST /internal/audit/query`
+6. Calls `ds-connector POST /internal/dataplane/authorize` once for the whole query — agreement validity, the agreement↔consumer binding, purpose and the consented subjects are all ds's to answer, and it returns the verdict, the person-layer row-filter spec and the consumer's `organizations`
+7. Evaluates the dataset's own local declaration, both layers (GS-13): ds's spec is the person layer, the local organization layer is applied to the verdict's `organizations` (none established → no rows), an undeclared layer follows `ROW_FILTERS_DEFAULT`; then records the disclosure with `POST /internal/audit/query`
 8. Skips the Keycloak/policy path entirely for datasets covered by the decision
 
 #### One instance, several connectors
@@ -98,7 +98,7 @@ Access levels:
 
 An entry that states no level is `internal`, and the import stores it as such; an unknown level is refused at import.
 
-Row-level filtering via the pluggable governance handler registry. Seven built-in handlers are supported:
+Row-level filtering via the pluggable governance handler registry. Nine built-in handlers are supported:
 - `direct_user_match` — filter by user column
 - `rec_registry` — lookup via REC registry
 - `subject_key_match` — filter by the typed data keys (`pod:…`) the consent carried, for a holder whose rows are keyed by something only the organisation that collected the consent can name
@@ -106,6 +106,7 @@ Row-level filtering via the pluggable governance handler registry. Seven built-i
 - `table_pointer` — table-based lookup
 - `organization_match` — the rows of the caller's organizations: `column` holds organization aliases; `org_type` limits to one type (`dso`). Declared `binds: organization`
 - `member_wide` — every row, declared on purpose for data meant for every member of every organization. Declared `binds: organization`
+- `allow_all` / `deny_all` — layer verdicts: admit every row, or none, in the layer their required `binds` names (GS-10)
 
 Each filter's `binds` (`person` by default, or `organization`) must agree with its handler; the catalogue import refuses one that does not (GS-08), and a filter whose `column` its table lacks (GS-09)
 
@@ -115,7 +116,7 @@ Further handlers can be registered through `ROW_FILTERS_MODULES` or the `celine.
 
 Holders of the `platform-admin` realm role bypass row filters entirely; no group does, at either level (see [Identity Model](docs/governance-security.md#identity-model)). Service accounts bypass the `rec_registry` and `organization_match` filters when they query on their own behalf — never when a dataspace decision delegates the query to them.
 
-On a dataspace request the filter arrives from ds whole, naming the consenting subjects as `principals` and as `keys`; a filter this service cannot apply serves no rows. Specification: [docs/dataspace-row-filters.md](docs/dataspace-row-filters.md).
+On a dataspace request the dataset's local declaration is evaluated, both layers: the person-layer filter arrives from ds whole, naming the consenting subjects as `principals` and as `keys`, and the organization layer is applied to the consumer's `organizations` from ds's verdict (GS-13); a filter this service cannot apply serves no rows. Specification: [docs/dataspace-row-filters.md](docs/dataspace-row-filters.md).
 
 Governance overrides are supported via `governance.<app_name>.yaml` files merged with the base `governance.yaml`.
 

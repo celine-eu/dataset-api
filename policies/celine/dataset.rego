@@ -250,7 +250,7 @@ reason := "missing required scope" if {
     is_internal
 }
 
-reason := "internal dataset without a row filter - platform-admin or services only" if {
+reason := "internal dataset without a row filter - closed to organizations" if {
     not allow
     is_internal
     is_organization_reader

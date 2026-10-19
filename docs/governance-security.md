@@ -316,9 +316,11 @@ resolved to several datasets writes one `denied` record per dataset, under one
 | `scope_unresolved` | the statement's scopes could not be resolved (QE-05) (`400`) |
 | `sql_refused` | the SQL guard refused a statement kind, function, construct or operation, a comment, stacked statements, or a tautology inside `OR` (`400`) |
 | `row_filter_unresolved` | a row filter could not be resolved for the caller (`403`) |
+| `row_policy_undeclared` | a row-policy layer is undeclared on a non-`open` dataset under `ROW_FILTERS_DEFAULT=deny` (`403`); under `allow` the same reason is carried by the *allowed* record (GS-10) |
+| `row_policy_denied` | a row-policy layer declares `deny_all` (`403`, GS-10) |
 | `not_offered` | dataspace: a dataset is not `dataspace_expose` (`403`) |
 | `ds_refused` | dataspace: ds refused the query (`403`) |
-| `row_filter_unenforceable` | dataspace: ds asked for a row filter this instance cannot apply (`403`) |
+| `row_filter_unenforceable` | a declared row filter cannot be read or names a handler this instance lacks (GS-11); dataspace: ds asked for a row filter this instance cannot apply, or the two ends disagree on the person layer (GS-13) (`403`) |
 | `pull_token` | DPS pull: no token, or one that is not valid or not live (`401`) |
 | `flow_not_started` | DPS pull: a live token on a flow that is not `STARTED` (`403`) |
 | `agreement_mismatch` | DPS pull: the agreement header names another agreement (`403`) |
@@ -385,8 +387,10 @@ naming an organization the person has left reads it until the token is reissued,
 and a reissued token is never answered from the previous token's cached plan.
 
 The platform administrator and a service admitted by scope are not narrowed by
-`organization_match`. A dataspace (delegated) request is refused by it: an
-organization is not a consenting subject.
+`organization_match`. On a dataspace request it filters by the consumer's
+organizations carried in ds's verdict, before the service bypass (GS-13); a
+delegation naming consenting subjects instead (`principals`/`keys`) is refused by
+it: an organization is not a consenting subject.
 
 Tests: `tests/routes/test_organization_scoping.py`,
 `tests/routes/test_platform_admin_role.py`; against a running stack with two
@@ -398,7 +402,7 @@ An `internal` dataset whose governance declares no row filter is readable by the
 `platform-admin` role and by no organization's group: nobody decided whose rows it
 holds. A service holding the scope reads it only under `ROW_FILTERS_DEFAULT=allow`
 (GS-10). The refusal is `403` with reason
-`internal dataset without a row filter - platform-admin or services only`
+`internal dataset without a row filter - closed to organizations`
 (audited as `policy`). A dataset meant for every member of every organization —
 weather, public building data — says so in governance with the `member_wide` row
 filter (`binds: organization`), which narrows nothing — and states the person layer
@@ -474,9 +478,9 @@ and AND together; filters within a layer AND.
 - The conformance sample (`POST /catalogue/{id}/conformance`) is read through the same
   path and follows the same layers.
 
-`dataset-cli export governance` reports a missing layer and exports the entry; the
-serving instance's default refuses it. The gate that fails on it is `celine-governance
-validate` (celine-utils).
+`dataset-cli export governance` fails on a missing layer of an exposed, non-`open`,
+non-`secret` dataset, and nothing is written; on an `open` dataset it is reported
+only. `celine-governance validate` (celine-utils) applies the same check.
 
 Tests: `tests/routes/test_row_policy.py`, `tests/routes/test_organization_scoping.py`,
 `tests/routes/test_import_row_policy.py`, `tests/routes/test_catalogue_conformance.py`,
@@ -536,7 +540,7 @@ The field is optional on the wire, so this service is deployed before ds sends i
 until ds does, an organization-bound dataset serves no rows through an agreement.
 
 Tests: `tests/api/test_edr_organization_layer.py`,
-`tests/api/test_edr_subject_key_filter.py`, `tests/dps/test_pull.py`.
+`tests/api/dataset_query/test_row_policy_units.py`.
 
 The query engine never logs a statement's literals: wherever it logs SQL it logs the
 statement's shape, every literal replaced by `?` (QE-03 in
@@ -549,11 +553,12 @@ withheld from the log entirely: its predicate is a literal list of the consentin
 ## Row-level filtering
 
 A dataset may declare `row_filters` in governance, and a handler turns each one into
-a predicate. On a request arriving through the dataspace the filter is not read from
-governance here — it arrives inside ds's decision, with the consenting subjects named
-in it, and this service applies it or serves nothing. That path has its own
-specification, with clauses and tests:
-[dataspace-row-filters.md](dataspace-row-filters.md).
+a predicate. On a request arriving through the dataspace the local declaration is
+still read, both layers (GS-13): the person layer's filter arrives inside ds's
+decision, with the consenting subjects named in it, and the organization layer is
+this service's declaration applied to the decision's `organizations`; a filter this
+service cannot apply serves nothing. ds's half has its own specification, with clauses
+and tests: [dataspace-row-filters.md](dataspace-row-filters.md).
 
 Whose rows an organization's reader gets is GS-06; an `internal` dataset with no
 row filter at all is GS-07; what a filter binds is GS-08; the column it names is GS-09;

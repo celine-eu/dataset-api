@@ -45,7 +45,7 @@ def test_negative_numeric_literal_accepted(sql):
 
 
 def test_negative_coordinates_inside_st_point():
-    """The case D49 was decided for: a point with negative coordinates."""
+    """The case a unary minus is admitted for (QE-02): a point with negative coordinates."""
     parsed = parse_sql_query(
         "SELECT cod_ac FROM boundaries "
         "WHERE ST_Intersects(geometry, ST_SetSRID(ST_Point(-0.05, -0.1), 4326)) "

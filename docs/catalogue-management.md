@@ -121,7 +121,7 @@ Example:
 
 A `dataset_id` declared differently in two inputs is refused unless
 `--allow-conflicts`, which keeps the declaration from the last file in sorted order.
-Invalid entries are skipped with a warning; `--strict` fails on the first one.
+An invalid entry fails the import (strict by default); `--no-strict` skips it with a warning.
 
 ---
 

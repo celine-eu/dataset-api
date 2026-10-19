@@ -4,8 +4,8 @@ The export runs unattended in the catalogue sync, where exit 0 is read as "the
 catalogue was synced". A governance file that did not load used to be skipped with
 the run exiting 0, so the catalogue silently lost that app's datasets. The governance
 checks (celine-utils `celine.governance.check`) run first, on the same files merged
-with the same overlays: what would make an exported entry wrong stops the export;
-a missing row-policy layer is reported and left to the serving default (GS-10).
+with the same overlays: what would make an exported entry wrong stops the export,
+and so does a missing row-policy layer on an exposed non-``open`` dataset (GS-10).
 """
 from __future__ import annotations
 
@@ -67,12 +67,21 @@ def test_a_layer_verdict_without_binds_stops_the_export(tmp_path: Path) -> None:
 
 
 # @verifies GS-10
-def test_a_missing_layer_is_reported_not_fatal(tmp_path: Path) -> None:
+def test_a_missing_layer_stops_the_export_before_anything_is_written(tmp_path: Path) -> None:
     rule = {"expose": True, "access_level": "internal", "row_filters": [BOTH_LAYERS[1]]}
     _app(tmp_path / "src", "a", rule)
     result = _export(tmp_path / "src", tmp_path / "out")
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 1, result.output
     assert "row-policy" in result.output and "no person layer" in result.output
+    assert not (tmp_path / "out").exists()
+
+
+# @verifies GS-10
+def test_an_open_dataset_missing_a_layer_still_exports(tmp_path: Path) -> None:
+    _app(tmp_path / "src", "a", {"expose": True, "access_level": "open"})
+    result = _export(tmp_path / "src", tmp_path / "out")
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "out" / "a.yaml").is_file()
 
 
 # @verifies GS-11

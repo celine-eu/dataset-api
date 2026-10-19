@@ -66,8 +66,8 @@ anything. `--dry-run` needs no token.
 
 Validation happens here: each entry is checked against the catalogue schema
 (`title` and `backend_type` required, `backend_type` one of `postgres`, `s3`, `fs`,
-`quantumleap`, `context_broker`). Invalid entries are skipped with a warning;
-`--strict` fails on the first one. A `dataset_id` declared differently in two inputs
+`quantumleap`, `context_broker`). An invalid entry fails the import on the first
+one (strict by default); `--no-strict` skips it with a warning. A `dataset_id` declared differently in two inputs
 is refused unless `--allow-conflicts`.
 
 The CLI prints file, namespace and filter counts, then `Catalogue import complete.`.
@@ -148,7 +148,12 @@ else `./config.yaml`).
   (`/query` answers `403` *"Dataset not available"* for an unexposed dataset)
 
 ### “Forbidden (403)”
+- no token on any level, `open` included: `401` (GS-12)
 - JWT missing groups/scopes required by the policy
+- a row-policy layer left undeclared on a non-`open` dataset under
+  `ROW_FILTERS_DEFAULT=deny`: *"declares no … row policy"*, reason
+  `row_policy_undeclared`; a layer declaring `deny_all`: reason `row_policy_denied`
+  (GS-10)
 - service account without the `dataset.query` (internal) or `dataset.admin`
   (restricted) scope
 - access_level is `restricted` and policy denies

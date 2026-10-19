@@ -1,7 +1,7 @@
 # ADR-0002 — an organization reads only its own rows, through a row filter; an unscoped `internal` dataset is closed to organizations
 
 **Date:** 2026-10-05
-**Status:** accepted
+**Status:** accepted; superseded in part by ADR-0003
 
 ## Context
 

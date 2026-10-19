@@ -180,7 +180,8 @@ Tests: `tests/api/test_edr_subject_key_filter.py`.
 
 ### RF-07 — A resolved plan is cached by whose rows it is for
 
-The plan cache is keyed by handler, table, caller, **both allow-lists** and args.
+The plan cache is keyed by handler, table, caller, **both allow-lists**, the consumer's
+`organizations` (GS-13) and args.
 The caller alone is not enough: in delegation it is one service account for every
 agreement. Nor are the principals alone: a `subject_key_match` decision often
 carries none, so two consents would differ only in their keys and the second

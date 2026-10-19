@@ -89,9 +89,13 @@ def load_governance_with_override(
     ).config
 
 
-#: Findings that leave an exported entry wrong. `row-policy` is not one: the
-#: entry is right, and the serving default refuses the dataset (GS-10).
-_FATAL_RULES = frozenset({"parse", "schema", "handler", "layer-verdict", "consent-coherence", "input"})
+#: Findings that stop the export. `row-policy` is among them: an exposed,
+#: non-``open``, non-``secret`` dataset missing a layer would be refused at query
+#: time by the deny default, so the gap is caught here, before the catalogue is
+#: synced (GS-10). Its ``open`` variant is informational and does not stop it.
+_FATAL_RULES = frozenset(
+    {"parse", "schema", "handler", "layer-verdict", "consent-coherence", "input", "row-policy"}
+)
 
 
 def _check_governance(paths: list[str]) -> list[str]:
@@ -308,10 +312,9 @@ def export_governance_cmd(
 
     # The governance checks, on the same files merged with the same overlays,
     # before anything is written. What would make an exported entry wrong stops
-    # the export; a missing row-policy layer is reported only — the serving
-    # instance's `ROW_FILTERS_DEFAULT` refuses that one dataset at query time
-    # (GS-10), and the strict gate is `celine-governance validate` in the
-    # deployment's own task.
+    # the export, and so does a missing row-policy layer on an exposed
+    # non-`open` dataset: the serving instance would refuse it at query time
+    # (GS-10), and a gap found at export is cheaper than one found by a caller.
     governance_errors = _check_governance(matched)
     if governance_errors:
         typer.echo(
@@ -393,7 +396,7 @@ def export_governance_cmd(
                 ontology_errors.append(f"{gov_path}: {exc}")
 
         # Name output file after the parent directory of the governance.yaml
-        # e.g. apps/demo3/governance.yaml -> demo3.yaml
+        # e.g. apps/example-app/governance.yaml -> example-app.yaml
         stem = gov_path.parent.name or gov_path.stem
         out_file = out_dir / f"{stem}.yaml"
 

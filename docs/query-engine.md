@@ -189,9 +189,12 @@ text round trip changes the dialect (`INTERVAL '30 minutes'` becomes
 `INTERVAL '30' MINUTES`) and splits `schema.table`, so a filter keyed on the
 physical table would stop matching and be dropped.
 
-On a request arriving through the dataspace the filter comes from ds's decision
-rather than from governance here, and carries the consenting subjects with it —
-see [dataspace-row-filters.md](dataspace-row-filters.md).
+On a request arriving through the dataspace both row-policy layers are still read
+from the local declaration: the person layer's filter comes from ds's decision and
+carries the consenting subjects with it, and the organization layer is applied to
+the decision's `organizations` (GS-13 in
+[governance-security.md](governance-security.md)) — see
+[dataspace-row-filters.md](dataspace-row-filters.md).
 
 ### Logging
 

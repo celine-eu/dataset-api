@@ -240,9 +240,9 @@ def test_a_code_the_sdk_drops_does_not_reach_the_detail_fallback():
 
 
 def test_only_the_sdks_error_is_read():
-    """D57: the match is the SDK's `RecRegistryApiError`. A raw `UnexpectedStatus`
-    — the handler's own error before, or a generated call's — is not read,
-    even carrying the registry's answer."""
+    """The match reads only the SDK's public `RecRegistryApiError`. A raw
+    `UnexpectedStatus` — the handler's own error before, or a generated call's —
+    is not read, even carrying the registry's answer."""
     coded = json.dumps(NOT_A_MEMBER_CODED).encode()
     assert not rec_registry_module._is_not_a_member(UnexpectedStatus(403, coded))
 
@@ -253,8 +253,8 @@ def test_only_the_sdks_error_is_read():
 
 
 async def test_the_handler_asks_through_the_public_get_my_assets(monkeypatch):
-    """D57: the handler calls `get_my_assets` with the caller's token, and
-    uses no private part of the client (`_get_client`, `_get_kwargs`)."""
+    """The handler calls the SDK's public `get_my_assets` with the caller's token,
+    and uses no private part of the client (`_get_client`, `_get_kwargs`)."""
     calls: list[str | None] = []
 
     async def _get_my_assets(self, *, token=None):

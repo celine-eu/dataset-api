@@ -9,7 +9,7 @@ One file per decision, named `ADR-####-short-slug.md`, with this shape:
 # ADR-0001 — <the decision, as a statement>
 
 **Date:** <ISO-8601>
-**Status:** accepted | superseded by ADR-####
+**Status:** accepted | superseded by ADR-#### | accepted; superseded in part by ADR-####
 
 ## Context
 <what forced a choice. The constraint, and what had already been tried.>
@@ -40,3 +40,4 @@ edited to say something else.
 |---|---|
 | [ADR-0001](ADR-0001-a-platform-administrator-is-a-realm-role.md) | A platform administrator is the realm role `platform-admin`; organization groups count only from `organization.<alias>.groups`; a realm group grants nothing |
 | [ADR-0002](ADR-0002-an-organization-reads-only-its-own-rows.md) | An organization reads only its own rows, through a row filter (`organization_match`); its `admins` read like `managers`; an `internal` dataset with no row filter is closed to organizations unless declared `member_wide` |
+| [ADR-0003](ADR-0003-a-row-policy-has-two-declared-layers.md) | A row policy has two layers, person and organization, each declared (`allow_all` / `deny_all` with `binds`); an undeclared layer on a non-`open` dataset follows `ROW_FILTERS_DEFAULT`, `deny` by default; after the `platform-admin` bypass; `open` needs a login; on the dataspace path the organization layer applies to the verdict's `organizations`. Supersedes ADR-0002 in part |
