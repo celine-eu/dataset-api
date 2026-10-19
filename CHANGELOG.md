@@ -2,6 +2,45 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-10-19)
+
+### Bug Fixes
+
+- **cli**: A refused catalogue import prints the response body naming each refused dataset
+  ([`6eb61b5`](https://github.com/celine-eu/dataset-api/commit/6eb61b500fac43b0785adc81f91bec7f335ed603))
+
+### Chores
+
+- Celine-utils 2.8.0
+  ([`688fb74`](https://github.com/celine-eu/dataset-api/commit/688fb74b9685680aec05d7596dfa53567bf904a5))
+
+### Features
+
+- Generic owners registry; the export task is generic, deployment wiring is local
+  ([`4163e43`](https://github.com/celine-eu/dataset-api/commit/4163e437019f58a31c8d476c30621c8e4378f421))
+
+- Governance:validate gates the export; comments state their reasons
+  ([`bc5d3c3`](https://github.com/celine-eu/dataset-api/commit/bc5d3c3e4c139b42afbbc179ae6198cf1f4447cd))
+
+- Normalize use of env CELINE_POLICIES*
+  ([`e31005c`](https://github.com/celine-eu/dataset-api/commit/e31005c855dc09955c188cd879e631e9c6d379d2))
+
+- The export stops on a missing row-policy layer; ADR-0003, unit tests and docs match the two layers
+  ([`be442be`](https://github.com/celine-eu/dataset-api/commit/be442be0a9dc2ca3f782e8cc5485281a76bff32b))
+
+- Through an agreement, the consumer's organization reads its own rows only
+  ([`bb8fd23`](https://github.com/celine-eu/dataset-api/commit/bb8fd23b0883e733e5ec6faee5343e1055708de9))
+
+- Two-layer row policy, deny by default; open requires authentication
+  ([`59aca43`](https://github.com/celine-eu/dataset-api/commit/59aca43f705219da0c51d9a19ee4e43e4c665230))
+
+### Testing
+
+- **cli**: The import-catalogue tests stub the module's httpx, not the shared httpx.Client, so each
+  file passes on its own
+  ([`99f8a7f`](https://github.com/celine-eu/dataset-api/commit/99f8a7fd8cae16785d9426d5427c82972eb31b30))
+
+
 ## v1.10.0 (2026-10-08)
 
 ### Bug Fixes
