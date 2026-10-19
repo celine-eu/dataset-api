@@ -43,16 +43,18 @@ tasks:
         {{if .OVERLAY_DIR}}--overlay-dir "{{.OVERLAY_DIR}}"{{end}}
         {{if .OWNERS}}--owners "{{.OWNERS}}"{{end}}
 
+  # Generic: the open-source pipelines, no overlays. A deployment calls this task with its
+  # own `APPS`, `OVERLAY_DIR` and `OWNERS` from the gitignored taskfile.local.yaml.
   cli:export:governance:
     desc: Export from governance.yaml (after `governance:validate` over the same input)
     vars:
-      GOV_OVERRIDES: ../../../demo3.deployment/recs/governance
-      APPS: ../celine-pipelines/apps ../../../demo3/pipelines/apps
+      APPS: '{{.APPS | default "../celine-pipelines/apps"}}'
     cmds:
       - task: governance:validate
         vars:
           APPS: "{{.APPS}}"
-          OVERLAY_DIR: "{{.GOV_OVERRIDES}}"
+          OVERLAY_DIR: "{{.OVERLAY_DIR}}"
+          OWNERS: "{{.OWNERS}}"
       - mkdir -p ./data/governance
       - |
         TMPDIR=$(mktemp -d)
@@ -62,8 +64,8 @@ tasks:
           app=$(basename "$(dirname "$f")")
           mkdir -p "$TMPDIR/$app"
           cp "$f" "$TMPDIR/$app/governance.yaml"
-          if [ -f "{{ .GOV_OVERRIDES }}/governance.${app}.yaml" ]; then
-            cp "{{ .GOV_OVERRIDES }}/governance.${app}.yaml" "$TMPDIR/$app/"
+          if [ -n "{{.OVERLAY_DIR}}" ] && [ -f "{{.OVERLAY_DIR}}/governance.${app}.yaml" ]; then
+            cp "{{.OVERLAY_DIR}}/governance.${app}.yaml" "$TMPDIR/$app/"
           fi
         done
 

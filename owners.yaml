@@ -21,6 +21,10 @@
 # url  : canonical homepage URI (foaf:homepage in DCAT output)
 #
 # No personal data (e-mail, phone) is stored here.
+#
+# Generic placeholders only: one owner per role (rec, dso, third party). A deployment's
+# real organisations go in its own registry, e.g. the gitignored owners.local.yaml
+# (OWNERS_YAML_PATH=owners.local.yaml).
 
 owners:
   - id: example_dso
@@ -41,26 +45,11 @@ owners:
       role: rec
     aliases: [rec] # open-source pipelines (rec_it, rec_metering, rec_flexibility) use "rec" as a generic owner placeholder
 
-  - id: spxl
+  - id: example_org
     type: schema:Corporation
-    name: Spindox Labs srl
-    url: https://spindoxlabs.com/en
-    # did: did:web:provider.dataspaces.localhost   # uncomment after onboarding
+    name: Example Third Party
+    url: https://example.net
+    # did: did:web:org.example.net   # uncomment after onboarding
     organization:
       create: true
       role: org
-
-  - id: celine
-    type: schema:ResearchOrganization
-    name: CELINE Consortium
-    url: https://celine-eu.github.io
-
-  - id: dwd
-    type: schema:GovernmentOrganization
-    name: Deutscher Wetterdienst
-    url: https://www.dwd.de
-
-  - id: openstreetmap
-    type: schema:NGO
-    name: OpenStreetMap Foundation
-    url: https://osmfoundation.org
